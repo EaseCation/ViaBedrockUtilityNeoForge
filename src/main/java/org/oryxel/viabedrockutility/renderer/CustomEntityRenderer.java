@@ -255,7 +255,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         state.bodyYaw = this.simulatedBodyYaw;
         state.bodyPitch = this.smoothedHeadPitch;
 
-        // target_x_rotation = head pitch (body pitch 閳?0 for standing entities)
+        // target_x_rotation = head pitch (body pitch is 0 for standing entities)
         // target_y_rotation = head yaw - body yaw (from body delay mechanism)
         state.setTargetXRotation(state.bodyPitch);
         state.setTargetYRotation(Mth.wrapDegrees(state.yaw - state.bodyYaw));
@@ -348,7 +348,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         // Rotation queries
         queryBinding.set("body_y_rotation", Value.of(state.getBodyYaw()));
         queryBinding.set("body_x_rotation", Value.of(state.getBodyPitch()));
-        queryBinding.set("target_x_rotation", Value.of(state.getTargetXRotation()));
+        // target_x_rotation = head pitch (body pitch is 0 for standing entities)
         queryBinding.set("target_y_rotation", Value.of(state.getTargetYRotation()));
         queryBinding.set("head_x_rotation", Value.of(state.getTargetXRotation()));
         queryBinding.set("head_y_rotation", Value.of(state.getTargetYRotation()));
@@ -451,7 +451,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
             part.visible = defaultVisible;
         }
 
-        // Override specific bones using name index 閳?O(pv.size()) instead of O(pv.size() 鑴?allParts.size())
+        // Override specific bones using name index: O(pv.size()) instead of O(pv.size() * allParts.size())
         boolean anyHidden = !defaultVisible;
 
         final Map<String, List<ModelPart>> partsByName = entityModel.getPartsByName();
@@ -484,7 +484,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
     private boolean ensureAncestorsVisibleImpl(ModelPart part, int depth) {
         if (depth > 200) {
-            ViaBedrockUtilityNeoForge.LOGGER.error("[VBU] ensureAncestorsVisible depth > 200 閳?likely cycle! bone='{}'",
+            ViaBedrockUtilityNeoForge.LOGGER.error("[VBU] ensureAncestorsVisible depth > 200 - likely cycle! bone='{}'",
                     ((IModelPart) ((Object) part)).viaBedrockUtility$getName());
             return false;
         }

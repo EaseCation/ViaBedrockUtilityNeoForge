@@ -20,7 +20,7 @@ public class CustomEntityModel<T extends CustomEntityRenderer.CustomEntityRender
     }
 
     /**
-     * Returns a lazily-built index of part name 鈫?ModelPart list.
+     * Returns a lazily-built index of part name -> ModelPart list.
      * Used by applyPartVisibility to avoid O(n*m) double loops.
      */
     public Map<String, List<ModelPart>> getPartsByName() {

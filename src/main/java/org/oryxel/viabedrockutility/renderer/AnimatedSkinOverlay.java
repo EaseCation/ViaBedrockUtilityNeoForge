@@ -64,7 +64,7 @@ public class AnimatedSkinOverlay {
 
     private void tickBlink() {
         if (currentFrame == 0) {
-            // Eyes open 鈥?count down to next blink
+            // Eyes open: count down to next blink
             nextBlinkIn--;
             if (nextBlinkIn <= 0) {
                 currentFrame = 1 % totalFrames;
@@ -72,7 +72,7 @@ public class AnimatedSkinOverlay {
                 updateVOffsetOnCuboids();
             }
         } else {
-            // Eyes closed (or mid-blink for multi-frame) 鈥?hold briefly then return
+            // Eyes closed (or mid-blink for multi-frame): hold briefly then return
             tickCounter++;
             if (tickCounter >= BLINK_DURATION) {
                 // For multi-frame blinks, advance to next frame or return to frame 0

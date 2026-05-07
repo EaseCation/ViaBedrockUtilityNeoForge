@@ -54,7 +54,7 @@ public class CustomEntityTicker implements AnimationEventListener {
     private final Map<String, String> inverseTextureMap = new HashMap<>();
     private final Map<String, String> inverseMaterialMap = new HashMap<>();
 
-    // particle_effects alias map from entity definition (short_name 閳?full ResourceLocation)
+    // particle_effects alias map from entity definition (short_name to full identifier)
     private final Map<String, String> particleEffects;
 
     private final Set<String> availableModels = new HashSet<>();
@@ -76,7 +76,7 @@ public class CustomEntityTicker implements AnimationEventListener {
     @Getter
     private Scope lastExecutionScope;
 
-    // animation ResourceLocation 閳?condition expression (for per-frame blend weight evaluation)
+    // animation identifier to condition expression (for per-frame blend weight evaluation)
     @Getter
     private final Map<String, String> animationIdToCondition = new HashMap<>();
     @Getter
@@ -99,7 +99,7 @@ public class CustomEntityTicker implements AnimationEventListener {
 
         this.entityDefinition = entityDefinition;
 
-        // Load particle_effects alias map from entity definition
+    // particle_effects alias map from entity definition (short_name to full identifier)
         final Map<String, String> pe = entityDefinition.entityData().getParticleEffects();
         this.particleEffects = pe != null ? pe : Map.of();
 

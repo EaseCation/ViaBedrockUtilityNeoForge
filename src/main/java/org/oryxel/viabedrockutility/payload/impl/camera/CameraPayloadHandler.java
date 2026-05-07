@@ -53,7 +53,7 @@ public class CameraPayloadHandler {
 
             if (position == null) {
                 if (p.isDefault()) {
-                    // Default preset without position (e.g., first_person/third_person) 閳?clear camera override
+                    // Default preset without position (e.g., first_person/third_person): clear camera override
                     CameraManager.INSTANCE.clear();
                     ViaBedrockUtilityNeoForge.LOGGER.debug("[BECamera] Camera set to default preset {} (no position), clearing override", p.getPresetRuntimeId());
                 } else {

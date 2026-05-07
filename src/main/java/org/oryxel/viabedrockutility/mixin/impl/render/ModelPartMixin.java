@@ -184,10 +184,10 @@ public abstract class ModelPartMixin implements IModelPart {
         this.xScale = this.yScale = this.zScale = 1.0F;
     }
 
-    // --- forEachChild depth guard (DISABLED 閳?kept for debugging cyclic ModelPart trees) ---
+    // --- forEachChild depth guard (DISABLED, kept for debugging cyclic ModelPart trees) ---
     // This mixin injects into every ModelPart.forEachChild call (all entities, every frame),
     // so it has non-trivial performance overhead from ThreadLocal access.
-    // The root cause (Bedrock skins with "world" 閳?"root" hierarchy) is now fixed in
+            // (e.g. Bedrock skins with "world" -> "root" hierarchy where "root" is already the tree root)
     // GeometryUtil.buildModel() via the root.part() identity check + validateAndFixCycles safety net.
     //
     // To re-enable: uncomment the @Inject annotations below, and add this class back to
@@ -211,7 +211,7 @@ public abstract class ModelPartMixin implements IModelPart {
             if (!vbu$depthWarningLogged) {
                 vbu$depthWarningLogged = true;
                 ViaBedrockUtilityNeoForge.LOGGER.error(
-                        "[VBU] ModelPart.forEachChild depth > {} 閳?likely cycle! bone='{}', isVBU={}. Suppressing further warnings.",
+                        "[VBU] ModelPart.forEachChild depth > {} - likely cycle! bone='{}', isVBU={}. Suppressing further warnings.",
                         VBU_MAX_FOREACHECHILD_DEPTH, this.name, this.isVBUModel);
             }
             ci.cancel();

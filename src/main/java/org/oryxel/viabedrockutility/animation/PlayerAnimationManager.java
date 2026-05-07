@@ -30,12 +30,12 @@ public class PlayerAnimationManager {
      * Unlisted animation names are purely additive (no clearing).
      *
      * Vanilla PlayerModel.setAngles() reference:
-     *   bob         鈫?arms roll (Z-axis oscillation: cos(age) * amplitude)
-     *   move.arms   鈫?arms pitch (X-axis swing: cos(limbSwing) * amplitude)
-     *   move.legs   鈫?legs pitch (X-axis swing: cos(limbSwing) * amplitude)
-     *   attack.*    鈫?rightArm pitch (X-axis swing)
-     *   riding.*    鈫?pitch on arms/legs
-     *   sneaking    鈫?body pitch + leg/arm pitch adjustments
+     *   bob         -> arms roll (Z-axis oscillation: cos(age) * amplitude)
+     *   move.arms   -> arms pitch (X-axis swing: cos(limbSwing) * amplitude)
+     *   move.legs   -> legs pitch (X-axis swing: cos(limbSwing) * amplitude)
+     *   attack.*    -> rightArm pitch (X-axis swing)
+     *   riding.*    -> pitch on arms/legs
+     *   sneaking    -> body pitch + leg/arm pitch adjustments
      */
     private static final Map<String, List<BoneClear>> VANILLA_CLEAR_MAP = Map.ofEntries(
             Map.entry("bob", List.of(
