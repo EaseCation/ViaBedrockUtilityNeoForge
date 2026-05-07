@@ -14,3 +14,16 @@ includeBuild('../BECameraNeoForge') {
         substitute module('nakern.be_camera:bedrockcameralib') using project(':')
     }
 }
+
+includeBuild('../BEParticleNeoForge') {
+    dependencySubstitution {
+        substitute module('net.easecation.beparticle:beparticle') using project(':')
+    }
+}
+
+includeBuild('../CubeConverter') {
+    dependencySubstitution {
+        substitute module('com.github.EaseCation:CubeConverter') using project(':')
+        substitute module('org.oryxel.cube:cubeconverter') using project(':')
+    }
+}
