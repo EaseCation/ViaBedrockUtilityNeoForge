@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ModelPart.Cube.class)
 public abstract class CuboidMixin implements ICuboid {
-    @Shadow @Final public ModelPart.Polygon[] sides;
+    @Shadow @Final public ModelPart.Polygon[] polygons;
 
     @Unique
     private boolean isVBU = false;
@@ -52,7 +52,7 @@ public abstract class CuboidMixin implements ICuboid {
         Matrix4f posMatrix = entry.pose();
         Vector3f tempVec = new Vector3f();
 
-        for (ModelPart.Polygon quad : this.sides) {
+        for (ModelPart.Polygon quad : this.polygons) {
             if (quad == null) continue;
 
             Vector3f transformedNormal = entry.transformNormal(quad.normal(), tempVec);

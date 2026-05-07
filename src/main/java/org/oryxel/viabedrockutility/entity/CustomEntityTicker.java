@@ -99,7 +99,7 @@ public class CustomEntityTicker implements AnimationEventListener {
 
         this.entityDefinition = entityDefinition;
 
-    // particle_effects alias map from entity definition (short_name to full identifier)
+        // Load particle_effects alias map from entity definition
         final Map<String, String> pe = entityDefinition.entityData().getParticleEffects();
         this.particleEffects = pe != null ? pe : Map.of();
 

@@ -16,9 +16,9 @@ public class SoundSystemMixin {
      * OpenAL natively supports arbitrary positive pitch values.
      */
     @Redirect(
-            method = "getAdjustedPitch",
+            method = "calculatePitch",
             at = @At(value = "INVOKE",
-                    target = "Lnet.minecraft.util.Mth;clamp(FFF)F")
+                    target = "Lnet/minecraft/util/Mth;clamp(FFF)F")
     )
     private float removePitchClamp(float value, float min, float max) {
         return Math.max(value, 0.0f);

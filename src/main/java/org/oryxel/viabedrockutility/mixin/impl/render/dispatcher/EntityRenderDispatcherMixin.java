@@ -21,7 +21,7 @@ public abstract class EntityRenderDispatcherMixin {
     // to a private getPlayerRenderer(Map, PlayerLikeEntity) method. We inject at HEAD to intercept
     // both custom player renderers and custom entity renderers before any lookup occurs.
     private int mixinLogCounter = 0;
-    @Inject(method = "getRenderer(Lnet.minecraft.world.entity.Entity;)Lnet.minecraft.client.renderer.entity.EntityRenderer;", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getRenderer(Lnet/minecraft/world/entity/Entity;)Lnet/minecraft/client/renderer/entity/EntityRenderer;", at = @At("HEAD"), cancellable = true)
     public <T extends Entity> void getRenderer(T entity, CallbackInfoReturnable<EntityRenderer<? super T, ?>> cir) {
         if (!ViaBedrockUtility.getInstance().isViaBedrockPresent()) {
             return;
@@ -47,7 +47,7 @@ public abstract class EntityRenderDispatcherMixin {
     // to look up the renderer by state.entityType. Since custom entities use vanilla entity types,
     // the vanilla renderer would be returned instead of ours. We intercept this to return the
     // custom renderer stored in the state during Phase 1's updateRenderState().
-    @Inject(method = "getRenderer(Lnet.minecraft.client.renderer.entity.state.EntityRenderState;)Lnet.minecraft.client.renderer.entity.EntityRenderer;", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getRenderer(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;)Lnet/minecraft/client/renderer/entity/EntityRenderer;", at = @At("HEAD"), cancellable = true)
     public <S extends EntityRenderState> void getRendererFromState(S state, CallbackInfoReturnable<EntityRenderer<?, ? super S>> cir) {
         if (state instanceof ICustomPlayerRendererHolder holder && holder.viaBedrockUtility$getCustomPlayerRenderer() != null) {
             cir.setReturnValue((EntityRenderer<?, ? super S>) holder.viaBedrockUtility$getCustomPlayerRenderer());

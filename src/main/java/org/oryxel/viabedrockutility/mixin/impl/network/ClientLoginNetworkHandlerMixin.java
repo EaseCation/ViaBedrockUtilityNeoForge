@@ -25,8 +25,8 @@ public class ClientLoginNetworkHandlerMixin {
     @Final
     private Connection connection;
 
-    @Inject(method = "onSuccess", at = @At("RETURN"))
-    public void onSuccess(ClientboundLoginFinishedPacket packet, CallbackInfo ci) {
+    @Inject(method = "handleLoginFinished", at = @At("RETURN"))
+    public void handleLoginFinished(ClientboundLoginFinishedPacket packet, CallbackInfo ci) {
         // Let ViaBedrock know that we want to receive full bedrock pack, also we have to do this to send it early.
         // Also use a different ResourceLocation to avoiding sending the same one twice.
         ViaBedrockUtility.getInstance().setViaBedrockPresent(false);

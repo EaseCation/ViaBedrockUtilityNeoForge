@@ -18,8 +18,8 @@ import java.util.UUID;
 
 @Mixin(ClientPacketListener.class)
 public class ClientPlayNetworkHandlerMixin {
-    @Inject(method = "onPlayerRemove", at = @At("HEAD"))
-    private void onPlayerRemove(ClientboundPlayerInfoRemovePacket packet, CallbackInfo ci) {
+    @Inject(method = "handlePlayerInfoRemove", at = @At("HEAD"))
+    private void handlePlayerInfoRemove(ClientboundPlayerInfoRemovePacket packet, CallbackInfo ci) {
         if (!ViaBedrockUtility.getInstance().isViaBedrockPresent()) {
             return;
         }
@@ -29,7 +29,7 @@ public class ClientPlayNetworkHandlerMixin {
     }
 
     // Have to do this since you can't run custom command when playing in a server.
-    @Inject(method = "sendChatMessage", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "sendChat", at = @At("HEAD"), cancellable = true)
     private void injectSendMessage(String content, CallbackInfo ci) {
         if (!ViaBedrockUtility.DEBUGGING || !content.startsWith("$animate")) {
             return;

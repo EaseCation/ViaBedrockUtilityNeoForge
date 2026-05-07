@@ -13,17 +13,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Entity.class)
 public class EntityMixin {
     @Shadow
-    private Vec3 pos;
+    private Vec3 position;
 
-    @Shadow public float distanceTraveled;
+    @Shadow public float moveDist;
 
-    @Inject(method = "setPos", at = @At("HEAD"))
+    @Inject(method = "setPos(DDD)V", at = @At("HEAD"))
     private void injectSetPos(double x, double y, double z, CallbackInfo ci) {
         if (!(((Object)this) instanceof Display.ItemDisplay) || !ViaBedrockUtility.getInstance().isViaBedrockPresent()) {
             return;
         }
 
-        float distanceMoved = (float) new Vec3(x, y, z).distanceTo(new Vec3(this.pos.x, y, this.pos.z));
-        this.distanceTraveled += distanceMoved;
+        float distanceMoved = (float) new Vec3(x, y, z).distanceTo(new Vec3(this.position.x, y, this.position.z));
+        this.moveDist += distanceMoved;
     }
 }

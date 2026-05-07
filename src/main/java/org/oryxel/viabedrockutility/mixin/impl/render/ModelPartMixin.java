@@ -26,10 +26,10 @@ public abstract class ModelPartMixin implements IModelPart {
     @Shadow public float x;
     @Shadow public float z;
 
-    @Shadow @Final private List<ModelPart.Cube> cuboids;
+    @Shadow @Final private List<ModelPart.Cube> cubes;
     @Shadow @Final private Map<String, ModelPart> children;
 
-    @Shadow public abstract List<ModelPart> traverse();
+    @Shadow public abstract List<ModelPart> getAllParts();
 
     @Shadow public float xScale;
     @Shadow public float yScale;
@@ -122,7 +122,7 @@ public abstract class ModelPartMixin implements IModelPart {
 
     @Override
     public void viaBedrockUtility$resetEverything() {
-        this.traverse().forEach(part -> {
+        this.getAllParts().forEach(part -> {
             ((IModelPart)((Object)part)).viaBedrockUtility$resetToDefaultPose();
         });
     }
@@ -149,7 +149,7 @@ public abstract class ModelPartMixin implements IModelPart {
 
     @Override
     public List<ModelPart.Cube> viaBedrockUtility$getCuboids() {
-        return this.cuboids;
+        return this.cubes;
     }
 
     @Override

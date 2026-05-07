@@ -25,7 +25,7 @@ public abstract class PlayerEntityModelMixin implements IBedrockAnimatedModel {
         this.animationManager = manager;
     }
 
-    @Inject(method = "setAngles(Lnet.minecraft.client.renderer.entity.state.PlayerRenderState;)V", at = @At("TAIL"))
+    @Inject(method = "setupAnim(Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;)V", at = @At("TAIL"))
     private void applyBedrockAnimations(PlayerRenderState state, CallbackInfo ci) {
         if (this.animationManager == null) {
             return;
