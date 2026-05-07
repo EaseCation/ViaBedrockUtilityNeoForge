@@ -1,0 +1,25 @@
+package {{packageName}};
+
+public enum {{enumName}} {
+
+    {{#each values}}
+    {{#if comments}}
+    /**
+    {{#each comments}}
+     * {{.}}{{#if iterHasNext}}<br>{{/if}}
+    {{/each}}
+     */
+    {{/if}}
+    {{name}}({{value}}){{#if iterHasNext}},{{/if}}{{#unless iterHasNext}};{{/unless}}
+    {{/each}}
+
+    private final int value;
+
+    {{enumName}}(final int value) {
+        this.value = value;
+    }
+
+    public int getValue() {
+        return this.value;
+    }
+}

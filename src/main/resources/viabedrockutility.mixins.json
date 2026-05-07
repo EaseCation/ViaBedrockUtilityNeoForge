@@ -1,0 +1,28 @@
+{
+  "required": true,
+  "package": "org.oryxel.viabedrockutility.mixin.impl",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "MinecraftClientMixin",
+    "accessor.PlayerSkinFieldAccessor",
+    "entity.EntityMixin",
+    "entity.InteractionEntityMixin",
+    "entity.player.AbstractClientPlayerMixin",
+    "network.ClientLoginNetworkHandlerMixin",
+    "network.ClientPlayNetworkHandlerMixin",
+    "pack.ServerResourcePackLoaderMixin",
+    "render.CuboidMixin",
+    "render.ModelPartMixin",
+    "render.PlayerEntityModelMixin",
+    "render.PlayerEntityRenderStateMixin",
+    "render.dispatcher.EntityRenderDispatcherMixin",
+    "render.feature.CapeFeatureRendererMixin",
+    "sound.SoundSystemMixin",
+    "world.ClientWorldMixin"
+  ]
+}

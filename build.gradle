@@ -1,3 +1,5 @@
+import org.oryxel.viabedrockutility.generator.EnumGeneratorTask
+
 plugins {
     id 'java-library'
     id 'net.neoforged.gradle.userdev' version '7.1.25'
@@ -12,6 +14,18 @@ group = mod_group_id
 
 repositories {
     mavenCentral()
+    mavenLocal()
+    maven {
+        name = "Jitpack"
+        url = "https://jitpack.io"
+        content {
+            includeGroup "com.github.EaseCation"
+        }
+    }
+    maven {
+        name = "Shedaniel"
+        url = "https://maven.shedaniel.me/"
+    }
 }
 
 base {
@@ -36,6 +50,28 @@ runs {
 
 dependencies {
     implementation "net.neoforged:neoforge:${neo_version}"
+    implementation('com.github.EaseCation:BedrockMotion:1.0.0') {
+        exclude group: 'org.apache.commons', module: 'commons-lang3'
+        exclude group: 'com.google.code.gson', module: 'gson'
+    }
+    implementation 'nakern.be_camera:bedrockcameralib:1.2.0'
+    implementation 'net.easecation.beparticle:beparticle:1.0.0'
+    compileOnly files('libs/minecraft-intermediary-1.21.8.jar')
+
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+}
+
+def enumSourceDir = layout.buildDirectory.dir("generated/enums/main/java")
+def enumGeneratorTask = tasks.register("enumGeneratorTask", EnumGeneratorTask) {
+    outputDirectory = enumSourceDir
+}
+tasks.compileJava.dependsOn(enumGeneratorTask)
+
+sourceSets.main.java {
+    srcDir(enumSourceDir)
+    exclude 'org/oryxel/viabedrockutility/config/ModMenuIntegration.java'
+    exclude 'org/oryxel/viabedrockutility/config/SodiumConfigIntegration.java'
 }
 
 tasks.withType(ProcessResources).configureEach {
@@ -53,8 +89,14 @@ tasks.withType(ProcessResources).configureEach {
     filesMatching(['META-INF/neoforge.mods.toml']) {
         expand replaceProperties
     }
+
+    from(project.file('libs/vanilla_packs')) {
+        into 'assets/viabedrockutility/vanilla_packs'
+        include '*.mcpack'
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    options.release = 21
 }

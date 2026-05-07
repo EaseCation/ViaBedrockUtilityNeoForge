@@ -6,8 +6,11 @@ version="${mod_version}"
 displayName="${mod_name}"
 authors="EaseCation"
 description='''
-NeoForge migration workspace for ${mod_name}.
+ViaBedrock extension mod that added support to certain things.
 '''
+
+[[mixins]]
+config="viabedrockutility.mixins.json"
 
 [[dependencies.${mod_id}]]
 modId="neoforge"
