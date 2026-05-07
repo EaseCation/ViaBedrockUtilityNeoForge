@@ -20,9 +20,6 @@ import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
-//? if <1.21.6 {
-/*import java.util.stream.Stream;
-*///?}
 
 @Mixin(ModelPart.class)
 public abstract class ModelPartMixin implements IModelPart {
@@ -32,11 +29,7 @@ public abstract class ModelPartMixin implements IModelPart {
     @Shadow @Final private List<ModelPart.Cube> cuboids;
     @Shadow @Final private Map<String, ModelPart> children;
 
-    //? if >=1.21.6 {
     @Shadow public abstract List<ModelPart> traverse();
-    //?} else {
-    /*@Shadow public abstract Stream<ModelPart> traverse();
-    *///?}
 
     @Shadow public float xScale;
     @Shadow public float yScale;
@@ -129,11 +122,7 @@ public abstract class ModelPartMixin implements IModelPart {
 
     @Override
     public void viaBedrockUtility$resetEverything() {
-        //? if >=1.21.6 {
         this.traverse().forEach(part -> {
-        //?} else {
-        /*this.traverse().toList().forEach(part -> {
-        *///?}
             ((IModelPart)((Object)part)).viaBedrockUtility$resetToDefaultPose();
         });
     }

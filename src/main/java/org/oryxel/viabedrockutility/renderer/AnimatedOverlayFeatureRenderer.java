@@ -29,18 +29,4 @@ public class AnimatedOverlayFeatureRenderer extends RenderLayer<PlayerRenderStat
             overlay.getModel().renderToBuffer(matrices, consumer, light, OverlayTexture.pack(0, 10));
         }
     }
-    //?} else {
-    /*@Override
-    public void render(PoseStack matrices, MultiBufferSource vertexConsumers, int light, PlayerRenderState state, float limbAngle, float limbDistance) {
-        if (renderer.getOverlays().isEmpty()) return;
-
-        PlayerModel mainModel = (PlayerModel) renderer.getModel();
-        for (AnimatedSkinOverlay overlay : renderer.getOverlays()) {
-            overlay.copyBoneTransformsFrom(mainModel);
-            RenderType RenderType = RenderType.getEntityTranslucent(overlay.getTextureId(), true);
-            VertexConsumer consumer = vertexConsumers.getBuffer(RenderType);
-            overlay.getModel().render(matrices, consumer, light, OverlayTexture.pack(0, 10));
-        }
-    }
-    *///?}
 }

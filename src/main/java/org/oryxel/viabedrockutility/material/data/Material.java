@@ -8,9 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import net.minecraft.client.renderer.*;
-//? if >=1.21.11 {
 import net.minecraft.client.renderer.RenderType;
-//?}
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.Util;
 
@@ -20,7 +18,7 @@ import java.util.function.Function;
 import static net.easecation.bedrockmotion.util.JsonUtil.*;
 
 // https://wiki.bedrock.dev/visuals/materials
-public record Material(String ResourceLocation, String baseResourceLocation, MaterialInfo info) {
+public record Material(String identifier, String baseIdentifier, MaterialInfo info) {
     public static Map<String, Material> parse(final Map<String, Material> existing, final JsonObject base) {
         final Map<String, Material> map = new HashMap<>();
 
@@ -41,11 +39,11 @@ public record Material(String ResourceLocation, String baseResourceLocation, Mat
                 continue;
             }
 
-            final String ResourceLocation = split[0], baseResourceLocation = split.length == 1 ? "" : split[1];
+            final String identifier = split[0], baseIdentifier = split.length == 1 ? "" : split[1];
 
             final MaterialInfo material;
-            if (!baseResourceLocation.isBlank()) {
-                final Material parent = map.getOrDefault(baseResourceLocation, existing.get(baseResourceLocation));
+            if (!baseIdentifier.isBlank()) {
+                final Material parent = map.getOrDefault(baseIdentifier, existing.get(baseIdentifier));
                 if (parent == null) {
                     material = MaterialInfo.emptyMaterial();
                 } else {
@@ -56,7 +54,7 @@ public record Material(String ResourceLocation, String baseResourceLocation, Mat
             }
 
             material.parse(object, false);
-            map.put(ResourceLocation, new Material(ResourceLocation, baseResourceLocation, material));
+            map.put(identifier, new Material(identifier, baseIdentifier, material));
         }
 
         return map;
@@ -161,7 +159,6 @@ public record Material(String ResourceLocation, String baseResourceLocation, Mat
                 // can recognize the RenderPipeline singleton and apply gbuffer programs correctly.
                 // Primary split on DisableCulling: outline/one-sided techniques require cull=true.
                 // USE_EMISSIVE is handled in the renderer via fullbright light override, not here.
-                //? if >=1.21.11 {
                 final boolean noCull = this.states.contains("DisableCulling");
                 if (this.states.contains("Blending")) {
                     return noCull ? RenderType.entityTranslucent(texture)
@@ -172,18 +169,6 @@ public record Material(String ResourceLocation, String baseResourceLocation, Mat
                 } else {
                     return RenderType.entitySolid(texture);
                 }
-                //?} else {
-                /*final boolean noCull = this.states.contains("DisableCulling");
-                if (this.states.contains("Blending")) {
-                    return noCull ? RenderType.getEntityTranslucent(texture)
-                                  : RenderType.getItemEntityTranslucentCull(texture);
-                } else if (this.defines.contains("ALPHA_TEST")) {
-                    return noCull ? RenderType.getEntityCutoutNoCull(texture)
-                                  : RenderType.getEntityCutout(texture);
-                } else {
-                    return RenderType.getEntitySolid(texture);
-                }
-                *///?}
             }));
         }
 

@@ -92,16 +92,9 @@ public class CustomEntityTicker implements AnimationEventListener {
 
     public CustomEntityTicker(final EntityDefinitions.EntityDefinition entityDefinition) {
         final Minecraft client = Minecraft.getInstance();
-        //? if >=1.21.9 {
         final EntityRendererProvider.Context context = new EntityRendererProvider.Context(client.getEntityRenderDispatcher(),
                 client.getItemModelResolver(), client.getMapRenderer(), client.getBlockRenderer(),
                 client.getResourceManager(), client.getEntityModels(), new EquipmentAssetManager(), client.font);
-        //?} else {
-        /*final EntityRendererProvider.Context context = new EntityRendererProvider.Context(client.getEntityRenderDispatcher(),
-                client.getItemModelResolver(), client.getMapRenderer(), client.getBlockRenderer(),
-                client.getResourceManager(), client.getEntityModels(), new EquipmentAssetManager(),
-                client.font);
-        *///?}
         this.renderer = new CustomEntityRenderer<>(this, new CopyOnWriteArrayList<>(), context);
 
         this.entityDefinition = entityDefinition;

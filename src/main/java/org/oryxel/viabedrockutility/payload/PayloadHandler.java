@@ -166,7 +166,7 @@ public class PayloadHandler {
         ((PlayerSkinFieldAccessor)entry).setPlayerSkin(builder::build);
     }
 
-    private static final List<String> HARDCODED_GEOMETRY_ResourceLocationS = List.of(
+    private static final List<String> HARDCODED_GEOMETRY_IDENTIFIERS = List.of(
             "geometry.humanoid.custom", "geometry.humanoid.customSlim");
 
     public void handle(final SkinDataPayload payload) {
@@ -201,11 +201,7 @@ public class PayloadHandler {
 
         if (client.getConnection() != null) {
             final PlayerInfo entry = client.getConnection().getPlayerInfo(payload.getPlayerUuid());
-            //? if >=1.21.9 {
             ViaBedrockUtilityFabric.LOGGER.debug("[Skin] PlayerInfo lookup for {}: {}", payload.getPlayerUuid(), entry != null ? entry.getProfile().getName() : "NOT FOUND");
-            //?} else {
-            /*ViaBedrockUtilityFabric.LOGGER.debug("[Skin] PlayerInfo lookup for {}: {}", payload.getPlayerUuid(), entry != null ? entry.getProfile().getName() : "NOT FOUND");
-            *///?}
 
             // If we can still get player list entry then use this to set skin still a good idea!
             if (entry != null) {
@@ -263,7 +259,7 @@ public class PayloadHandler {
 
             boolean found = false;
 
-            for (final String i : HARDCODED_GEOMETRY_ResourceLocationS) {
+            for (final String i : HARDCODED_GEOMETRY_IDENTIFIERS) {
                 if (i.equals(requiredGeometry) || requiredGeometry.startsWith(i + ".")) {
                     found = true;
                     break;
@@ -282,16 +278,9 @@ public class PayloadHandler {
             ViaBedrockUtilityFabric.LOGGER.debug("[Skin] Using default player model (slim={}) for {}", slim, payload.getPlayerUuid());
         }
 
-        //? if >=1.21.9 {
         final EntityRendererProvider.Context entityContext = new EntityRendererProvider.Context(client.getEntityRenderDispatcher(),
                 client.getItemModelResolver(), client.getMapRenderer(), client.getBlockRenderer(),
                 client.getResourceManager(), client.getEntityModels(), new EquipmentAssetManager(), client.font);
-        //?} else {
-        /*final EntityRendererProvider.Context entityContext = new EntityRendererProvider.Context(client.getEntityRenderDispatcher(),
-                client.getItemModelResolver(), client.getMapRenderer(), client.getBlockRenderer(),
-                client.getResourceManager(), client.getEntityModels(), new EquipmentAssetManager(),
-                client.font);
-        *///?}
         this.cachedPlayerRenderers.put(payload.getPlayerUuid(), new CustomPlayerRenderer(entityContext, model, slim, identifier));
         this.cachedPlayerSkins.put(payload.getPlayerUuid(), new CachedPlayerSkin(identifier, slim, info.getGeometryRaw(), info.getResourcePatch()));
         ViaBedrockUtilityFabric.LOGGER.debug("[Skin] CustomPlayerRenderer created for {}", payload.getPlayerUuid());
@@ -479,7 +468,7 @@ public class PayloadHandler {
             return;
         }
 
-        // Look up geometry ResourceLocation from skinResourcePatch
+        // Look up geometry identifier from skinResourcePatch
         String geometryIdentifier = null;
         try {
             final JsonObject patch = JsonParser.parseString(cachedSkin.getResourcePatch()).getAsJsonObject();
@@ -493,7 +482,7 @@ public class PayloadHandler {
         }
 
         if (geometryIdentifier == null) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] No geometry ResourceLocation for key '{}' in resourcePatch for {}", geometryKey, playerUuid);
+            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] No geometry identifier for key '{}' in resourcePatch for {}", geometryKey, playerUuid);
             return;
         }
 

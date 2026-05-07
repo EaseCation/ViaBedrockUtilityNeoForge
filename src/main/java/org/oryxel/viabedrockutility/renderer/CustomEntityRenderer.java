@@ -167,90 +167,6 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         }
         super.render(state, matrices, vertexConsumers, light);
     }
-    //?} else {
-    /*@Override
-    public void render(CustomEntityRenderState state, PoseStack matrices, MultiBufferSource vertexConsumers, int light) {
-        if (LodConfig.getInstance().shouldSkipRender(state.getDistanceFromCamera())) {
-            return;
-        }
-
-        this.renderFrameCounter++;
-
-        boolean shouldAnimate = LodConfig.getInstance().shouldAnimate(state.getDistanceFromCamera(), this.renderFrameCounter);
-
-        final Scope frameScope;
-        if (shouldAnimate) {
-            frameScope = this.buildFrameScope(state);
-            this.ticker.runPreAnimationTask(frameScope);
-            this.animators.values().forEach(a -> a.setBaseScope(frameScope));
-            this.evaluateAnimationConditions(frameScope);
-
-            for (AnimationControllerInstance ci : this.ticker.getControllerInstances()) {
-                ci.setBaseScope(frameScope);
-                ci.tick(frameScope);
-            }
-        } else {
-            frameScope = null;
-        }
-
-        float s = (this.ticker.getScale() != null) ? this.ticker.getScale() : 1.0F;
-        for (Model model : this.models) {
-            matrices.pushPose();
-
-            this.setupTransforms(state, matrices);
-            matrices.scale(-s, -s, s);
-            matrices.translate(0.0F, -1.501F, 0.0F);
-
-            if (shouldAnimate) {
-                final McBoneModel boneModel = boneModelCache.computeIfAbsent(model.model(), McBoneModel::new);
-
-                // Reset all bones to default pose before additive animation blending
-                boneModel.resetAllBones();
-
-                this.animators.values().forEach(animator -> {
-                    try {
-                        animator.animate(boneModel);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-
-                for (AnimationControllerInstance ci : this.ticker.getControllerInstances()) {
-                    ci.animate(boneModel);
-                }
-
-                if (model.parsedPartVisibility() != null && !model.parsedPartVisibility().isEmpty()) {
-                    applyPartVisibility(model.model(), model.parsedPartVisibility(), frameScope);
-                }
-            }
-
-            try {
-                Material.MaterialInfo.Variant skinningColor = model.material.info().getVariants().get("skinning_color");
-                RenderType RenderType = skinningColor.build().apply(model.texture);
-                if (RenderType != null) {
-                    int effectiveLight = light;
-                    if ((model.controller() != null && model.controller().ignoreLighting())
-                            || skinningColor.getDefines().contains("USE_EMISSIVE")) {
-                        effectiveLight = LightTexture.FULL_BRIGHT;
-                    }
-
-                    VertexConsumer vertexConsumer = vertexConsumers.getBuffer(RenderType);
-                    model.model.render(matrices, vertexConsumer, effectiveLight, OverlayTexture.pack(0, 10));
-                }
-            } catch (StackOverflowError soe) {
-                ViaBedrockUtilityFabric.LOGGER.error(
-                        "[VBU] StackOverflow rendering model! key='{}', geometry='{}', texture='{}'",
-                        model.key(), model.geometry(), model.texture());
-                dumpModelHierarchy(model.model().root(), "", 0);
-            } catch (Exception e) {
-                ViaBedrockUtilityFabric.LOGGER.debug("[Render] Error rendering model key={}, texture={}", model.key(), model.texture(), e);
-            }
-
-            matrices.popPose();
-        }
-        super.render(state, matrices, vertexConsumers, light);
-    }
-    *///?}
 
     @Override
     public boolean shouldRender(T entity, Frustum frustum, double x, double y, double z) {
@@ -391,11 +307,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
         // Calculate rotation_to_camera for billboard effect
         final var camera = Minecraft.getInstance().gameRenderer.getMainCamera();
-        //? if >=1.21.6 {
         final Vec3 cameraPos = camera.getPosition();
-        //?} else {
-        /*final Vec3 cameraPos = camera.getPos();
-        *///?}
         final Vec3 camEntityPos = entity.getPosition(tickDelta);
         final double cdx = cameraPos.x - camEntityPos.x;
         final double cdy = cameraPos.y - camEntityPos.y;
