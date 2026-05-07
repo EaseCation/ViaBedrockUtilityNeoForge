@@ -22,10 +22,6 @@ repositories {
             includeGroup "com.github.EaseCation"
         }
     }
-    maven {
-        name = "Shedaniel"
-        url = "https://maven.shedaniel.me/"
-    }
 }
 
 base {
@@ -71,8 +67,6 @@ tasks.compileJava.dependsOn(enumGeneratorTask)
 
 sourceSets.main.java {
     srcDir(enumSourceDir)
-    exclude 'org/oryxel/viabedrockutility/config/ModMenuIntegration.java'
-    exclude 'org/oryxel/viabedrockutility/config/SodiumConfigIntegration.java'
 }
 
 tasks.withType(ProcessResources).configureEach {
