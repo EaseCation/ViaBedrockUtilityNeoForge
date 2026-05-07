@@ -67,7 +67,6 @@ public class BasePayload implements CustomPacketPayload {
             }
 
             case ANIMATE -> {
-                // Reserved by the upstream payload enum; animation data is handled by skin animation payloads.
                 return new BasePayload();
             }
 

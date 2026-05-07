@@ -53,10 +53,10 @@ dependencies {
     implementation('com.github.EaseCation:BedrockMotion:1.0.0') {
         exclude group: 'org.apache.commons', module: 'commons-lang3'
         exclude group: 'com.google.code.gson', module: 'gson'
+        exclude group: 'com.github.EaseCation', module: 'CubeConverter'
     }
     implementation 'nakern.be_camera:bedrockcameralib:1.2.0'
     implementation 'net.easecation.beparticle:beparticle:1.0.0'
-    compileOnly files('libs/minecraft-intermediary-1.21.8.jar')
 
     compileOnly 'org.projectlombok:lombok:1.18.36'
     annotationProcessor 'org.projectlombok:lombok:1.18.36'
@@ -70,6 +70,7 @@ tasks.compileJava.dependsOn(enumGeneratorTask)
 
 sourceSets.main.java {
     srcDir(enumSourceDir)
+    srcDir(rootProject.file('../../ViaProxyWorkspace/CubeConverter/src/main/java'))
     exclude 'org/oryxel/viabedrockutility/config/ModMenuIntegration.java'
     exclude 'org/oryxel/viabedrockutility/config/SodiumConfigIntegration.java'
 }

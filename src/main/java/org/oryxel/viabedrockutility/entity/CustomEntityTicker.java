@@ -107,7 +107,8 @@ public class CustomEntityTicker implements AnimationEventListener {
         this.entityDefinition = entityDefinition;
 
         // Load particle_effects alias map from entity definition
-        this.particleEffects = Map.of();
+        final Map<String, String> pe = entityDefinition.entityData().getParticleEffects();
+        this.particleEffects = pe != null ? pe : Map.of();
 
         final MutableObjectBinding variableBinding = new MutableObjectBinding();
         // Bedrock engine provides gliding_speed_value based on entity movement attribute.
@@ -185,16 +186,15 @@ public class CustomEntityTicker implements AnimationEventListener {
 
     @Override
     public void onParticleEvent(String effectShortName, String locator) {
-        final String ResourceLocation = this.particleEffects.get(effectShortName);
-        if (ResourceLocation == null) {
+        final String identifier = this.particleEffects.get(effectShortName);
+        if (identifier == null) {
             ViaBedrockUtilityFabric.LOGGER.debug("[Particle] Unknown particle effect alias: {}", effectShortName);
             return;
         }
         // Skip if position not yet initialized (renderer hasn't run)
         if (entityPosition == null) return;
-        // Locator bone positions are not exposed in this adapter path, so particle events use the entity position.
         net.easecation.beparticle.ParticleManager.INSTANCE.spawnEmitter(
-                ResourceLocation,
+                identifier,
                 new org.joml.Vector3f(entityPosition),
                 null
         );

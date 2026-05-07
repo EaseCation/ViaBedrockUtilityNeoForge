@@ -2,8 +2,8 @@ package org.oryxel.viabedrockutility.payload.impl.camera;
 
 import nakern.be_camera.camera.*;
 import nakern.be_camera.easings.Easings;
-import net.minecraft.class_241;
-import net.minecraft.class_243;
+import net.minecraft.world.phys.Vec2;
+import net.minecraft.world.phys.Vec3;
 import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
 
 import java.util.ArrayList;
@@ -31,24 +31,24 @@ public class CameraPayloadHandler {
             final CameraPresetManager.Preset resolvedPreset = CameraPresetManager.INSTANCE.resolvePreset(p.getPresetRuntimeId());
 
             // Resolve position: prefer explicit position, fall back to preset
-            class_243 position = null;
-            class_241 rotation = null;
-            class_243 facing = null;
+            Vec3 position = null;
+            Vec2 rotation = null;
+            Vec3 facing = null;
 
             if (p.isHasPos()) {
-                position = new class_243(p.getPosX(), p.getPosY(), p.getPosZ());
+                position = new Vec3(p.getPosX(), p.getPosY(), p.getPosZ());
             } else if (resolvedPreset != null && resolvedPreset.getPosX() != null && resolvedPreset.getPosY() != null && resolvedPreset.getPosZ() != null) {
-                position = new class_243(resolvedPreset.getPosX(), resolvedPreset.getPosY(), resolvedPreset.getPosZ());
+                position = new Vec3(resolvedPreset.getPosX(), resolvedPreset.getPosY(), resolvedPreset.getPosZ());
             }
 
             if (p.isHasRot()) {
-                rotation = new class_241(p.getRotX(), p.getRotY());
+                rotation = new Vec2(p.getRotX(), p.getRotY());
             } else if (resolvedPreset != null && resolvedPreset.getRotX() != null && resolvedPreset.getRotY() != null) {
-                rotation = new class_241(resolvedPreset.getRotX(), resolvedPreset.getRotY());
+                rotation = new Vec2(resolvedPreset.getRotX(), resolvedPreset.getRotY());
             }
 
             if (p.isHasFacing()) {
-                facing = new class_243(p.getFacingX(), p.getFacingY(), p.getFacingZ());
+                facing = new Vec3(p.getFacingX(), p.getFacingY(), p.getFacingZ());
             }
 
             if (position == null) {
@@ -78,7 +78,7 @@ public class CameraPayloadHandler {
                 CameraManager.INSTANCE.setPlayerEffects(effectsEnabled);
 
                 ViaBedrockUtilityFabric.LOGGER.info("[BECamera] Camera set: pos={} rot=(pitch={}, yaw={}) facing={} ease={} playerEffects={}",
-                        position, rotation != null ? rotation.field_1343 : "null", rotation != null ? rotation.field_1342 : "null", facing, p.isHasEase(), effectsEnabled);
+                        position, rotation != null ? rotation.x : "null", rotation != null ? rotation.y : "null", facing, p.isHasEase(), effectsEnabled);
             }
         }
 
