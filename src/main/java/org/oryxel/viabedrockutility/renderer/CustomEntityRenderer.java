@@ -26,7 +26,7 @@ import org.cube.converter.data.bedrock.controller.BedrockRenderController;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
 import org.oryxel.viabedrockutility.config.LodConfig;
 import org.oryxel.viabedrockutility.entity.CustomEntityTicker;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.material.data.Material;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
 import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
@@ -155,12 +155,12 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                     model.model.renderToBuffer(matrices, vertexConsumer, effectiveLight, OverlayTexture.pack(0, 10));
                 }
             } catch (StackOverflowError soe) {
-                ViaBedrockUtilityFabric.LOGGER.error(
+                ViaBedrockUtilityNeoForge.LOGGER.error(
                         "[VBU] StackOverflow rendering model! key='{}', geometry='{}', texture='{}'",
                         model.key(), model.geometry(), model.texture());
                 dumpModelHierarchy(model.model().root(), "", 0);
             } catch (Exception e) {
-                ViaBedrockUtilityFabric.LOGGER.debug("[Render] Error rendering model key={}, texture={}", model.key(), model.texture(), e);
+                ViaBedrockUtilityNeoForge.LOGGER.debug("[Render] Error rendering model key={}, texture={}", model.key(), model.texture(), e);
             }
 
             matrices.popPose();
@@ -255,7 +255,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         state.bodyYaw = this.simulatedBodyYaw;
         state.bodyPitch = this.smoothedHeadPitch;
 
-        // target_x_rotation = head pitch (body pitch 鈮?0 for standing entities)
+        // target_x_rotation = head pitch (body pitch 閳?0 for standing entities)
         // target_y_rotation = head yaw - body yaw (from body delay mechanism)
         state.setTargetXRotation(state.bodyPitch);
         state.setTargetYRotation(Mth.wrapDegrees(state.yaw - state.bodyYaw));
@@ -451,7 +451,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
             part.visible = defaultVisible;
         }
 
-        // Override specific bones using name index 鈥?O(pv.size()) instead of O(pv.size() 脳 allParts.size())
+        // Override specific bones using name index 閳?O(pv.size()) instead of O(pv.size() 鑴?allParts.size())
         boolean anyHidden = !defaultVisible;
 
         final Map<String, List<ModelPart>> partsByName = entityModel.getPartsByName();
@@ -484,7 +484,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
     private boolean ensureAncestorsVisibleImpl(ModelPart part, int depth) {
         if (depth > 200) {
-            ViaBedrockUtilityFabric.LOGGER.error("[VBU] ensureAncestorsVisible depth > 200 鈥?likely cycle! bone='{}'",
+            ViaBedrockUtilityNeoForge.LOGGER.error("[VBU] ensureAncestorsVisible depth > 200 閳?likely cycle! bone='{}'",
                     ((IModelPart) ((Object) part)).viaBedrockUtility$getName());
             return false;
         }
@@ -506,13 +506,13 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
      */
     private void dumpModelHierarchy(ModelPart part, String indent, int depth) {
         if (depth > 20) {
-            ViaBedrockUtilityFabric.LOGGER.error("{}... (truncated at depth 20)", indent);
+            ViaBedrockUtilityNeoForge.LOGGER.error("{}... (truncated at depth 20)", indent);
             return;
         }
         String name = ((IModelPart) ((Object) part)).viaBedrockUtility$getName();
         boolean isVBU = ((IModelPart) ((Object) part)).viaBedrockUtility$isVBUModel();
         Map<String, ModelPart> children = ((IModelPart) ((Object) part)).viaBedrockUtility$getChildren();
-        ViaBedrockUtilityFabric.LOGGER.error("{}bone='{}' isVBU={} children={} identity={}",
+        ViaBedrockUtilityNeoForge.LOGGER.error("{}bone='{}' isVBU={} children={} identity={}",
                 indent, name, isVBU, children.size(), System.identityHashCode(part));
         for (Map.Entry<String, ModelPart> entry : children.entrySet()) {
             dumpModelHierarchy(entry.getValue(), indent + "  ", depth + 1);

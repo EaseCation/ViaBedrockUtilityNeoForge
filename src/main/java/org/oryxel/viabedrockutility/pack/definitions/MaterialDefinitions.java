@@ -3,7 +3,7 @@ package org.oryxel.viabedrockutility.pack.definitions;
 import com.google.gson.JsonParser;
 import net.easecation.bedrockmotion.pack.PackManager;
 import net.easecation.bedrockmotion.pack.content.Content;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.material.VanillaMaterials;
 import org.oryxel.viabedrockutility.material.data.Material;
 
@@ -27,7 +27,7 @@ public class MaterialDefinitions {
             try {
                 NAME_TO_MATERIAL.putAll(Material.parse(Collections.unmodifiableMap(VanillaMaterials.NAME_TO_MATERIAL), JsonParser.parseString(content.getString("materials/entity.material")).getAsJsonObject()));
             } catch (Throwable e) {
-                ViaBedrockUtilityFabric.LOGGER.warn("Failed to parse entity material!");
+                ViaBedrockUtilityNeoForge.LOGGER.warn("Failed to parse entity material!");
             }
         }
     }

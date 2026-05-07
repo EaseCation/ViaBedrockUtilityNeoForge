@@ -4,7 +4,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 
 import java.nio.charset.StandardCharsets;
 
@@ -23,7 +23,7 @@ public class CameraPayload implements CustomPacketPayload {
 
         switch (payloadType) {
             case CONFIRM -> {
-                ViaBedrockUtilityFabric.LOGGER.info("[BECamera] Received CONFIRM, camera support active!");
+                ViaBedrockUtilityNeoForge.LOGGER.info("[BECamera] Received CONFIRM, camera support active!");
                 return new CameraPayload(payloadType);
             }
             case CAMERA_INSTRUCTION -> {

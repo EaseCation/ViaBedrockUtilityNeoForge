@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamDecoder;
 import net.minecraft.resources.ResourceLocation;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.payload.BasePayload;
 
 import java.util.UUID;
@@ -19,7 +19,7 @@ public final class CapeDataPayload extends BasePayload {
         int height = buf.readInt();
 
         String capeId = BasePayload.readString(buf);
-        ResourceLocation identifier = ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityFabric.MOD_ID, capeId);
+        ResourceLocation identifier = ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, capeId);
 
         byte[] capeData = new byte[buf.readInt()];
         buf.readBytes(capeData);

@@ -7,7 +7,7 @@ import org.oryxel.viabedrockutility.renderer.CustomEntityRenderer;
 import net.minecraft.world.entity.Entity;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.entity.CustomEntityTicker;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -36,7 +36,7 @@ public abstract class EntityRenderDispatcherMixin {
         final CustomEntityTicker data = ViaBedrockUtility.getInstance().getPayloadHandler().getCachedCustomEntities().get(entity.getUUID());
         if (data != null && data.getRenderer() != null) {
             if (mixinLogCounter++ % 200 == 0) {
-                ViaBedrockUtilityFabric.LOGGER.debug("[Mixin] getRenderer intercepted for entity uuid={}, returning custom renderer with {} models",
+                ViaBedrockUtilityNeoForge.LOGGER.debug("[Mixin] getRenderer intercepted for entity uuid={}, returning custom renderer with {} models",
                     entity.getUUID(), data.getRenderer().getModels().size());
             }
             cir.setReturnValue((EntityRenderer<? super T, ?>) data.getRenderer());

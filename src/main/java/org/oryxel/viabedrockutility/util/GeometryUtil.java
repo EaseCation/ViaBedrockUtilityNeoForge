@@ -13,7 +13,7 @@ import org.cube.converter.model.impl.bedrock.BedrockGeometryModel;
 import org.cube.converter.util.element.Position3V;
 import org.cube.converter.util.element.UVMap;
 import org.joml.Vector3f;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICuboid;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
 import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
@@ -159,7 +159,7 @@ public final class GeometryUtil {
             root = new PartInfo("", new ModelPart(List.of(), rootParts), rootParts);
         }
 
-        // Detect all cycles in the parent graph (handles A鈫扐, A鈫払鈫扐, A鈫払鈫扖鈫扐, etc.)
+        // Detect all cycles in the parent graph (handles A閳墣, A閳墪閳墣, A閳墪閳墫閳墣, etc.)
         final Map<String, String> parentGraph = new HashMap<>();
         for (Map.Entry<String, PartInfo> entry : stringToPart.entrySet()) {
             if (!entry.getValue().parent.isBlank()) {
@@ -182,9 +182,9 @@ public final class GeometryUtil {
                         if (inCycle) cycleMembers.add(p);
                     }
                     cyclicBones.addAll(cycleMembers);
-                    ViaBedrockUtilityFabric.LOGGER.warn(
-                            "[GeometryUtil] Detected circular parent chain: {} 鈥?breaking cycle by attaching to root",
-                            String.join(" 鈫?", cycleMembers) + " 鈫?" + current);
+                    ViaBedrockUtilityNeoForge.LOGGER.warn(
+                            "[GeometryUtil] Detected circular parent chain: {} 閳?breaking cycle by attaching to root",
+                            String.join(" 閳?", cycleMembers) + " 閳?" + current);
                     break;
                 }
                 path.add(current);
@@ -205,7 +205,7 @@ public final class GeometryUtil {
             }
 
             // The tree root must not be re-added as a child of any other bone
-            // (e.g. Bedrock skins with "world" 鈫?"root" hierarchy where "root" is already the tree root)
+            // (e.g. Bedrock skins with "world" 閳?"root" hierarchy where "root" is already the tree root)
             if (entry.getValue().part() == root.part()) {
                 continue;
             }
@@ -246,9 +246,9 @@ public final class GeometryUtil {
      */
     private static void validateAndFixCycles(ModelPart part, String name, IdentityHashMap<ModelPart, String> ancestors, List<String> path, String geometryName) {
         if (ancestors.containsKey(part)) {
-            // This ModelPart object is already an ancestor 鈥?cycle detected!
-            String cyclePath = String.join(" 鈫?", path) + " 鈫?" + name + " (CYCLE to '" + ancestors.get(part) + "')";
-            ViaBedrockUtilityFabric.LOGGER.error(
+            // This ModelPart object is already an ancestor 閳?cycle detected!
+            String cyclePath = String.join(" 閳?", path) + " 閳?" + name + " (CYCLE to '" + ancestors.get(part) + "')";
+            ViaBedrockUtilityNeoForge.LOGGER.error(
                     "[GeometryUtil] RUNTIME ModelPart CYCLE DETECTED in geometry '{}': {}",
                     geometryName != null ? geometryName : "unknown", cyclePath);
             return; // caller will remove this edge
@@ -262,9 +262,9 @@ public final class GeometryUtil {
         while (it.hasNext()) {
             Map.Entry<String, ModelPart> entry = it.next();
             if (ancestors.containsKey(entry.getValue())) {
-                // Child points to an ancestor 鈥?remove this cyclic edge
-                String cyclePath = String.join(" 鈫?", path) + " 鈫?" + entry.getKey() + " (CYCLE to '" + ancestors.get(entry.getValue()) + "')";
-                ViaBedrockUtilityFabric.LOGGER.error(
+                // Child points to an ancestor 閳?remove this cyclic edge
+                String cyclePath = String.join(" 閳?", path) + " 閳?" + entry.getKey() + " (CYCLE to '" + ancestors.get(entry.getValue()) + "')";
+                ViaBedrockUtilityNeoForge.LOGGER.error(
                         "[GeometryUtil] Removing cyclic ModelPart edge in geometry '{}': {}",
                         geometryName != null ? geometryName : "unknown", cyclePath);
                 it.remove();
@@ -283,7 +283,7 @@ public final class GeometryUtil {
     private static void swapUv(UVMap map, org.cube.converter.util.element.Direction a, org.cube.converter.util.element.Direction b) {
         Float[] uvA = map.getMap().remove(a);
         Float[] uvB = map.getMap().remove(b);
-        // Flip U (swap u1鈫攗2) to compensate for reversed vertex winding on the swapped face.
+        // Flip U (swap u1閳敆2) to compensate for reversed vertex winding on the swapped face.
         // Each face pair (EAST/WEST, NORTH/SOUTH) has opposite vertex ordering along one axis,
         // so placing one face's UV on the other requires a horizontal flip.
         if (uvA != null) map.getMap().put(b, new Float[]{uvA[2], uvA[1], uvA[0], uvA[3]});
@@ -323,7 +323,7 @@ public final class GeometryUtil {
             // Bedrock UP/DOWN texture regions are swapped vs Java; swap UV if both faces exist (box UV)
             Float[] uv = map.getMap().get(org.cube.converter.util.element.Direction.UP);
             if (uv == null) uv = map.getMap().get(org.cube.converter.util.element.Direction.DOWN);
-            // Swap both u1鈫攗2 and v1鈫攙2 to compensate for scale(-1,-1,1): X negation flips U,
+            // Swap both u1閳敆2 and v1閳敊2 to compensate for scale(-1,-1,1): X negation flips U,
             // and Y negation flips the viewing side which flips V on horizontal faces
             sides[s++] = new ModelPart.Polygon(new ModelPart.Vertex[]{vertex6, vertex5, vertex, vertex2}, uv[2], uv[3], uv[0], uv[1], uvWidth, uvHeight, mirror, Direction.DOWN);
         }
@@ -332,7 +332,7 @@ public final class GeometryUtil {
             // Bedrock UP/DOWN texture regions are swapped vs Java; swap UV if both faces exist (box UV)
             Float[] uv = map.getMap().get(org.cube.converter.util.element.Direction.DOWN);
             if (uv == null) uv = map.getMap().get(org.cube.converter.util.element.Direction.UP);
-            // Swap both u1鈫攗2 and v1鈫攙2 to compensate for scale(-1,-1,1): X negation flips U,
+            // Swap both u1閳敆2 and v1閳敊2 to compensate for scale(-1,-1,1): X negation flips U,
             // and Y negation flips the viewing side which flips V on horizontal faces
             sides[s++] = new ModelPart.Polygon(new ModelPart.Vertex[]{vertex3, vertex4, vertex8, vertex7}, uv[2], uv[3], uv[0], uv[1], uvWidth, uvHeight, mirror, Direction.UP);
         }

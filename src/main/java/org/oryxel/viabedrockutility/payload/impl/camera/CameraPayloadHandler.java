@@ -4,7 +4,7 @@ import nakern.be_camera.camera.*;
 import nakern.be_camera.easings.Easings;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,11 +53,11 @@ public class CameraPayloadHandler {
 
             if (position == null) {
                 if (p.isDefault()) {
-                    // Default preset without position (e.g., first_person/third_person) 鈫?clear camera override
+                    // Default preset without position (e.g., first_person/third_person) 閳?clear camera override
                     CameraManager.INSTANCE.clear();
-                    ViaBedrockUtilityFabric.LOGGER.debug("[BECamera] Camera set to default preset {} (no position), clearing override", p.getPresetRuntimeId());
+                    ViaBedrockUtilityNeoForge.LOGGER.debug("[BECamera] Camera set to default preset {} (no position), clearing override", p.getPresetRuntimeId());
                 } else {
-                    ViaBedrockUtilityFabric.LOGGER.warn("[BECamera] Camera set instruction has no position (preset {} may not define position)", p.getPresetRuntimeId());
+                    ViaBedrockUtilityNeoForge.LOGGER.warn("[BECamera] Camera set instruction has no position (preset {} may not define position)", p.getPresetRuntimeId());
                 }
             } else {
                 EaseOptions easeOptions = null;
@@ -77,14 +77,14 @@ public class CameraPayloadHandler {
                         && resolvedPreset.getPlayerEffects();
                 CameraManager.INSTANCE.setPlayerEffects(effectsEnabled);
 
-                ViaBedrockUtilityFabric.LOGGER.info("[BECamera] Camera set: pos={} rot=(pitch={}, yaw={}) facing={} ease={} playerEffects={}",
+                ViaBedrockUtilityNeoForge.LOGGER.info("[BECamera] Camera set: pos={} rot=(pitch={}, yaw={}) facing={} ease={} playerEffects={}",
                         position, rotation != null ? rotation.x : "null", rotation != null ? rotation.y : "null", facing, p.isHasEase(), effectsEnabled);
             }
         }
 
         if (p.isHasClear()) {
             CameraManager.INSTANCE.clear();
-            ViaBedrockUtilityFabric.LOGGER.debug("[BECamera] Camera cleared");
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[BECamera] Camera cleared");
         }
 
         if (p.isHasFade()) {
@@ -107,7 +107,7 @@ public class CameraPayloadHandler {
                     (long) (fadeOut * 1000)
             );
             CameraManager.INSTANCE.fade(fadeOptions);
-            ViaBedrockUtilityFabric.LOGGER.debug("[BECamera] Camera fade: in={}s stay={}s out={}s color=#{}", fadeIn, fadeStay, fadeOut, Integer.toHexString(color));
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[BECamera] Camera fade: in={}s stay={}s out={}s color=#{}", fadeIn, fadeStay, fadeOut, Integer.toHexString(color));
         }
     }
 
@@ -115,11 +115,11 @@ public class CameraPayloadHandler {
         if (p.getAction() == 0) {
             // Add shake
             CameraShakeManager.INSTANCE.addShake(p.getIntensity(), p.getDuration(), p.getShakeType());
-            ViaBedrockUtilityFabric.LOGGER.debug("[BECamera] Camera shake added: intensity={} duration={} type={}", p.getIntensity(), p.getDuration(), p.getShakeType());
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[BECamera] Camera shake added: intensity={} duration={} type={}", p.getIntensity(), p.getDuration(), p.getShakeType());
         } else {
             // Stop all shakes
             CameraShakeManager.INSTANCE.stopAll();
-            ViaBedrockUtilityFabric.LOGGER.debug("[BECamera] Camera shake stopped");
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[BECamera] Camera shake stopped");
         }
     }
 
@@ -136,6 +136,6 @@ public class CameraPayloadHandler {
             ));
         }
         CameraPresetManager.INSTANCE.setPresets(presets);
-        ViaBedrockUtilityFabric.LOGGER.debug("[BECamera] Camera presets loaded: {} presets", presets.size());
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[BECamera] Camera presets loaded: {} presets", presets.size());
     }
 }

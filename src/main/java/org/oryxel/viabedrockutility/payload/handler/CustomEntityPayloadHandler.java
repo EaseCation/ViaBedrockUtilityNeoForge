@@ -2,7 +2,7 @@ package org.oryxel.viabedrockutility.payload.handler;
 
 import lombok.Getter;
 import org.oryxel.viabedrockutility.entity.CustomEntityTicker;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.material.VanillaMaterials;
 import org.oryxel.viabedrockutility.material.data.Material;
 import net.easecation.bedrockmotion.pack.definitions.EntityDefinitions;
@@ -28,11 +28,11 @@ public class CustomEntityPayloadHandler extends PayloadHandler {
     @Override
     public void handle(ModelRequestPayload payload) {
         if (!this.packManager.getEntityDefinitions().getEntities().containsKey(payload.getIdentifier())) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Entity] MODEL_REQUEST for unknown entity '{}' (uuid={}), skipping", payload.getIdentifier(), payload.getUuid());
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Entity] MODEL_REQUEST for unknown entity '{}' (uuid={}), skipping", payload.getIdentifier(), payload.getUuid());
             return;
         }
 
-        ViaBedrockUtilityFabric.LOGGER.debug("[Entity] MODEL_REQUEST for '{}' (uuid={}) skinId={} variant={} markVariant={} scale={}",
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] MODEL_REQUEST for '{}' (uuid={}) skinId={} variant={} markVariant={} scale={}",
             payload.getIdentifier(), payload.getUuid(),
             payload.getEntityData().skinId(), payload.getEntityData().variant(),
             payload.getEntityData().mark_variant(), payload.getEntityData().scale());
@@ -40,7 +40,7 @@ public class CustomEntityPayloadHandler extends PayloadHandler {
 
         CustomEntityTicker ticker = this.cachedCustomEntities.get(payload.getUuid());
         if (ticker == null) {
-            ViaBedrockUtilityFabric.LOGGER.debug("[Entity] Creating new CustomEntityTicker for '{}' (uuid={})", payload.getIdentifier(), payload.getUuid());
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] Creating new CustomEntityTicker for '{}' (uuid={})", payload.getIdentifier(), payload.getUuid());
             ticker = new CustomEntityTicker(definition);
             this.cachedCustomEntities.put(payload.getUuid(), ticker);
         }

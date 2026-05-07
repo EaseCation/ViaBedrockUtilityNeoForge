@@ -4,7 +4,7 @@ import net.minecraft.client.Minecraft;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import net.easecation.bedrockmotion.pack.content.Content;
 
 import java.io.IOException;
@@ -27,7 +27,7 @@ public class TextureProcessor {
                     final NativeImage image1 = NativeImage.read(image.getPngBytes());
                     client.getTextureManager().register(identifier, new DynamicTexture(() -> identifier.toString() + image1.hashCode(), image1));
                 } catch (final IOException e) {
-                    ViaBedrockUtilityFabric.LOGGER.warn("Unable to register texture {}", path);
+                    ViaBedrockUtilityNeoForge.LOGGER.warn("Unable to register texture {}", path);
                 }
             }
         }

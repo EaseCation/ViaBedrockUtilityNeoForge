@@ -18,7 +18,7 @@ import org.cube.converter.data.bedrock.controller.BedrockRenderController;
 import org.cube.converter.model.impl.bedrock.BedrockGeometryModel;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.enums.bedrock.ActorFlags;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mappings.BedrockMappings;
 import org.oryxel.viabedrockutility.material.data.Material;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
@@ -54,7 +54,7 @@ public class CustomEntityTicker implements AnimationEventListener {
     private final Map<String, String> inverseTextureMap = new HashMap<>();
     private final Map<String, String> inverseMaterialMap = new HashMap<>();
 
-    // particle_effects alias map from entity definition (short_name 鈫?full ResourceLocation)
+    // particle_effects alias map from entity definition (short_name 閳?full ResourceLocation)
     private final Map<String, String> particleEffects;
 
     private final Set<String> availableModels = new HashSet<>();
@@ -76,7 +76,7 @@ public class CustomEntityTicker implements AnimationEventListener {
     @Getter
     private Scope lastExecutionScope;
 
-    // animation ResourceLocation 鈫?condition expression (for per-frame blend weight evaluation)
+    // animation ResourceLocation 閳?condition expression (for per-frame blend weight evaluation)
     @Getter
     private final Map<String, String> animationIdToCondition = new HashMap<>();
     @Getter
@@ -118,7 +118,7 @@ public class CustomEntityTicker implements AnimationEventListener {
                 MoLangEngine.eval(this.entityScope, parsed);
             }
         } catch (Throwable e) {
-            ViaBedrockUtilityFabric.LOGGER.warn("Failed to initialize custom entity variables", e);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("Failed to initialize custom entity variables", e);
         }
 
         // Pre-parse pre_animation scripts (evaluated every frame in renderer)
@@ -126,7 +126,7 @@ public class CustomEntityTicker implements AnimationEventListener {
             try {
                 this.parsedPreAnimationExpressions.add(MoLangEngine.parse(expr));
             } catch (IOException e) {
-                ViaBedrockUtilityFabric.LOGGER.warn("Failed to parse pre_animation expression: {}", expr, e);
+                ViaBedrockUtilityNeoForge.LOGGER.warn("Failed to parse pre_animation expression: {}", expr, e);
             }
         }
 
@@ -166,7 +166,7 @@ public class CustomEntityTicker implements AnimationEventListener {
                 MoLangEngine.eval(this.entityScope, expression);
             }
         } catch (Throwable e) {
-            ViaBedrockUtilityFabric.LOGGER.warn("Failed to initialize custom entity pre-animation variables", e);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("Failed to initialize custom entity pre-animation variables", e);
         }
 
         this.update();
@@ -181,7 +181,7 @@ public class CustomEntityTicker implements AnimationEventListener {
     public void onParticleEvent(String effectShortName, String locator) {
         final String identifier = this.particleEffects.get(effectShortName);
         if (identifier == null) {
-            ViaBedrockUtilityFabric.LOGGER.debug("[Particle] Unknown particle effect alias: {}", effectShortName);
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Particle] Unknown particle effect alias: {}", effectShortName);
             return;
         }
         // Skip if position not yet initialized (renderer hasn't run)
@@ -205,7 +205,7 @@ public class CustomEntityTicker implements AnimationEventListener {
                 MoLangEngine.eval(frameScope, parsed);
             }
         } catch (Throwable e) {
-            ViaBedrockUtilityFabric.LOGGER.warn("Failed to evaluate pre-animation scripts", e);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("Failed to evaluate pre-animation scripts", e);
         }
     }
 
@@ -246,12 +246,12 @@ public class CustomEntityTicker implements AnimationEventListener {
         executionScope.set("q", queryBinding);
 
         if (!evaluateRenderControllerChange(executionScope)) {
-            ViaBedrockUtilityFabric.LOGGER.debug("[Entity] update(): no render controller change, models={}", this.renderer.getModels().size());
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] update(): no render controller change, models={}", this.renderer.getModels().size());
             this.renderer.getAnimators().values().forEach(animator -> animator.setBaseScope(executionScope.copy()));
             return;
         }
 
-        ViaBedrockUtilityFabric.LOGGER.debug("[Entity] update(): render controller changed, evaluatedModels={}", this.models.size());
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] update(): render controller changed, evaluatedModels={}", this.models.size());
         final Set<String> old = new HashSet<>(this.availableModels);
         this.availableModels.clear();
         for (RenderControllerEvaluator.EvaluatedModel model : this.models) {
@@ -259,7 +259,7 @@ public class CustomEntityTicker implements AnimationEventListener {
 
             BedrockGeometryModel geometry = this.packManager.getModelDefinitions().getEntityModels().get(model.geometryValue());
             if (geometry == null) {
-                ViaBedrockUtilityFabric.LOGGER.warn("[Entity] update(): geometry '{}' not found in packManager", model.geometryValue());
+                ViaBedrockUtilityNeoForge.LOGGER.warn("[Entity] update(): geometry '{}' not found in packManager", model.geometryValue());
                 continue;
             }
 
@@ -285,7 +285,7 @@ public class CustomEntityTicker implements AnimationEventListener {
                         try {
                             parsedPV.put(pvEntry.getKey(), MoLangEngine.parse(pvEntry.getValue()));
                         } catch (IOException e) {
-                            ViaBedrockUtilityFabric.LOGGER.warn("[Entity] Failed to parse part visibility expression: {}", pvEntry.getValue(), e);
+                            ViaBedrockUtilityNeoForge.LOGGER.warn("[Entity] Failed to parse part visibility expression: {}", pvEntry.getValue(), e);
                             parsedPV.put(pvEntry.getKey(), Boolean.TRUE);
                         }
                     }
@@ -295,7 +295,7 @@ public class CustomEntityTicker implements AnimationEventListener {
             this.availableModels.add(model.key());
         }
         this.renderer.getModels().removeIf(model -> !this.availableModels.contains(model.key()));
-        ViaBedrockUtilityFabric.LOGGER.debug("[Entity] update(): final renderer models={}", this.renderer.getModels().size());
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] update(): final renderer models={}", this.renderer.getModels().size());
 
         if (!this.hasPlayInitAnimation) {
             this.entityDefinition.entityData().getScripts().animates().forEach(animate -> {
@@ -314,9 +314,9 @@ public class CustomEntityTicker implements AnimationEventListener {
                                     this.packManager.getAnimationDefinitions(),
                                     this);
                             this.controllerInstances.add(instance);
-                            ViaBedrockUtilityFabric.LOGGER.debug("[Animation] Registered controller '{}' ({})", animate.name(), animId);
+                            ViaBedrockUtilityNeoForge.LOGGER.debug("[Animation] Registered controller '{}' ({})", animate.name(), animId);
                         } else {
-                            ViaBedrockUtilityFabric.LOGGER.debug("[Animation] Controller '{}' ({}) not found in definitions", animate.name(), animId);
+                            ViaBedrockUtilityNeoForge.LOGGER.debug("[Animation] Controller '{}' ({}) not found in definitions", animate.name(), animId);
                         }
                         return; // forEach return = continue
                     }
@@ -332,10 +332,10 @@ public class CustomEntityTicker implements AnimationEventListener {
                                 this.parsedAnimationConditions.put(animIdentifier, MoLangEngine.parse(animate.expression()));
                             } catch (IOException ignored) {}
                         }
-                        ViaBedrockUtilityFabric.LOGGER.debug("[Animation] Registered '{}' ({}), condition='{}'", animate.name(), animId, animate.expression());
+                        ViaBedrockUtilityNeoForge.LOGGER.debug("[Animation] Registered '{}' ({}), condition='{}'", animate.name(), animId, animate.expression());
                     }
                 } catch (Throwable e) {
-                    ViaBedrockUtilityFabric.LOGGER.warn("Failed to register animation: {}", animate.name(), e);
+                    ViaBedrockUtilityNeoForge.LOGGER.warn("Failed to register animation: {}", animate.name(), e);
                 }
             });
             this.hasPlayInitAnimation = true;

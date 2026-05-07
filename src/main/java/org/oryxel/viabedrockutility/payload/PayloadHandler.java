@@ -18,7 +18,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.cube.converter.model.impl.bedrock.BedrockGeometryModel;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.entity.CustomEntityTicker;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mixin.impl.accessor.PlayerSkinFieldAccessor;
 import net.easecation.bedrockmotion.pack.PackManager;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
@@ -58,19 +58,19 @@ public class PayloadHandler {
         }
 
         if (this.packManager == null) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Payload] Received {} but PackManager is null, ignoring", payload.getClass().getSimpleName());
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Payload] Received {} but PackManager is null, ignoring", payload.getClass().getSimpleName());
             return;
         }
 
         if (payload instanceof ModelRequestPayload modelRequest) {
             this.handle(modelRequest);
         } else if (payload instanceof BaseSkinPayload baseSkin) {
-            ViaBedrockUtilityFabric.LOGGER.debug("[Skin] Received skin info for player {} ({}x{}, {} chunk(s))", baseSkin.getPlayerUuid(), baseSkin.getSkinWidth(), baseSkin.getSkinHeight(), baseSkin.getChunkCount());
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Received skin info for player {} ({}x{}, {} chunk(s))", baseSkin.getPlayerUuid(), baseSkin.getSkinWidth(), baseSkin.getSkinHeight(), baseSkin.getChunkCount());
             this.cachedSkinInfo.put(baseSkin.getPlayerUuid(), new SkinInfo(baseSkin.getGeometry(), baseSkin.getResourcePatch(), baseSkin.getSkinWidth(), baseSkin.getSkinHeight(), baseSkin.getChunkCount()));
         } else if (payload instanceof SkinDataPayload skinData) {
             this.handle(skinData);
         } else if (payload instanceof CapeDataPayload capePayload) {
-            ViaBedrockUtilityFabric.LOGGER.debug("[Skin] Received cape data for player {}", capePayload.getPlayerUuid());
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Received cape data for player {}", capePayload.getPlayerUuid());
             this.handle(capePayload);
         } else if (payload instanceof SkinAnimationInfoPayload animInfo) {
             this.handle(animInfo);
@@ -84,7 +84,7 @@ public class PayloadHandler {
     public void handle(final ModelRequestPayload payload) {}
 
     public void handle(final SpawnParticlePayload payload) {
-        ViaBedrockUtilityFabric.LOGGER.info("[Particle:L4] Handling SpawnParticlePayload: {} at ({}, {}, {}), molang={}", payload.getIdentifier(), payload.getX(), payload.getY(), payload.getZ(), payload.getMolangVarsJson());
+        ViaBedrockUtilityNeoForge.LOGGER.info("[Particle:L4] Handling SpawnParticlePayload: {} at ({}, {}, {}), molang={}", payload.getIdentifier(), payload.getX(), payload.getY(), payload.getZ(), payload.getMolangVarsJson());
         Map<String, Float> molangVars = null;
         final String json = payload.getMolangVarsJson();
         if (json != null && !json.isEmpty()) {
@@ -95,7 +95,7 @@ public class PayloadHandler {
                 new org.joml.Vector3f(payload.getX(), payload.getY(), payload.getZ()),
                 molangVars
         );
-        ViaBedrockUtilityFabric.LOGGER.info("[Particle:L4] spawnEmitter result: {} (definitions loaded: {})", emitter != null ? "SUCCESS" : "NULL (definition not found)", net.easecation.beparticle.ParticleManager.INSTANCE.getDefinitionCount());
+        ViaBedrockUtilityNeoForge.LOGGER.info("[Particle:L4] spawnEmitter result: {} (definitions loaded: {})", emitter != null ? "SUCCESS" : "NULL (definition not found)", net.easecation.beparticle.ParticleManager.INSTANCE.getDefinitionCount());
     }
 
     /**
@@ -133,7 +133,7 @@ public class PayloadHandler {
             }
             return vars.isEmpty() ? null : vars;
         } catch (Exception e) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Particle] Failed to parse molang vars JSON: {}", json, e);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Particle] Failed to parse molang vars JSON: {}", json, e);
             return null;
         }
     }
@@ -172,12 +172,12 @@ public class PayloadHandler {
     public void handle(final SkinDataPayload payload) {
         final SkinInfo info = this.cachedSkinInfo.get(payload.getPlayerUuid());
         if (info == null) {
-            ViaBedrockUtilityFabric.LOGGER.error("Skin info was null!");
+            ViaBedrockUtilityNeoForge.LOGGER.error("Skin info was null!");
             return;
         }
 
         info.setData(payload.getSkinData(), payload.getChunkPosition());
-        ViaBedrockUtilityFabric.LOGGER.debug("Skin chunk {} received for {}", payload.getChunkPosition(), payload.getPlayerUuid());
+        ViaBedrockUtilityNeoForge.LOGGER.debug("Skin chunk {} received for {}", payload.getChunkPosition(), payload.getPlayerUuid());
 
         if (info.isComplete()) {
             // All skin data has been received
@@ -188,20 +188,20 @@ public class PayloadHandler {
 
         final NativeImage skinImage = ImageUtil.toNativeImage(info.getData(), info.getWidth(), info.getHeight());
         if (skinImage == null) {
-            ViaBedrockUtilityFabric.LOGGER.error("[Skin] toNativeImage returned null for {}", payload.getPlayerUuid());
+            ViaBedrockUtilityNeoForge.LOGGER.error("[Skin] toNativeImage returned null for {}", payload.getPlayerUuid());
             return;
         }
-        ViaBedrockUtilityFabric.LOGGER.debug("[Skin] NativeImage created for {} ({}x{})", payload.getPlayerUuid(), info.getWidth(), info.getHeight());
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] NativeImage created for {} ({}x{})", payload.getPlayerUuid(), info.getWidth(), info.getHeight());
 
         final Minecraft client = Minecraft.getInstance();
 
-        final ResourceLocation identifier = ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityFabric.MOD_ID, payload.getPlayerUuid().toString());
+        final ResourceLocation identifier = ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, payload.getPlayerUuid().toString());
         client.getTextureManager().register(identifier, new DynamicTexture(() -> identifier.toString() + skinImage.hashCode(), skinImage));
-        ViaBedrockUtilityFabric.LOGGER.debug("[Skin] Texture registered: {}", identifier);
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Texture registered: {}", identifier);
 
         if (client.getConnection() != null) {
             final PlayerInfo entry = client.getConnection().getPlayerInfo(payload.getPlayerUuid());
-            ViaBedrockUtilityFabric.LOGGER.debug("[Skin] PlayerInfo lookup for {}: {}", payload.getPlayerUuid(), entry != null ? entry.getProfile().getName() : "NOT FOUND");
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] PlayerInfo lookup for {}: {}", payload.getPlayerUuid(), entry != null ? entry.getProfile().getName() : "NOT FOUND");
 
             // If we can still get player list entry then use this to set skin still a good idea!
             if (entry != null) {
@@ -211,7 +211,7 @@ public class PayloadHandler {
                 ((PlayerSkinFieldAccessor)entry).setPlayerSkin(builder::build);
             }
         } else {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] NetworkHandler is null!");
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] NetworkHandler is null!");
         }
 
         // Ex: skinResourcePatch={"geometry":{"default":"geometry.humanoid.custom.1742391406.1704"}}
@@ -220,7 +220,7 @@ public class PayloadHandler {
             requiredGeometry = JsonParser.parseString(info.getResourcePatch()).getAsJsonObject()
                     .getAsJsonObject("geometry").get("default").getAsString();
         } catch (Exception ignored) {}
-        ViaBedrockUtilityFabric.LOGGER.debug("[Skin] requiredGeometry={} resourcePatch={}", requiredGeometry, info.getResourcePatch());
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] requiredGeometry={} resourcePatch={}", requiredGeometry, info.getResourcePatch());
 
         // Hardcoded I know...
         boolean slim = requiredGeometry != null && requiredGeometry.startsWith("geometry.humanoid.customSlim");
@@ -244,16 +244,16 @@ public class PayloadHandler {
                     }
 
                     model = (PlayerModel) GeometryUtil.buildModel(geometry, true, slim);
-                    ViaBedrockUtilityFabric.LOGGER.debug("[Skin] Built custom geometry model for {}", payload.getPlayerUuid());
+                    ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Built custom geometry model for {}", payload.getPlayerUuid());
                 }
             } catch (final Exception e) {
-                ViaBedrockUtilityFabric.LOGGER.error("[Skin] Failed to parse geometry for {}: {}", payload.getPlayerUuid(), e.getMessage());
+                ViaBedrockUtilityNeoForge.LOGGER.error("[Skin] Failed to parse geometry for {}: {}", payload.getPlayerUuid(), e.getMessage());
             }
         }
 
         if (model == null) {
             if (requiredGeometry == null) {
-                ViaBedrockUtilityFabric.LOGGER.warn("[Skin] requiredGeometry is null, returning early for {}", payload.getPlayerUuid());
+                ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] requiredGeometry is null, returning early for {}", payload.getPlayerUuid());
                 return;
             }
 
@@ -267,7 +267,7 @@ public class PayloadHandler {
             }
 
             if (!found) {
-                ViaBedrockUtilityFabric.LOGGER.warn("[Skin] Geometry '{}' not in hardcoded list, returning early for {}", requiredGeometry, payload.getPlayerUuid());
+                ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] Geometry '{}' not in hardcoded list, returning early for {}", requiredGeometry, payload.getPlayerUuid());
                 return;
             }
         }
@@ -275,7 +275,7 @@ public class PayloadHandler {
         if (model == null) {
             // Classic skins use the vanilla 64x64 model layout here.
             model = new PlayerModel(LayerDefinition.create(PlayerModel.createMesh(CubeDeformation.NONE, slim), 64, 64).bakeRoot(), slim);
-            ViaBedrockUtilityFabric.LOGGER.debug("[Skin] Using default player model (slim={}) for {}", slim, payload.getPlayerUuid());
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Using default player model (slim={}) for {}", slim, payload.getPlayerUuid());
         }
 
         final EntityRendererProvider.Context entityContext = new EntityRendererProvider.Context(client.getEntityRenderDispatcher(),
@@ -283,7 +283,7 @@ public class PayloadHandler {
                 client.getResourceManager(), client.getEntityModels(), new EquipmentAssetManager(), client.font);
         this.cachedPlayerRenderers.put(payload.getPlayerUuid(), new CustomPlayerRenderer(entityContext, model, slim, identifier));
         this.cachedPlayerSkins.put(payload.getPlayerUuid(), new CachedPlayerSkin(identifier, slim, info.getGeometryRaw(), info.getResourcePatch()));
-        ViaBedrockUtilityFabric.LOGGER.debug("[Skin] CustomPlayerRenderer created for {}", payload.getPlayerUuid());
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] CustomPlayerRenderer created for {}", payload.getPlayerUuid());
 
         // Parse animation overrides from skinResourcePatch.animations
         if (this.packManager != null) {
@@ -299,18 +299,18 @@ public class PayloadHandler {
                         if (animData != null) {
                             animManager.addAnimation(animEntry.getKey(), animData);
                         } else {
-                            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] Animation '{}' ({}) not found in PackManager for {}",
+                            ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] Animation '{}' ({}) not found in PackManager for {}",
                                     animEntry.getKey(), animIdentifier, payload.getPlayerUuid());
                         }
                     }
                     if (!animManager.isEmpty()) {
                         ((IBedrockAnimatedModel) (Object) model).viaBedrockUtility$setAnimationManager(animManager);
-                        ViaBedrockUtilityFabric.LOGGER.debug("[Skin] Loaded {} animation overrides for {}",
+                        ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Loaded {} animation overrides for {}",
                                 animManager.getAffectedBones().size(), payload.getPlayerUuid());
                     }
                 }
             } catch (final Exception e) {
-                ViaBedrockUtilityFabric.LOGGER.warn("[Skin] Failed to parse animation overrides for {}: {}",
+                ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] Failed to parse animation overrides for {}: {}",
                         payload.getPlayerUuid(), e.getMessage());
             }
         }
@@ -328,9 +328,9 @@ public class PayloadHandler {
             builder.model = slim ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE;
 
             ((PlayerSkinFieldAccessor)entry).setPlayerSkin(builder::build);
-            ViaBedrockUtilityFabric.LOGGER.debug("[Skin] Final skin applied to PlayerInfo for {}", payload.getPlayerUuid());
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Final skin applied to PlayerInfo for {}", payload.getPlayerUuid());
         } else {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] Final PlayerInfo NOT FOUND for {}", payload.getPlayerUuid());
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] Final PlayerInfo NOT FOUND for {}", payload.getPlayerUuid());
         }
     }
 
@@ -408,7 +408,7 @@ public class PayloadHandler {
     }
 
     public void handle(final SkinAnimationInfoPayload payload) {
-        ViaBedrockUtilityFabric.LOGGER.debug("[Skin] Received animation info: uuid={} index={} type={} frames={} {}x{} chunks={}",
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Received animation info: uuid={} index={} type={} frames={} {}x{} chunks={}",
                 payload.getPlayerUuid(), payload.getAnimIndex(), payload.getType(),
                 payload.getFrames(), payload.getWidth(), payload.getHeight(), payload.getChunkCount());
 
@@ -432,7 +432,7 @@ public class PayloadHandler {
         if (pending == null) return;
 
         pending.setData(payload.getData(), payload.getChunkPosition());
-        ViaBedrockUtilityFabric.LOGGER.debug("[Skin] Animation data chunk {} received for {} index={}",
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Animation data chunk {} received for {} index={}",
                 payload.getChunkPosition(), payload.getPlayerUuid(), payload.getAnimIndex());
 
         if (pending.isComplete()) {
@@ -447,13 +447,13 @@ public class PayloadHandler {
     private void buildAnimationOverlay(UUID playerUuid, PendingAnimation pending) {
         final CachedPlayerSkin cachedSkin = cachedPlayerSkins.get(playerUuid);
         if (cachedSkin == null) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] No cached skin for animation overlay, uuid={}", playerUuid);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] No cached skin for animation overlay, uuid={}", playerUuid);
             return;
         }
 
         final EntityRenderer<?, ?> renderer = cachedPlayerRenderers.get(playerUuid);
         if (!(renderer instanceof CustomPlayerRenderer customRenderer)) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] No CustomPlayerRenderer for animation overlay, uuid={}", playerUuid);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] No CustomPlayerRenderer for animation overlay, uuid={}", playerUuid);
             return;
         }
 
@@ -464,7 +464,7 @@ public class PayloadHandler {
             default -> null;
         };
         if (geometryKey == null) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] Unknown animation type {} for {}", pending.type, playerUuid);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] Unknown animation type {} for {}", pending.type, playerUuid);
             return;
         }
 
@@ -477,17 +477,17 @@ public class PayloadHandler {
                 geometryIdentifier = geometryObj.get(geometryKey).getAsString();
             }
         } catch (Exception e) {
-            ViaBedrockUtilityFabric.LOGGER.error("[Skin] Failed to parse resourcePatch for animation: {}", e.getMessage());
+            ViaBedrockUtilityNeoForge.LOGGER.error("[Skin] Failed to parse resourcePatch for animation: {}", e.getMessage());
             return;
         }
 
         if (geometryIdentifier == null) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] No geometry identifier for key '{}' in resourcePatch for {}", geometryKey, playerUuid);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] No geometry identifier for key '{}' in resourcePatch for {}", geometryKey, playerUuid);
             return;
         }
 
         if (cachedSkin.getGeometryRaw() == null || cachedSkin.getGeometryRaw().isEmpty()) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] No geometryData available for animation overlay, uuid={}", playerUuid);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] No geometryData available for animation overlay, uuid={}", playerUuid);
             return;
         }
 
@@ -503,12 +503,12 @@ public class PayloadHandler {
                 }
             }
         } catch (Exception e) {
-            ViaBedrockUtilityFabric.LOGGER.error("[Skin] Failed to parse geometry for animation overlay: {}", e.getMessage());
+            ViaBedrockUtilityNeoForge.LOGGER.error("[Skin] Failed to parse geometry for animation overlay: {}", e.getMessage());
             return;
         }
 
         if (targetGeometry == null) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Skin] Geometry '{}' not found in geometryData for {}", geometryIdentifier, playerUuid);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] Geometry '{}' not found in geometryData for {}", geometryIdentifier, playerUuid);
             return;
         }
 
@@ -517,18 +517,18 @@ public class PayloadHandler {
         try {
             overlayModel = (PlayerModel) GeometryUtil.buildModel(targetGeometry, true, cachedSkin.isSlim(), geometryIdentifier);
         } catch (Exception e) {
-            ViaBedrockUtilityFabric.LOGGER.error("[Skin] Failed to build overlay model '{}' for {}: {}", geometryIdentifier, playerUuid, e.getMessage());
+            ViaBedrockUtilityNeoForge.LOGGER.error("[Skin] Failed to build overlay model '{}' for {}: {}", geometryIdentifier, playerUuid, e.getMessage());
             return;
         }
 
         // Register the sprite sheet texture
         final NativeImage textureImage = ImageUtil.toNativeImage(pending.getData(), pending.width, pending.height);
         if (textureImage == null) {
-            ViaBedrockUtilityFabric.LOGGER.error("[Skin] Failed to create NativeImage for animation overlay, uuid={}", playerUuid);
+            ViaBedrockUtilityNeoForge.LOGGER.error("[Skin] Failed to create NativeImage for animation overlay, uuid={}", playerUuid);
             return;
         }
 
-        final ResourceLocation textureId = ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityFabric.MOD_ID, playerUuid.toString() + "/anim_" + pending.animIndex);
+        final ResourceLocation textureId = ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, playerUuid.toString() + "/anim_" + pending.animIndex);
         final Minecraft client = Minecraft.getInstance();
         client.getTextureManager().register(textureId, new DynamicTexture(() -> textureId.toString() + textureImage.hashCode(), textureImage));
 
@@ -538,7 +538,7 @@ public class PayloadHandler {
         final AnimatedSkinOverlay overlay = new AnimatedSkinOverlay(overlayModel, textureId, pending.type, totalFrames, pending.expression, pending.height, frameHeight);
         customRenderer.addOverlay(overlay);
 
-        ViaBedrockUtilityFabric.LOGGER.info("[Skin] Animation overlay created: uuid={} type={} frames={} geometry='{}'",
+        ViaBedrockUtilityNeoForge.LOGGER.info("[Skin] Animation overlay created: uuid={} type={} frames={} geometry='{}'",
                 playerUuid, pending.type, totalFrames, geometryIdentifier);
     }
 

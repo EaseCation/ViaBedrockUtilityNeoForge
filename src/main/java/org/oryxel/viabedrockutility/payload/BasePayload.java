@@ -8,7 +8,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.enums.bedrock.ActorFlags;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.payload.enums.PayloadType;
 import org.oryxel.viabedrockutility.payload.impl.entity.*;
 import org.oryxel.viabedrockutility.payload.impl.particle.*;
@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets;
 @RequiredArgsConstructor
 @Getter
 public class BasePayload implements CustomPacketPayload {
-    public static final Type<BasePayload> ID = new Type<>(ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityFabric.MOD_ID, "data"));
+    public static final Type<BasePayload> ID = new Type<>(ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "data"));
 
     public static final StreamCodec<FriendlyByteBuf, BasePayload> STREAM_CODEC = StreamCodec.of(null, buf -> {
         final int type = buf.readInt();
@@ -33,7 +33,7 @@ public class BasePayload implements CustomPacketPayload {
             case CONFIRM -> {
                 // Confirm that ViaBedrock is present, this should be sent back right after we send confirm register channel.
                 ViaBedrockUtility.getInstance().setViaBedrockPresent(true);
-                ViaBedrockUtilityFabric.LOGGER.info("[Handshake] Received CONFIRM from ViaBedrock, handshake successful!");
+                ViaBedrockUtilityNeoForge.LOGGER.info("[Handshake] Received CONFIRM from ViaBedrock, handshake successful!");
                 return new BasePayload();
             }
             case MODEL_REQUEST -> {
@@ -92,7 +92,7 @@ public class BasePayload implements CustomPacketPayload {
                 final float y = buf.readFloat();
                 final float z = buf.readFloat();
                 final String molangVarsJson = buf.readBoolean() ? readString(buf) : "";
-                ViaBedrockUtilityFabric.LOGGER.info("[Particle:L3] Decoded SPAWN_PARTICLE payload: {} at ({}, {}, {})", identifier, x, y, z);
+                ViaBedrockUtilityNeoForge.LOGGER.info("[Particle:L3] Decoded SPAWN_PARTICLE payload: {} at ({}, {}, {})", identifier, x, y, z);
                 return new SpawnParticlePayload(identifier, x, y, z, molangVarsJson);
             }
 

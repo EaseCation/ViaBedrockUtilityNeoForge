@@ -3,7 +3,7 @@ package org.oryxel.viabedrockutility.mixin.impl.render.feature;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.layers.CapeLayer;
 import net.minecraft.resources.ResourceLocation;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -17,7 +17,7 @@ public class CapeFeatureRendererMixin {
             require = 0
     )
     public RenderType solidToTranslucent(final ResourceLocation texture) {
-        if (texture.getNamespace().equals(ViaBedrockUtilityFabric.MOD_ID)) {
+        if (texture.getNamespace().equals(ViaBedrockUtilityNeoForge.MOD_ID)) {
             return RenderType.entityTranslucent(texture, true);
         }
         return RenderType.entitySolid(texture);

@@ -1,4 +1,4 @@
-package org.oryxel.viabedrockutility.fabric;
+package org.oryxel.viabedrockutility.neoforge;
 
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
@@ -8,12 +8,12 @@ import org.oryxel.viabedrockutility.config.LodConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Mod(ViaBedrockUtilityFabric.MOD_ID)
-public class ViaBedrockUtilityFabric {
+@Mod(ViaBedrockUtilityNeoForge.MOD_ID)
+public class ViaBedrockUtilityNeoForge {
 	public static final String MOD_ID = "viabedrockutility";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-	public ViaBedrockUtilityFabric(IEventBus modEventBus) {
+	public ViaBedrockUtilityNeoForge(IEventBus modEventBus) {
 		LOGGER.debug("ViaBedrockUtility initialized");
 		LodConfig.load();
 		ViaBedrockUtility.getInstance().init();

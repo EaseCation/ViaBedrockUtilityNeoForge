@@ -2,7 +2,7 @@ package org.oryxel.viabedrockutility.material;
 
 import com.google.gson.JsonParser;
 import org.apache.commons.io.IOUtils;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.material.data.Material;
 
 import java.io.IOException;
@@ -18,7 +18,7 @@ public class VanillaMaterials {
     public static void init() {
         final InputStream stream = VanillaMaterials.class.getResourceAsStream("/assets/viabedrockutility/vanilla_packs/entity.material");
         if (stream == null) {
-            ViaBedrockUtilityFabric.LOGGER.error("Failed to find vanilla material file!");
+            ViaBedrockUtilityNeoForge.LOGGER.error("Failed to find vanilla material file!");
             return;
         }
 
@@ -26,14 +26,14 @@ public class VanillaMaterials {
         try {
             content = IOUtils.toString(stream, StandardCharsets.UTF_8);
         } catch (IOException e) {
-            ViaBedrockUtilityFabric.LOGGER.error("Failed to read vanilla material file content!");
+            ViaBedrockUtilityNeoForge.LOGGER.error("Failed to read vanilla material file content!");
             return;
         }
 
         try {
             NAME_TO_MATERIAL.putAll(Material.parse(new HashMap<>(), JsonParser.parseString(content).getAsJsonObject()));
         } catch (Exception exception) {
-            ViaBedrockUtilityFabric.LOGGER.error("Failed to parse vanilla material file!");
+            ViaBedrockUtilityNeoForge.LOGGER.error("Failed to parse vanilla material file!");
             throw new RuntimeException(exception);
         }
     }

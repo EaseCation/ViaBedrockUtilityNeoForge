@@ -3,7 +3,7 @@ package org.oryxel.viabedrockutility.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.neoforged.fml.loading.FMLPaths;
-import org.oryxel.viabedrockutility.fabric.ViaBedrockUtilityFabric;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -195,16 +195,16 @@ public class LodConfig {
                     INSTANCE = new LodConfig();
                 }
                 INSTANCE.syncParticleSettings();
-                ViaBedrockUtilityFabric.LOGGER.debug("[Config] Loaded LOD config: preset={}", INSTANCE.preset);
+                ViaBedrockUtilityNeoForge.LOGGER.debug("[Config] Loaded LOD config: preset={}", INSTANCE.preset);
             } catch (Exception e) {
-                ViaBedrockUtilityFabric.LOGGER.warn("[Config] Failed to load config, using defaults", e);
+                ViaBedrockUtilityNeoForge.LOGGER.warn("[Config] Failed to load config, using defaults", e);
                 INSTANCE = new LodConfig();
             }
         } else {
             INSTANCE = new LodConfig();
             INSTANCE.syncParticleSettings();
             INSTANCE.save();
-            ViaBedrockUtilityFabric.LOGGER.debug("[Config] Created default config file");
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Config] Created default config file");
         }
     }
 
@@ -214,7 +214,7 @@ public class LodConfig {
             Files.createDirectories(path.getParent());
             Files.writeString(path, GSON.toJson(this));
         } catch (IOException e) {
-            ViaBedrockUtilityFabric.LOGGER.warn("[Config] Failed to save config", e);
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[Config] Failed to save config", e);
         }
     }
 }
