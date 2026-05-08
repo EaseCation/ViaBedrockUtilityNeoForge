@@ -37,7 +37,7 @@ public class ServerResourcePackLoaderMixin {
         final List<Path> packPaths = this.packs.stream()
                 .map(pack -> (ServerPackDataAccessor) pack)
                 .filter(ServerPackDataAccessor::viaBedrockUtility$getPromptAccepted)
-                .filter(pack -> pack.viaBedrockUtility$getRemovalReason() == null)
+                .filter(pack -> !pack.viaBedrockUtility$isRemoved())
                 .map(ServerPackDataAccessor::viaBedrockUtility$getPath)
                 .filter(java.util.Objects::nonNull)
                 .toList();
