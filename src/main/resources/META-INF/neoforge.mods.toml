@@ -26,3 +26,17 @@ type="required"
 versionRange="${minecraft_version_range}"
 ordering="NONE"
 side="CLIENT"
+
+[[dependencies.${mod_id}]]
+modId="bedrockcameralib"
+type="required"
+versionRange="[1.2.0,)"
+ordering="AFTER"
+side="CLIENT"
+
+[[dependencies.${mod_id}]]
+modId="beparticle"
+type="required"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="CLIENT"
