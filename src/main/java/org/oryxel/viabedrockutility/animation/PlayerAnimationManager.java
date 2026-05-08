@@ -29,13 +29,13 @@ public class PlayerAnimationManager {
      * Only axes that vanilla setAngles() actually writes for that animation are cleared.
      * Unlisted animation names are purely additive (no clearing).
      *
-     * Vanilla PlayerModel.setAngles() reference:
-     *   bob         -> arms roll (Z-axis oscillation: cos(age) * amplitude)
-     *   move.arms   -> arms pitch (X-axis swing: cos(limbSwing) * amplitude)
-     *   move.legs   -> legs pitch (X-axis swing: cos(limbSwing) * amplitude)
-     *   attack.*    -> rightArm pitch (X-axis swing)
-     *   riding.*    -> pitch on arms/legs
-     *   sneaking    -> body pitch + leg/arm pitch adjustments
+     * Vanilla PlayerEntityModel.setAngles() reference:
+     *   bob         → arms roll (Z-axis oscillation: cos(age) * amplitude)
+     *   move.arms   → arms pitch (X-axis swing: cos(limbSwing) * amplitude)
+     *   move.legs   → legs pitch (X-axis swing: cos(limbSwing) * amplitude)
+     *   attack.*    → rightArm pitch (X-axis swing)
+     *   riding.*    → pitch on arms/legs
+     *   sneaking    → body pitch + leg/arm pitch adjustments
      */
     private static final Map<String, List<BoneClear>> VANILLA_CLEAR_MAP = Map.ofEntries(
             Map.entry("bob", List.of(
@@ -107,7 +107,7 @@ public class PlayerAnimationManager {
     }
 
     /**
-     * Called every frame from PlayerModel.setAngles() TAIL injection.
+     * Called every frame from PlayerEntityModel.setAngles() TAIL injection.
      * For known vanilla-replacing animations, clears only the specific axes that vanilla sets.
      * All other animations are purely additive via IModelPart.rotation.
      */

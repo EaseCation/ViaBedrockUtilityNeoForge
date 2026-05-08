@@ -17,9 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @SuppressWarnings("unchecked")
 @Mixin(EntityRenderDispatcher.class)
 public abstract class EntityRenderDispatcherMixin {
-    // In 1.21.9+, getRenderer(Entity) uses switch pattern matching and delegates player rendering
-    // to a private getPlayerRenderer(Map, PlayerLikeEntity) method. We inject at HEAD to intercept
-    // both custom player renderers and custom entity renderers before any lookup occurs.
+    // Intercept both custom player renderers and custom entity renderers before vanilla lookup occurs.
     private int mixinLogCounter = 0;
     @Inject(method = "getRenderer(Lnet/minecraft/world/entity/Entity;)Lnet/minecraft/client/renderer/entity/EntityRenderer;", at = @At("HEAD"), cancellable = true)
     public <T extends Entity> void getRenderer(T entity, CallbackInfoReturnable<EntityRenderer<? super T, ?>> cir) {
@@ -43,10 +41,10 @@ public abstract class EntityRenderDispatcherMixin {
         }
     }
 
-    // Phase 2: In 1.21.9+ two-phase rendering, pushEntityRenders calls getRenderer(EntityRenderState)
+    // Phase 2: two-phase rendering calls getRenderer(EntityRenderState)
     // to look up the renderer by state.entityType. Since custom entities use vanilla entity types,
     // the vanilla renderer would be returned instead of ours. We intercept this to return the
-    // custom renderer stored in the state during Phase 1's updateRenderState().
+    // custom renderer stored in the state during Phase 1's extractRenderState().
     @Inject(method = "getRenderer(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;)Lnet/minecraft/client/renderer/entity/EntityRenderer;", at = @At("HEAD"), cancellable = true)
     public <S extends EntityRenderState> void getRendererFromState(S state, CallbackInfoReturnable<EntityRenderer<?, ? super S>> cir) {
         if (state instanceof ICustomPlayerRendererHolder holder && holder.viaBedrockUtility$getCustomPlayerRenderer() != null) {

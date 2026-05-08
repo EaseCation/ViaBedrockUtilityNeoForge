@@ -82,7 +82,7 @@ public final class GeometryUtil {
             boolean isLeg = player && legRelatedBones.contains(bone.getName().toLowerCase(Locale.ROOT));
             if (isLeg) {
                 float pivotY = bone.getPivot().getY();
-                // Vanilla translateAndRotate translates to origin but never translates back,
+                // Vanilla applyTransform translates to origin but never translates back,
                 // so child origins accumulate with parents. Use relative Y to compensate:
                 // accumulated origin Y of any bone = its absolute Bedrock pivot Y.
                 String parentLower = boneParentMap.getOrDefault(bone.getName().toLowerCase(Locale.ROOT), "");
@@ -133,6 +133,7 @@ public final class GeometryUtil {
                 children.put(cube.getParent() + cube.hashCode(), cubePart);
             }
 
+            // Handle poly_mesh: convert pre-computed polygon data to Cuboid/Quad/Vertex
             if (bone.getPolyMesh() != null) {
                 buildPolyMeshParts(bone.getPolyMesh(), isLeg, neededOffset, bone.getName(), uvWidth, uvHeight, children);
             }
@@ -159,7 +160,7 @@ public final class GeometryUtil {
             root = new PartInfo("", new ModelPart(List.of(), rootParts), rootParts);
         }
 
-        // Detect all cycles in the parent graph (handles A -> B, A -> B -> C, A -> B -> C -> A, etc.)
+        // Detect all cycles in the parent graph (handles A→A, A→B→A, A→B→C→A, etc.)
         final Map<String, String> parentGraph = new HashMap<>();
         for (Map.Entry<String, PartInfo> entry : stringToPart.entrySet()) {
             if (!entry.getValue().parent.isBlank()) {
@@ -183,8 +184,8 @@ public final class GeometryUtil {
                     }
                     cyclicBones.addAll(cycleMembers);
                     ViaBedrockUtilityNeoForge.LOGGER.warn(
-                            "[GeometryUtil] Detected circular parent chain: {} - breaking cycle by attaching to root",
-                            String.join(" -> ", cycleMembers) + " -> " + current);
+                            "[GeometryUtil] Detected circular parent chain: {} — breaking cycle by attaching to root",
+                            String.join(" → ", cycleMembers) + " → " + current);
                     break;
                 }
                 path.add(current);
@@ -205,7 +206,7 @@ public final class GeometryUtil {
             }
 
             // The tree root must not be re-added as a child of any other bone
-            // (e.g. Bedrock skins with "world" -> "root" hierarchy where "root" is already the tree root)
+            // (e.g. Bedrock skins with "world" → "root" hierarchy where "root" is already the tree root)
             if (entry.getValue().part() == root.part()) {
                 continue;
             }
@@ -246,8 +247,8 @@ public final class GeometryUtil {
      */
     private static void validateAndFixCycles(ModelPart part, String name, IdentityHashMap<ModelPart, String> ancestors, List<String> path, String geometryName) {
         if (ancestors.containsKey(part)) {
-            // This ModelPart object is already an ancestor: cycle detected!
-            String cyclePath = String.join(" -> ", path) + " -> " + name + " (CYCLE to '" + ancestors.get(part) + "')";
+            // This ModelPart object is already an ancestor — cycle detected!
+            String cyclePath = String.join(" → ", path) + " → " + name + " (CYCLE to '" + ancestors.get(part) + "')";
             ViaBedrockUtilityNeoForge.LOGGER.error(
                     "[GeometryUtil] RUNTIME ModelPart CYCLE DETECTED in geometry '{}': {}",
                     geometryName != null ? geometryName : "unknown", cyclePath);
@@ -262,8 +263,8 @@ public final class GeometryUtil {
         while (it.hasNext()) {
             Map.Entry<String, ModelPart> entry = it.next();
             if (ancestors.containsKey(entry.getValue())) {
-                // Child points to an ancestor: remove this cyclic edge
-                String cyclePath = String.join(" -> ", path) + " -> " + entry.getKey() + " (CYCLE to '" + ancestors.get(entry.getValue()) + "')";
+                // Child points to an ancestor — remove this cyclic edge
+                String cyclePath = String.join(" → ", path) + " → " + entry.getKey() + " (CYCLE to '" + ancestors.get(entry.getValue()) + "')";
                 ViaBedrockUtilityNeoForge.LOGGER.error(
                         "[GeometryUtil] Removing cyclic ModelPart edge in geometry '{}': {}",
                         geometryName != null ? geometryName : "unknown", cyclePath);
@@ -283,7 +284,7 @@ public final class GeometryUtil {
     private static void swapUv(UVMap map, org.cube.converter.util.element.Direction a, org.cube.converter.util.element.Direction b) {
         Float[] uvA = map.getMap().remove(a);
         Float[] uvB = map.getMap().remove(b);
-        // Flip U (swap u1/u2) to compensate for reversed vertex winding on the swapped face.
+        // Flip U (swap u1↔u2) to compensate for reversed vertex winding on the swapped face.
         // Each face pair (EAST/WEST, NORTH/SOUTH) has opposite vertex ordering along one axis,
         // so placing one face's UV on the other requires a horizontal flip.
         if (uvA != null) map.getMap().put(b, new Float[]{uvA[2], uvA[1], uvA[0], uvA[3]});
@@ -323,7 +324,7 @@ public final class GeometryUtil {
             // Bedrock UP/DOWN texture regions are swapped vs Java; swap UV if both faces exist (box UV)
             Float[] uv = map.getMap().get(org.cube.converter.util.element.Direction.UP);
             if (uv == null) uv = map.getMap().get(org.cube.converter.util.element.Direction.DOWN);
-            // Swap both u1/u2 and v1/v2 to compensate for scale(-1,-1,1): X negation flips U,
+            // Swap both u1↔u2 and v1↔v2 to compensate for scale(-1,-1,1): X negation flips U,
             // and Y negation flips the viewing side which flips V on horizontal faces
             sides[s++] = new ModelPart.Polygon(new ModelPart.Vertex[]{vertex6, vertex5, vertex, vertex2}, uv[2], uv[3], uv[0], uv[1], uvWidth, uvHeight, mirror, Direction.DOWN);
         }
@@ -332,7 +333,7 @@ public final class GeometryUtil {
             // Bedrock UP/DOWN texture regions are swapped vs Java; swap UV if both faces exist (box UV)
             Float[] uv = map.getMap().get(org.cube.converter.util.element.Direction.DOWN);
             if (uv == null) uv = map.getMap().get(org.cube.converter.util.element.Direction.UP);
-            // Swap both u1/u2 and v1/v2 to compensate for scale(-1,-1,1): X negation flips U,
+            // Swap both u1↔u2 and v1↔v2 to compensate for scale(-1,-1,1): X negation flips U,
             // and Y negation flips the viewing side which flips V on horizontal faces
             sides[s++] = new ModelPart.Polygon(new ModelPart.Vertex[]{vertex3, vertex4, vertex8, vertex7}, uv[2], uv[3], uv[0], uv[1], uvWidth, uvHeight, mirror, Direction.UP);
         }
@@ -369,6 +370,7 @@ public final class GeometryUtil {
         final int[][][] pmPolys = polyMesh.getPolys();
         final boolean normalizedUvs = polyMesh.isNormalizedUvs();
 
+        // Build quad data from poly_mesh polygons
         final List<PolyQuadData> allPolyQuads = new ArrayList<>();
         for (int[][] poly : pmPolys) {
             int vertCount = Math.min(poly.length, 4);
@@ -384,13 +386,17 @@ public final class GeometryUtil {
                 float py = pmPositions[posIdx][1];
                 float pz = pmPositions[posIdx][2];
 
+                // Coordinate transform: Bedrock -> Java model space
                 if (!isLeg) {
                     py = -py + 24.016F;
                 }
 
+                // UV transform
                 float u = pmUvs[uvIdx][0];
                 float vCoord = pmUvs[uvIdx][1];
                 if (normalizedUvs) {
+                    // Bedrock poly_mesh normalized UVs use V=0 at bottom, V=1 at top (OpenGL convention).
+                    // Java/Minecraft uses V=0 at top, V=1 at bottom. Invert V to correct the mapping.
                     vCoord = 1.0f - vCoord;
                 } else {
                     u = u / uvWidth;
@@ -404,6 +410,7 @@ public final class GeometryUtil {
                 avgNz += pmNormals[normIdx][2];
             }
 
+            // Degenerate triangle to quad
             if (vertCount == 3) {
                 verts[3] = verts[2];
             }
@@ -412,21 +419,26 @@ public final class GeometryUtil {
             allPolyQuads.add(new PolyQuadData(verts, dir));
         }
 
+        // Group into batches of 6 (max quads per Cuboid's sides array)
         for (int batch = 0; batch < allPolyQuads.size(); batch += 6) {
             int batchEnd = Math.min(batch + 6, allPolyQuads.size());
             int batchSize = batchEnd - batch;
 
+            // Create direction set with exactly batchSize entries to size the sides array
             Set<Direction> dirSet = EnumSet.noneOf(Direction.class);
             for (int d = 0; d < batchSize; d++) {
                 dirSet.add(Direction.values()[d]);
             }
 
+            // Create dummy Cuboid — its sides array will be fully replaced
             ModelPart.Cube cuboid = new ModelPart.Cube(
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 1, 1, dirSet);
 
+            // Replace sides with poly_mesh quads
             ModelPart.Polygon[] sides = cuboid.polygons;
             for (int q = 0; q < batchSize; q++) {
                 PolyQuadData qd = allPolyQuads.get(batch + q);
+                // Create Quad with dummy vertices (constructor will overwrite their UVs)
                 ModelPart.Vertex[] dummyVerts = new ModelPart.Vertex[]{
                         new ModelPart.Vertex(0, 0, 0, 0, 0),
                         new ModelPart.Vertex(0, 0, 0, 0, 0),
@@ -434,6 +446,7 @@ public final class GeometryUtil {
                         new ModelPart.Vertex(0, 0, 0, 0, 0)
                 };
                 sides[q] = new ModelPart.Polygon(dummyVerts, 0, 0, 1, 1, 1, 1, false, qd.direction);
+                // Replace vertices with correct positions and UVs
                 ModelPart.Vertex[] quadVerts = sides[q].vertices();
                 for (int vi = 0; vi < 4; vi++) {
                     quadVerts[vi] = qd.vertices[vi];
@@ -443,6 +456,7 @@ public final class GeometryUtil {
             ((ICuboid) (Object) cuboid).viaBedrockUtility$markAsVBU();
 
             ModelPart cubePart = new ModelPart(List.of(cuboid), Map.of());
+            // poly_mesh vertices already contain absolute positions — no additional pivot/rotation needed
             ((IModelPart) (Object) cubePart).viaBedrockUtility$setPivot(new Vector3f(0, 0, 0));
             ((IModelPart) (Object) cubePart).viaBedrockUtility$setAngles(new Vector3f(0, 0, 0));
             ((IModelPart) (Object) cubePart).viaBedrockUtility$setVBUModel();

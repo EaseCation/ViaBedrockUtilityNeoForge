@@ -266,8 +266,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         state.setEntityLifeTime(entity.tickCount / 20.0f);
 
         // LimbAnimator-style movement tracking.
-        // InteractionMixin enables PositionMoveRotation, so getPosition() now
-        // returns properly interpolated positions (3-tick lerp, smooth within each tick).
+        // getPosition(float) returns interpolated positions using previous/current entity position.
         final Vec3 pos = entity.getPosition(tickDelta);
 
         if (this.lastAge < 0) {
