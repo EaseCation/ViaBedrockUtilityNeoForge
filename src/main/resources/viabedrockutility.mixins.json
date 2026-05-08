@@ -14,7 +14,7 @@
     "entity.EntityMixin",
     "entity.InteractionEntityMixin",
     "entity.player.AbstractClientPlayerMixin",
-    "network.ClientLoginNetworkHandlerMixin",
+    "network.ClientConfigurationNetworkHandlerMixin",
     "network.ClientPlayNetworkHandlerMixin",
     "pack.ServerResourcePackLoaderMixin",
     "render.CuboidMixin",
@@ -27,3 +27,4 @@
     "world.ClientWorldMixin"
   ]
 }
+
