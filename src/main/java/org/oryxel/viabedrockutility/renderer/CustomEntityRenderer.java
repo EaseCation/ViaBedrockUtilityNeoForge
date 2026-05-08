@@ -171,7 +171,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     @Override
     public boolean shouldRender(T entity, Frustum frustum, double x, double y, double z) {
         if (!frustum.isVisible(getVisualBoundingBox(entity))) return false;
-        double d = 64.0F * 1.0D;
+        double d = 64.0F * Entity.getViewScale();
         return entity.distanceToSqr(x, y, z) <= d * d;
     }
 
@@ -349,6 +349,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         queryBinding.set("body_y_rotation", Value.of(state.getBodyYaw()));
         queryBinding.set("body_x_rotation", Value.of(state.getBodyPitch()));
         // target_x_rotation = head pitch (body pitch is 0 for standing entities)
+        queryBinding.set("target_x_rotation", Value.of(state.getTargetXRotation()));
         queryBinding.set("target_y_rotation", Value.of(state.getTargetYRotation()));
         queryBinding.set("head_x_rotation", Value.of(state.getTargetXRotation()));
         queryBinding.set("head_y_rotation", Value.of(state.getTargetYRotation()));

@@ -44,6 +44,10 @@ public class ServerResourcePackLoaderMixin {
 
         ViaBedrockUtilityNeoForge.LOGGER.info("[ResourcePack] Loaded {} bedrock pack(s) total, initializing PackManager", contents.size());
 
+        // Load vanilla.mcpack textures as base layer (e.g. textures/particle/particles.png)
+        // Without this, particle textures from vanilla.mcpack won't be in TextureManager,
+        // causing a crash when BillboardParticleSubmittable tries to bind them during render pass.
+        // Note: BedrockMotion's vanilla.mcpack has no textures; VBU's copy (in assets/) does.
         final List<Content> textureContents = new ArrayList<>();
         try (java.io.InputStream is = ViaBedrockUtilityNeoForge.class.getResourceAsStream("/assets/viabedrockutility/vanilla_packs/vanilla.mcpack")) {
             if (is != null) {
@@ -62,6 +66,7 @@ public class ServerResourcePackLoaderMixin {
     }
 
     private void loadParticleDefinitions(List<Content> contents) {
+        // Count particle files first to avoid clearing definitions when no packs are present (e.g. on disconnect)
         java.util.List<java.util.Map.Entry<String, String>> pendingDefinitions = new java.util.ArrayList<>();
         for (final Content content : contents) {
             for (final String path : content.getFilesDeep("particles/", ".json")) {

@@ -39,19 +39,23 @@ public class ViaBedrockUtility {
 
     public void registerPayloads(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar("1").optional();
+        // Register custom payload.
         registrar.configurationToClient(BasePayload.ID, BasePayload.STREAM_CODEC, (payload, context) -> payload.handle(this.payloadHandler));
         registrar.playToClient(BasePayload.ID, BasePayload.STREAM_CODEC, (payload, context) -> payload.handle(this.payloadHandler));
+        // Register BECamera payload channel (CONFIGURATION for CONFIRM, PLAY for data).
         registrar.configurationToClient(CameraPayload.ID, CameraPayload.STREAM_CODEC, (payload, context) -> payload.handle(this.cameraPayloadHandler));
         registrar.playToClient(CameraPayload.ID, CameraPayload.STREAM_CODEC, (payload, context) -> payload.handle(this.cameraPayloadHandler));
     }
 
     public void onClientTick(ClientTickEvent.Post event) {
+        // Tick animation overlays on all cached player renderers
         if (this.payloadHandler != null) {
             this.payloadHandler.tickAnimationOverlays();
         }
     }
 
     public void registerClientCommands(RegisterClientCommandsEvent event) {
+        // To enable debugging in order to use animate test thingy (look at ClientPlayNetworkHandler)
         event.getDispatcher().register(net.minecraft.commands.Commands.literal("vbudebug").executes(context -> {
             DEBUGGING = !DEBUGGING;
             System.out.println("Debugging status: " + DEBUGGING);
