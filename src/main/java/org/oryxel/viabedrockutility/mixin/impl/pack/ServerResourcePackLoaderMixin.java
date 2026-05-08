@@ -4,9 +4,12 @@ import net.easecation.bedrockmotion.pack.PackManager;
 import net.easecation.bedrockmotion.pack.content.Content;
 import net.minecraft.client.resources.server.ServerPackManager;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
+import org.oryxel.viabedrockutility.mixin.impl.accessor.ServerPackDataAccessor;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.pack.processor.TextureProcessor;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -19,28 +22,51 @@ import java.util.List;
 
 @Mixin(ServerPackManager.class)
 public class ServerResourcePackLoaderMixin {
-    @Inject(method = "pushLocalPack", at = @At("HEAD"))
-    private void pushLocalPack(java.util.UUID id, Path pack, CallbackInfo ci) {
+    @Shadow
+    @Final
+    private List<?> packs;
+
+    private String viabedrockutility$loadedPackSignature = "";
+
+    @Inject(method = "triggerReloadIfNeeded", at = @At("HEAD"))
+    private void triggerReloadIfNeeded(CallbackInfo ci) {
         if (!ViaBedrockUtility.getInstance().isViaBedrockPresent()) {
             return;
         }
-        ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack] Intercepting server resource pack {}", pack.getFileName());
-        loadBedrockPacks(pack);
+
+        final List<Path> packPaths = this.packs.stream()
+                .map(pack -> (ServerPackDataAccessor) pack)
+                .filter(ServerPackDataAccessor::viaBedrockUtility$getPromptAccepted)
+                .filter(pack -> pack.viaBedrockUtility$getRemovalReason() == null)
+                .map(ServerPackDataAccessor::viaBedrockUtility$getPath)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+
+        final String signature = packPaths.toString();
+        if (signature.equals(this.viabedrockutility$loadedPackSignature)) {
+            return;
+        }
+
+        this.viabedrockutility$loadedPackSignature = signature;
+        loadBedrockPacks(packPaths);
     }
 
-    private void loadBedrockPacks(Path pack) {
+    private void loadBedrockPacks(List<Path> packs) {
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack] Intercepting server resource packs, {} pack(s) received", packs.size());
         final List<Content> contents = new ArrayList<>();
-        try {
-            final Content content = new Content(Files.readAllBytes(pack));
-            final List<String> mcpacks = content.getFilesDeep("bedrock/", ".mcpack");
-            ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack] Found {} bedrock mcpack(s) in {}", mcpacks.size(), pack.getFileName());
-            for (final String path : mcpacks) {
-                ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack]   - {}", path);
-                contents.add(new Content(content.get(path)));
+        packs.forEach(pack -> {
+            try {
+                final Content content = new Content(Files.readAllBytes(pack));
+                final List<String> mcpacks = content.getFilesDeep("bedrock/", ".mcpack");
+                ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack] Found {} bedrock mcpack(s) in {}", mcpacks.size(), pack.getFileName());
+                for (final String path : mcpacks) {
+                    ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack]   - {}", path);
+                    contents.add(new Content(content.get(path)));
+                }
+            } catch (IOException e) {
+                ViaBedrockUtilityNeoForge.LOGGER.warn("[ResourcePack] Failed to read pack {}", pack);
             }
-        } catch (IOException e) {
-            ViaBedrockUtilityNeoForge.LOGGER.warn("[ResourcePack] Failed to read pack {}", pack, e);
-        }
+        });
 
         ViaBedrockUtilityNeoForge.LOGGER.info("[ResourcePack] Loaded {} bedrock pack(s) total, initializing PackManager", contents.size());
 
@@ -61,12 +87,16 @@ public class ServerResourcePackLoaderMixin {
         }
         textureContents.addAll(contents);
         TextureProcessor.process(textureContents);
+
         ViaBedrockUtility.getInstance().setPackManager(new PackManager(contents));
+
+        // Load particle definitions into BEParticle
         loadParticleDefinitions(contents);
     }
 
     private void loadParticleDefinitions(List<Content> contents) {
         // Count particle files first to avoid clearing definitions when no packs are present (e.g. on disconnect)
+        int count = 0;
         java.util.List<java.util.Map.Entry<String, String>> pendingDefinitions = new java.util.ArrayList<>();
         for (final Content content : contents) {
             for (final String path : content.getFilesDeep("particles/", ".json")) {
@@ -89,7 +119,6 @@ public class ServerResourcePackLoaderMixin {
             return;
         }
         net.easecation.beparticle.ParticleManager.INSTANCE.clear();
-        int count = 0;
         for (final var entry : pendingDefinitions) {
             net.easecation.beparticle.ParticleManager.INSTANCE.loadDefinition(entry.getKey(), entry.getValue());
             ViaBedrockUtilityNeoForge.LOGGER.info("[Particle:L0] Loaded particle definition: {}", entry.getKey());

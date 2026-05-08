@@ -10,6 +10,7 @@
   "client": [
     "MinecraftClientMixin",
     "accessor.PlayerSkinFieldAccessor",
+    "accessor.ServerPackDataAccessor",
     "entity.EntityMixin",
     "entity.InteractionEntityMixin",
     "entity.player.AbstractClientPlayerMixin",

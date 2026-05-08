@@ -28,7 +28,7 @@ public class ClientLoginNetworkHandlerMixin {
     @Inject(method = "handleLoginFinished", at = @At("RETURN"))
     public void handleLoginFinished(ClientboundLoginFinishedPacket packet, CallbackInfo ci) {
         // Let ViaBedrock know that we want to receive full bedrock pack, also we have to do this to send it early.
-        // Also use a different ResourceLocation to avoiding sending the same one twice.
+        // Also use a different identifier to avoiding sending the same one twice.
         ViaBedrockUtility.getInstance().setViaBedrockPresent(false);
         ViaBedrockUtilityNeoForge.LOGGER.info("[Handshake] Login success, sending confirm channel registration to ViaBedrock...");
         this.connection.send(new ServerboundCustomPayloadPacket(new MinecraftRegisterPayload(Set.of(
