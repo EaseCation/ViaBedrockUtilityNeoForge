@@ -34,8 +34,21 @@ public class ServerResourcePackLoaderMixin {
             return;
         }
 
-        final List<Path> packPaths = this.packs.stream()
+        final List<ServerPackDataAccessor> serverPacks = this.packs.stream()
                 .map(pack -> (ServerPackDataAccessor) pack)
+                .toList();
+        ViaBedrockUtilityNeoForge.LOGGER.info("[ResourcePack] ServerPackManager tick: viaBedrockPresent=true, totalPackData={}", serverPacks.size());
+        for (final ServerPackDataAccessor pack : serverPacks) {
+            ViaBedrockUtilityNeoForge.LOGGER.info(
+                    "[ResourcePack] pack id={}, accepted={}, removed={}, path={}",
+                    pack.viaBedrockUtility$getId(),
+                    pack.viaBedrockUtility$getPromptAccepted(),
+                    pack.viaBedrockUtility$isRemoved(),
+                    pack.viaBedrockUtility$getPath()
+            );
+        }
+
+        final List<Path> packPaths = serverPacks.stream()
                 .filter(ServerPackDataAccessor::viaBedrockUtility$getPromptAccepted)
                 .filter(pack -> !pack.viaBedrockUtility$isRemoved())
                 .map(ServerPackDataAccessor::viaBedrockUtility$getPath)
@@ -52,15 +65,15 @@ public class ServerResourcePackLoaderMixin {
     }
 
     private void loadBedrockPacks(List<Path> packs) {
-        ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack] Intercepting server resource packs, {} pack(s) received", packs.size());
+        ViaBedrockUtilityNeoForge.LOGGER.info("[ResourcePack] Intercepting accepted/downloaded server resource packs, {} pack(s) received", packs.size());
         final List<Content> contents = new ArrayList<>();
         packs.forEach(pack -> {
             try {
                 final Content content = new Content(Files.readAllBytes(pack));
                 final List<String> mcpacks = content.getFilesDeep("bedrock/", ".mcpack");
-                ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack] Found {} bedrock mcpack(s) in {}", mcpacks.size(), pack.getFileName());
+                ViaBedrockUtilityNeoForge.LOGGER.info("[ResourcePack] Found {} bedrock mcpack(s) in {}", mcpacks.size(), pack.getFileName());
                 for (final String path : mcpacks) {
-                    ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack]   - {}", path);
+                    ViaBedrockUtilityNeoForge.LOGGER.info("[ResourcePack]   - {}", path);
                     contents.add(new Content(content.get(path)));
                 }
             } catch (IOException e) {

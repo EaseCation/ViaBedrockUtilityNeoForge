@@ -5,9 +5,13 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 import java.nio.file.Path;
+import java.util.UUID;
 
 @Mixin(targets = "net.minecraft.client.resources.server.ServerPackManager$ServerPackData")
 public interface ServerPackDataAccessor {
+    @Accessor("id")
+    UUID viaBedrockUtility$getId();
+
     @Accessor("path")
     Path viaBedrockUtility$getPath();
 

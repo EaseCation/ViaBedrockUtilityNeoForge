@@ -16,6 +16,7 @@
     "entity.player.AbstractClientPlayerMixin",
     "network.ClientLoginNetworkHandlerMixin",
     "network.ClientConfigurationNetworkHandlerMixin",
+    "network.ClientCommonPacketListenerMixin",
     "network.ClientPlayNetworkHandlerMixin",
     "pack.ServerResourcePackLoaderMixin",
     "render.CuboidMixin",
