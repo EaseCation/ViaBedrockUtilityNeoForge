@@ -273,7 +273,7 @@ public class PayloadHandler {
         }
 
         if (model == null) {
-            // Classic skins use the vanilla 64x64 model layout here.
+            // This is likely a classic skin with hardcoded identifier! TODO: 128x128
             model = new PlayerModel(LayerDefinition.create(PlayerModel.createMesh(CubeDeformation.NONE, slim), 64, 64).bakeRoot(), slim);
             ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Using default player model (slim={}) for {}", slim, payload.getPlayerUuid());
         }

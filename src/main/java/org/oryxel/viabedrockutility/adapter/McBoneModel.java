@@ -10,7 +10,7 @@ import java.util.*;
 
 /**
  * Adapter: wraps any MC Model as IBoneModel.
- * Lazily builds a flat bone index from Model.allParts() traversal.
+ * Lazily builds a flat bone index from Model.getParts() traversal.
  */
 public class McBoneModel implements IBoneModel {
     private final Model model;

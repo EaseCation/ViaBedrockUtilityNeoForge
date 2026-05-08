@@ -54,7 +54,7 @@ public class CustomEntityTicker implements AnimationEventListener {
     private final Map<String, String> inverseTextureMap = new HashMap<>();
     private final Map<String, String> inverseMaterialMap = new HashMap<>();
 
-    // particle_effects alias map from entity definition (short_name to full identifier)
+    // particle_effects alias map from entity definition (short_name → full identifier)
     private final Map<String, String> particleEffects;
 
     private final Set<String> availableModels = new HashSet<>();
@@ -76,7 +76,7 @@ public class CustomEntityTicker implements AnimationEventListener {
     @Getter
     private Scope lastExecutionScope;
 
-    // animation identifier to condition expression (for per-frame blend weight evaluation)
+    // animation identifier → condition expression (for per-frame blend weight evaluation)
     @Getter
     private final Map<String, String> animationIdToCondition = new HashMap<>();
     @Getter
@@ -186,6 +186,7 @@ public class CustomEntityTicker implements AnimationEventListener {
         }
         // Skip if position not yet initialized (renderer hasn't run)
         if (entityPosition == null) return;
+        // TODO: resolve locator to bone world position; for now use entity position
         net.easecation.beparticle.ParticleManager.INSTANCE.spawnEmitter(
                 identifier,
                 new org.joml.Vector3f(entityPosition),

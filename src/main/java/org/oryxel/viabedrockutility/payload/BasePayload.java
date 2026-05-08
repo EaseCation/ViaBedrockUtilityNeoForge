@@ -67,6 +67,7 @@ public class BasePayload implements CustomPacketPayload {
             }
 
             case ANIMATE -> {
+                // TODO: Implement this.
                 return new BasePayload();
             }
 

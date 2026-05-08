@@ -155,7 +155,7 @@ public record Material(String identifier, String baseIdentifier, MaterialInfo in
 
         public Function<ResourceLocation, RenderType> build() {
             return Objects.requireNonNullElseGet(this.function, () -> this.function = Util.memoize(texture -> {
-                // Use standard MC RenderType factory methods so that shader mods (Iris, etc.)
+                // Use standard MC RenderLayer factory methods so that shader mods (Iris, etc.)
                 // can recognize the RenderPipeline singleton and apply gbuffer programs correctly.
                 // Primary split on DisableCulling: outline/one-sided techniques require cull=true.
                 // USE_EMISSIVE is handled in the renderer via fullbright light override, not here.
