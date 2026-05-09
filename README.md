@@ -1,6 +1,6 @@
 # ViaBedrockUtility
 
-A Fabric client mod that provides enhanced rendering capabilities for Minecraft Java Edition clients connecting to Bedrock servers via [ViaProxy](https://github.com/ViaVersion/ViaProxy) + [ViaBedrock](https://github.com/RaphiMC/ViaBedrock).
+A NeoForge client mod that provides enhanced rendering capabilities for Minecraft Java Edition clients connecting to Bedrock servers via [ViaProxy](https://github.com/ViaVersion/ViaProxy) + [ViaBedrock](https://github.com/RaphiMC/ViaBedrock).
 
 Inspired by [BedrockSkinUtility](https://github.com/Camotoy/BedrockSkinUtility), with some code reused from ViaBedrock.
 
@@ -21,12 +21,12 @@ Bedrock Server
 ViaProxy (Proxy)
     ├── ViaBedrock (Protocol Translation)
     │       ↓ Custom Payload
-    └── ViaBedrockUtility (Fabric Mod, this project)
+    └── ViaBedrockUtility (NeoForge Mod, this project)
             ├── Custom Entity Rendering
             ├── Custom Player Skins
             └── Bedrock Camera API
                     ↓
-                BECamera (Fabric Mod, camera library)
+                BECamera (NeoForge mod, camera library)
 ```
 
 ### Communication Channels
@@ -85,7 +85,7 @@ Powered by the [BECamera](https://github.com/EaseCation/BECamera) library for ca
 
 ### Configuration
 
-Configuration UI available via ModMenu or Sodium:
+Configuration options in the current NeoForge client build:
 
 - **Animation LOD Presets**: HIGH_QUALITY (no LOD), BALANCED, PERFORMANCE, CUSTOM
 - **Custom Tiers**: Control animation update frequency by distance threshold and frame interval
@@ -107,17 +107,13 @@ BECamera               ← Bedrock Camera API library (camera control / path int
 | [CubeConverter](https://github.com/EaseCation/CubeConverter) | 1.3 | mavenLocal / JitPack | Bedrock geometry model parsing |
 | [BedrockMotion](https://github.com/EaseCation/BedrockMotion) | 1.0.0 | mavenLocal / JitPack | Skeletal animation engine |
 | [BECamera](https://github.com/EaseCation/BECamera) | 1.2.0 | mavenLocal | Bedrock Camera API |
-| Fabric API | 0.119.5 ~ 0.141.3 | Maven | Varies by MC version |
-| Fabric Loader | ≥0.18.0 | Maven | |
+| [BEParticle](https://github.com/EaseCation/BEParticleNeoForge) | 1.0.0 | Local workspace / Maven | Bedrock particle engine used by the NeoForge client stack |
+| NeoForge | 21.8.53 | Maven | Client mod runtime |
 | Lombok | 1.18.36 | Maven | Compile-time annotation processing |
 
 ## Supported Minecraft Versions
 
-Multi-version builds via [Stonecutter](https://stonecutter.kikugie.dev/):
-
-**1.21.5** · **1.21.6** · **1.21.7** · **1.21.8** · **1.21.9** · **1.21.10** · **1.21.11**
-
-Active development version is **1.21.11**, with version-conditional compilation via `//? if >=1.21.9 {` comment syntax.
+Current NeoForge workspace target: **1.21.8**.
 
 ## Usage
 
@@ -125,29 +121,25 @@ Active development version is **1.21.11**, with version-conditional compilation 
 
 1. **ViaProxy** — Proxy server through which the Java client connects to Bedrock servers
 2. **ViaBedrock** — ViaProxy plugin that performs Java ↔ Bedrock protocol translation
-3. **ViaBedrockUtility** — This mod, installed on the Fabric client
+3. **ViaBedrockUtility** — This mod, installed on the NeoForge client
 
 ### Optional Components
 
-- **BECamera** — For Bedrock Camera API support (already included as a dependency)
-- **ModMenu** / **Cloth Config** — Graphical configuration UI
-- **Sodium** — 1.21.11+ can integrate with Sodium's config panel
+- Additional client-side optimization or UI mods can be layered on top of this NeoForge setup as needed
 
 ### Installation
 
-1. Install [Fabric Loader](https://fabricmc.net/) and Fabric API
-2. Place `viabedrockutility-mc<version>-1.0.0.jar` and `bedrockcameralib-mc<version>-1.2.0.jar` into the client `mods/` directory
+1. Install NeoForge 21.8.53 for Minecraft 1.21.8
+2. Place `viabedrockutility-1.0.0.jar`, `bedrockcameralib-1.2.0.jar`, and `beparticle-1.0.0.jar` into the client `mods/` directory
 3. Configure ViaProxy to connect to a Bedrock server
 4. Launch the game and connect through the ViaProxy proxy
-
-> **Note**: Choose the jar that **matches** your Minecraft client version. Do not use the root-level `viabedrockutility-1.0.0.jar` (that's the base version for 1.21.5). Version-specific jars are located under `versions/<MC version>/build/libs/`.
 
 ## Building
 
 ### Prerequisites
 
 - JDK 21+
-- Dependency projects published to mavenLocal (see below)
+- This NeoForge workspace checked out with its companion projects available locally
 
 ### Local Build
 
@@ -158,20 +150,17 @@ cd CubeConverter && ./gradlew publishToMavenLocal
 # 2. Build and publish BedrockMotion
 cd BedrockMotion && ./gradlew publishToMavenLocal
 
-# 3. Build and publish BECamera
-cd BECamera && ./gradlew publishToMavenLocal
+# 3. Build and publish BECameraNeoForge
+cd BECameraNeoForge && ./gradlew publishToMavenLocal
 
-# 4. Build ViaBedrockUtility (all MC versions)
-cd ViaBedrockUtility && ./gradlew chiseledBuild
+# 4. Build and publish BEParticleNeoForge
+cd BEParticleNeoForge && ./gradlew publishToMavenLocal
+
+# 5. Build ViaBedrockUtilityNeoForge
+cd ViaBedrockUtilityNeoForge && ./gradlew build
 ```
 
-Build artifacts are located at `versions/<MC version>/build/libs/viabedrockutility-mc<version>-1.0.0.jar`.
-
-If using [ViaProxyWorkspace](https://github.com/EaseCation/ViaProxyWorkspace), you can build in one step:
-
-```bash
-cd ViaProxyWorkspace && ./gradlew buildViaBedrockUtility
-```
+Build artifacts are located at `build/libs/viabedrockutility-1.0.0.jar`.
 
 ### CI Build
 
@@ -181,7 +170,7 @@ GitHub Actions automatically builds all dependencies from source (bypassing JitP
 CubeConverter → BedrockMotion → BECamera → ViaBedrockUtility
 ```
 
-Each dependency is published to mavenLocal first, then `chiseledBuild` builds all MC versions.
+Each dependency is published to `mavenLocal` first, then the NeoForge workspace build is executed.
 
 ## License
 

@@ -1,6 +1,6 @@
 # ViaBedrockUtility
 
-Fabric 客户端 Mod，为通过 [ViaProxy](https://github.com/ViaVersion/ViaProxy) + [ViaBedrock](https://github.com/RaphiMC/ViaBedrock) 连接 Bedrock 服务器的 Java 版客户端提供增强渲染能力。
+NeoForge 客户端 Mod，为通过 [ViaProxy](https://github.com/ViaVersion/ViaProxy) + [ViaBedrock](https://github.com/RaphiMC/ViaBedrock) 连接 Bedrock 服务器的 Java 版客户端提供增强渲染能力。
 
 灵感来源于 [BedrockSkinUtility](https://github.com/Camotoy/BedrockSkinUtility)，部分代码复用自 ViaBedrock。
 
@@ -21,12 +21,12 @@ Bedrock 服务器
 ViaProxy (代理)
     ├── ViaBedrock (协议转换)
     │       ↓ Custom Payload
-    └── ViaBedrockUtility (Fabric Mod, 本项目)
+    └── ViaBedrockUtility (NeoForge Mod, 本项目)
             ├── 自定义实体渲染
             ├── 自定义玩家皮肤
             └── Bedrock Camera API
                     ↓
-                BECamera (Fabric Mod, 相机库)
+                BECamera (NeoForge Mod, 相机库)
 ```
 
 ### 通信链路
@@ -85,7 +85,7 @@ ViaBedrock 在代理端完成 Bedrock → Java 协议转换，同时将 Java 版
 
 ### 配置系统
 
-通过 ModMenu 或 Sodium 提供配置界面：
+当前 NeoForge 客户端构建提供以下配置项：
 
 - **动画 LOD 预设**：HIGH_QUALITY（无 LOD）、BALANCED、PERFORMANCE、CUSTOM
 - **自定义分级**：按距离阈值和帧间隔控制动画更新频率
@@ -107,17 +107,13 @@ BECamera               ← Bedrock Camera API 库 (相机控制/路径插值)
 | [CubeConverter](https://github.com/EaseCation/CubeConverter) | 1.3 | mavenLocal / JitPack | Bedrock 几何模型解析 |
 | [BedrockMotion](https://github.com/EaseCation/BedrockMotion) | 1.0.0 | mavenLocal / JitPack | 骨骼动画引擎 |
 | [BECamera](https://github.com/EaseCation/BECamera) | 1.2.0 | mavenLocal | Bedrock Camera API |
-| Fabric API | 0.119.5 ~ 0.141.3 | Maven | 按 MC 版本变化 |
-| Fabric Loader | ≥0.18.0 | Maven | |
+| [BEParticle](https://github.com/EaseCation/BEParticleNeoForge) | 1.0.0 | 本地工作区 / Maven | NeoForge 客户端粒子引擎 |
+| NeoForge | 21.8.53 | Maven | 客户端 Mod 运行时 |
 | Lombok | 1.18.36 | Maven | 编译期注解处理 |
 
 ## 支持的 Minecraft 版本
 
-使用 [Stonecutter](https://stonecutter.kikugie.dev/) 多版本构建：
-
-**1.21.5** · **1.21.6** · **1.21.7** · **1.21.8** · **1.21.9** · **1.21.10** · **1.21.11**
-
-活动开发版本为 **1.21.11**，通过 `//? if >=1.21.9 {` 注释语法实现版本条件编译。
+当前 NeoForge 工作区目标版本：**1.21.8**。
 
 ## 搭配使用
 
@@ -125,29 +121,25 @@ BECamera               ← Bedrock Camera API 库 (相机控制/路径插值)
 
 1. **ViaProxy** — 代理服务器，Java 客户端通过它连接 Bedrock 服务器
 2. **ViaBedrock** — ViaProxy 插件，执行 Java ↔ Bedrock 协议转换
-3. **ViaBedrockUtility** — 本 Mod，安装在 Fabric 客户端
+3. **ViaBedrockUtility** — 本 Mod，安装在 NeoForge 客户端
 
 ### 可选组件
 
-- **BECamera** — 如需 Bedrock Camera API 支持（已作为依赖自动引入）
-- **ModMenu** / **Cloth Config** — 图形化配置界面
-- **Sodium** — 1.21.11+ 可集成 Sodium 配置面板
+- 可按需叠加其他 NeoForge 客户端优化或界面类 Mod
 
 ### 安装
 
-1. 安装 [Fabric Loader](https://fabricmc.net/) 和 Fabric API
-2. 将 `viabedrockutility-mc<版本>-1.0.0.jar` 和 `bedrockcameralib-mc<版本>-1.2.0.jar` 放入客户端 `mods/` 目录
+1. 安装适用于 Minecraft 1.21.8 的 NeoForge 21.8.53
+2. 将 `viabedrockutility-1.0.0.jar`、`bedrockcameralib-1.2.0.jar` 和 `beparticle-1.0.0.jar` 放入客户端 `mods/` 目录
 3. 配置 ViaProxy 连接 Bedrock 服务器
 4. 启动游戏，通过 ViaProxy 代理连接
-
-> **注意**：选择与你的 Minecraft 客户端版本**对应**的 jar，不要使用根目录的 `viabedrockutility-1.0.0.jar`（那是基础版本 1.21.5 的）。版本化 jar 在 `versions/<MC版本>/build/libs/` 下。
 
 ## 构建
 
 ### 前置条件
 
 - JDK 21+
-- 依赖项目已发布到 mavenLocal（见下方说明）
+- 已检出当前 NeoForge 工作区及其本地配套项目
 
 ### 本地构建
 
@@ -158,20 +150,17 @@ cd CubeConverter && ./gradlew publishToMavenLocal
 # 2. 构建并发布 BedrockMotion
 cd BedrockMotion && ./gradlew publishToMavenLocal
 
-# 3. 构建并发布 BECamera
-cd BECamera && ./gradlew publishToMavenLocal
+# 3. 构建并发布 BECameraNeoForge
+cd BECameraNeoForge && ./gradlew publishToMavenLocal
 
-# 4. 构建 ViaBedrockUtility（所有 MC 版本）
-cd ViaBedrockUtility && ./gradlew chiseledBuild
+# 4. 构建并发布 BEParticleNeoForge
+cd BEParticleNeoForge && ./gradlew publishToMavenLocal
+
+# 5. 构建 ViaBedrockUtilityNeoForge
+cd ViaBedrockUtilityNeoForge && ./gradlew build
 ```
 
-构建产物位于 `versions/<MC版本>/build/libs/viabedrockutility-mc<版本>-1.0.0.jar`。
-
-如果使用 [ViaProxyWorkspace](https://github.com/EaseCation/ViaProxyWorkspace)，可以一步完成：
-
-```bash
-cd ViaProxyWorkspace && ./gradlew buildViaBedrockUtility
-```
+构建产物位于 `build/libs/viabedrockutility-1.0.0.jar`。
 
 ### CI 构建
 
@@ -181,7 +170,7 @@ GitHub Actions 自动从源码构建所有依赖（绕过 JitPack 缓存问题�
 CubeConverter → BedrockMotion → BECamera → ViaBedrockUtility
 ```
 
-每个依赖先 `publishToMavenLocal`，最终执行 `chiseledBuild` 构建所有 MC 版本。
+每个依赖先发布到 `mavenLocal`，然后执行 NeoForge 工作区构建。
 
 ## 许可证
 
