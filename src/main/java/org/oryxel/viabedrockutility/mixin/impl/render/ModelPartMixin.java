@@ -178,6 +178,11 @@ public abstract class ModelPartMixin implements IModelPart {
     }
 
     @Override
+    public Vector3f viaBedrockUtility$getPivot() {
+        return this.pivot;
+    }
+
+    @Override
     public void viaBedrockUtility$resetToDefaultPose() {
         this.rotation.set(this.defaultRotation);
         this.offset.set(0, 0, 0);

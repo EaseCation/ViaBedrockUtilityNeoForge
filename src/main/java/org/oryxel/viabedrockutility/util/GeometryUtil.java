@@ -16,6 +16,7 @@ import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICuboid;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
+import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
 import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
 
 import java.util.*;
@@ -64,6 +65,7 @@ public final class GeometryUtil {
             }
         }
 
+        final BedrockPlayerModelMetadata playerMetadata = player ? new BedrockPlayerModelMetadata(slim) : null;
         final Map<String, PartInfo> stringToPart = new HashMap<>();
         for (final Parent bone : geometry.getParents()) {
             final Map<String, ModelPart> children = Maps.newHashMap();
@@ -146,7 +148,12 @@ public final class GeometryUtil {
                 }
             }
 
-            stringToPart.put(adjustFormatting(player, name), new PartInfo(adjustFormatting(player, parent), part, children));
+            String adjustedName = adjustFormatting(player, name);
+            String adjustedParent = adjustFormatting(player, parent);
+            if (playerMetadata != null) {
+                playerMetadata.addBone(bone, adjustedName, adjustedParent, part);
+            }
+            stringToPart.put(adjustedName, new PartInfo(adjustedParent, part, children));
         }
 
         PartInfo root = stringToPart.get("root");
@@ -220,7 +227,12 @@ public final class GeometryUtil {
         // Validate the actual ModelPart tree for cycles (identity-based, not name-based)
         validateAndFixCycles(root.part(), "root", new IdentityHashMap<>(), new ArrayList<>(), geometryName);
 
-        return player ? new PlayerModel(root.part(), slim) : new CustomEntityModel<>(root.part());
+        if (player) {
+            PlayerModel model = new PlayerModel(root.part(), slim);
+            BedrockPlayerModelMetadata.register(model, playerMetadata);
+            return model;
+        }
+        return new CustomEntityModel<>(root.part());
     }
 
     private static String adjustFormatting(boolean player, String name) {

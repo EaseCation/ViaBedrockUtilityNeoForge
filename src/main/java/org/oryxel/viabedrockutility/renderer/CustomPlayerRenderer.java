@@ -1,6 +1,7 @@
 package org.oryxel.viabedrockutility.renderer;
 
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.entity.layers.PlayerItemInHandLayer;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
@@ -23,6 +24,8 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         }
 
         this.texture = texture;
+        this.layers.removeIf(layer -> layer instanceof PlayerItemInHandLayer<?, ?>);
+        this.addLayer(new BedrockPlayerItemInHandLayer(this));
         this.addLayer(new AnimatedOverlayFeatureRenderer(this));
     }
 
