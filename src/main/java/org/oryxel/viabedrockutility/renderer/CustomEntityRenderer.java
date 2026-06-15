@@ -149,6 +149,8 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                     if ((model.controller() != null && model.controller().ignoreLighting())
                             || skinningColor.getDefines().contains("USE_EMISSIVE")) {
                         effectiveLight = LightTexture.FULL_BRIGHT;
+                    } else if (model.controller() != null && model.controller().lightColorMultiplier() != 1.0F) {
+                        effectiveLight = scaleLight(light, model.controller().lightColorMultiplier());
                     }
 
                     VertexConsumer vertexConsumer = vertexConsumers.getBuffer(renderType);
@@ -166,6 +168,20 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
             matrices.popPose();
         }
         super.render(state, matrices, vertexConsumers, light);
+    }
+
+    // Bedrock render controller "light_color_multiplier": a scalar applied to the light color
+    // reaching the entity (>1 brightens beyond ambient, <1 darkens; default 1.0). Java has no RGB
+    // light color - lighting arrives as a packed lightmap coord (block in low 16 bits, sky in high
+    // 16, each a level<<4 in 0..240). Approximate by scaling both coord components by the multiplier
+    // and clamping to the legal 0..240 (0xF0) range, then repacking. Independent of LightTexture
+    // unpack helpers to avoid level-vs-coord ambiguity.
+    private static int scaleLight(final int packedLight, final float multiplier) {
+        final int block = packedLight & 0xFFFF;
+        final int sky = (packedLight >> 16) & 0xFFFF;
+        final int scaledBlock = Mth.clamp(Math.round(block * multiplier), 0, 0xF0);
+        final int scaledSky = Mth.clamp(Math.round(sky * multiplier), 0, 0xF0);
+        return (scaledSky << 16) | scaledBlock;
     }
 
     @Override
