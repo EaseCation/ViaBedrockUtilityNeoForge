@@ -22,7 +22,6 @@ import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
 import java.util.*;
 
 public final class GeometryUtil {
-    private static final List<String> LEG_RELATED = List.of("leftleg", "rightleg", "rightpants", "leftpants");
 
     public static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim) {
         return buildModel(geometry, player, slim, null);
@@ -34,36 +33,6 @@ public final class GeometryUtil {
         // https://github.com/Camotoy/BedrockSkinUtility/issues/9
         final float uvWidth = geometry.getTextureSize().getX();
         final float uvHeight = geometry.getTextureSize().getY();
-
-        // Pre-compute which bones are leg-related (including all descendants of leg bones).
-        // Child bones of legs must use the same Y coordinate system as their parent leg bone;
-        // otherwise the Y-inversion transform (-Y + 24.016) causes severe height offset.
-        final Set<String> legRelatedBones = new HashSet<>();
-        final Map<String, String> boneParentMap = new LinkedHashMap<>();
-        final Map<String, Float> bonePivotY = new HashMap<>();
-        if (player) {
-            for (final Parent bone : geometry.getParents()) {
-                String bn = bone.getName().toLowerCase(Locale.ROOT);
-                String pn = bone.getParent() != null ? bone.getParent().toLowerCase(Locale.ROOT) : "";
-                boneParentMap.put(bn, pn);
-                bonePivotY.put(bn, bone.getPivot().getY());
-            }
-            for (String bn : boneParentMap.keySet()) {
-                if (LEG_RELATED.contains(bn)) {
-                    legRelatedBones.add(bn);
-                }
-            }
-            boolean changed = true;
-            while (changed) {
-                changed = false;
-                for (Map.Entry<String, String> entry : boneParentMap.entrySet()) {
-                    if (!legRelatedBones.contains(entry.getKey()) && legRelatedBones.contains(entry.getValue())) {
-                        legRelatedBones.add(entry.getKey());
-                        changed = true;
-                    }
-                }
-            }
-        }
 
         final BedrockPlayerModelMetadata playerMetadata = player ? new BedrockPlayerModelMetadata(slim) : null;
         final Map<String, PartInfo> stringToPart = new HashMap<>();
@@ -81,19 +50,12 @@ public final class GeometryUtil {
             ((IModelPart)((Object)part)).viaBedrockUtility$setNeededOffset(neededOffset);
             ((IModelPart)((Object)part)).viaBedrockUtility$setAngles(new Vector3f(bone.getRotation().getX() , bone.getRotation().getY(), bone.getRotation().getZ()));
 
-            boolean isLeg = player && legRelatedBones.contains(bone.getName().toLowerCase(Locale.ROOT));
-            if (isLeg) {
-                float pivotY = bone.getPivot().getY();
-                // Vanilla applyTransform translates to origin but never translates back,
-                // so child origins accumulate with parents. Use relative Y to compensate:
-                // accumulated origin Y of any bone = its absolute Bedrock pivot Y.
-                String parentLower = boneParentMap.getOrDefault(bone.getName().toLowerCase(Locale.ROOT), "");
-                float parentPivotY = bonePivotY.getOrDefault(parentLower, 0f);
-                part.setPos(0, pivotY - parentPivotY, 0);
-                part.setInitialPose(part.storePose());
-            } else {
-                ((IModelPart)((Object)part)).viaBedrockUtility$setPivot(new Vector3f(bone.getPivot().getX(), -bone.getPivot().getY() + 24.016F, bone.getPivot().getZ()));
-            }
+            // All bones (player and entity, including legs) use one coordinate convention: the bone's
+            // rotation pivot is its Bedrock pivot mapped to Java space (Y inverted, +24.016 offset), and
+            // its cubes are positioned in that same inverted-Y space (see below). No setPos is used, so
+            // geometry is placed absolutely by its cube vertices and there is no parent-origin
+            // accumulation. This matches the proven custom-entity path; legs are NOT special-cased.
+            ((IModelPart)((Object)part)).viaBedrockUtility$setPivot(new Vector3f(bone.getPivot().getX(), -bone.getPivot().getY() + 24.016F, bone.getPivot().getZ()));
 
             // Java don't allow individual cubes to have their own rotation therefore, we have to separate each cube into ModelPart to be able to rotate.
             for (final Cube cube : bone.getCubes().values()) {
@@ -122,7 +84,7 @@ public final class GeometryUtil {
                     }
                 }
 
-                final ModelPart.Cube cuboid = new ModelPart.Cube(0, 0, pos.getX(), isLeg ? pos.getY() : -(pos.getY() - 24.016F + sizeY), pos.getZ(), sizeX, sizeY, sizeZ, inflate, inflate, inflate, cube.isMirror(), uvWidth, uvHeight, set);
+                final ModelPart.Cube cuboid = new ModelPart.Cube(0, 0, pos.getX(), -(pos.getY() - 24.016F + sizeY), pos.getZ(), sizeX, sizeY, sizeZ, inflate, inflate, inflate, cube.isMirror(), uvWidth, uvHeight, set);
                 correctUv(cuboid, set, uvMap, uvWidth, uvHeight, cube.getInflate(), cube.isMirror());
                 ((ICuboid)(Object) cuboid).viaBedrockUtility$markAsVBU();
 
@@ -137,7 +99,7 @@ public final class GeometryUtil {
 
             // Handle poly_mesh: convert pre-computed polygon data to Cuboid/Quad/Vertex
             if (bone.getPolyMesh() != null) {
-                buildPolyMeshParts(bone.getPolyMesh(), isLeg, neededOffset, bone.getName(), uvWidth, uvHeight, children);
+                buildPolyMeshParts(bone.getPolyMesh(), neededOffset, bone.getName(), uvWidth, uvHeight, children);
             }
 
             String parent = bone.getParent();
@@ -373,7 +335,7 @@ public final class GeometryUtil {
         }
     }
 
-    private static void buildPolyMeshParts(PolyMesh polyMesh, boolean isLeg, boolean neededOffset,
+    private static void buildPolyMeshParts(PolyMesh polyMesh, boolean neededOffset,
                                            String boneName, float uvWidth, float uvHeight,
                                            Map<String, ModelPart> children) {
         final float[][] pmPositions = polyMesh.getPositions();
@@ -398,10 +360,8 @@ public final class GeometryUtil {
                 float py = pmPositions[posIdx][1];
                 float pz = pmPositions[posIdx][2];
 
-                // Coordinate transform: Bedrock -> Java model space
-                if (!isLeg) {
-                    py = -py + 24.016F;
-                }
+                // Coordinate transform: Bedrock -> Java model space (Y inverted + 24.016 offset)
+                py = -py + 24.016F;
 
                 // UV transform
                 float u = pmUvs[uvIdx][0];
@@ -427,7 +387,7 @@ public final class GeometryUtil {
                 verts[3] = verts[2];
             }
 
-            Direction dir = normalToDirection(avgNx / vertCount, avgNy / vertCount, avgNz / vertCount, isLeg);
+            Direction dir = normalToDirection(avgNx / vertCount, avgNy / vertCount, avgNz / vertCount);
             allPolyQuads.add(new PolyQuadData(verts, dir));
         }
 
@@ -478,8 +438,8 @@ public final class GeometryUtil {
         }
     }
 
-    private static Direction normalToDirection(float nx, float ny, float nz, boolean isLeg) {
-        if (!isLeg) ny = -ny; // Y axis is inverted for non-leg bones
+    private static Direction normalToDirection(float nx, float ny, float nz) {
+        ny = -ny; // Y axis is inverted (Bedrock -> Java) for all bones
         float absX = Math.abs(nx), absY = Math.abs(ny), absZ = Math.abs(nz);
         if (absY >= absX && absY >= absZ) {
             return ny > 0 ? Direction.UP : Direction.DOWN;

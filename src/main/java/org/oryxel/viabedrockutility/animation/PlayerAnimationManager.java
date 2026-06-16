@@ -1,5 +1,6 @@
 package org.oryxel.viabedrockutility.animation;
 
+import net.easecation.bedrockmotion.animation.vanilla.AnimateTransformation;
 import net.easecation.bedrockmotion.animation.vanilla.AnimationHelper;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import net.minecraft.client.model.Model;
@@ -16,86 +17,34 @@ import team.unnamed.mocha.runtime.value.Value;
 import java.util.*;
 
 public class PlayerAnimationManager {
-    /**
-     * Specifies which vanilla rotation axes to clear on a bone.
-     * Vanilla setAngles() sets pitch(X)/yaw(Y)/roll(Z); we only clear the specific axes
-     * that correspond to the vanilla animation being overridden.
-     */
-    private record BoneClear(String boneName, boolean pitch, boolean yaw, boolean roll) {
-    }
-
-    /**
-     * Maps animation short names to precise per-bone, per-axis clearing rules.
-     * Only axes that vanilla setAngles() actually writes for that animation are cleared.
-     * Unlisted animation names are purely additive (no clearing).
-     *
-     * Vanilla PlayerEntityModel.setAngles() reference:
-     *   bob         → arms roll (Z-axis oscillation: cos(age) * amplitude)
-     *   move.arms   → arms pitch (X-axis swing: cos(limbSwing) * amplitude)
-     *   move.legs   → legs pitch (X-axis swing: cos(limbSwing) * amplitude)
-     *   attack.*    → rightArm pitch (X-axis swing)
-     *   riding.*    → pitch on arms/legs
-     *   sneaking    → body pitch + leg/arm pitch adjustments
-     */
-    private static final Map<String, List<BoneClear>> VANILLA_CLEAR_MAP = Map.ofEntries(
-            Map.entry("bob", List.of(
-                    new BoneClear("rightarm", false, false, true),
-                    new BoneClear("leftarm", false, false, true)
-            )),
-            Map.entry("move.arms", List.of(
-                    new BoneClear("rightarm", true, false, false),
-                    new BoneClear("leftarm", true, false, false)
-            )),
-            Map.entry("move.legs", List.of(
-                    new BoneClear("rightleg", true, false, false),
-                    new BoneClear("leftleg", true, false, false)
-            )),
-            Map.entry("attack.rotations", List.of(
-                    new BoneClear("rightarm", true, false, false)
-            )),
-            Map.entry("riding.arms", List.of(
-                    new BoneClear("rightarm", true, false, false),
-                    new BoneClear("leftarm", true, false, false)
-            )),
-            Map.entry("riding.legs", List.of(
-                    new BoneClear("rightleg", true, false, false),
-                    new BoneClear("leftleg", true, false, false)
-            )),
-            Map.entry("sneaking", List.of(
-                    new BoneClear("body", true, false, false)
-            )),
-            Map.entry("swimming", List.of(
-                    new BoneClear("rightarm", true, true, true),
-                    new BoneClear("leftarm", true, true, true),
-                    new BoneClear("rightleg", true, false, false),
-                    new BoneClear("leftleg", true, false, false),
-                    new BoneClear("body", true, false, false)
-            )),
-            Map.entry("swimming.legs", List.of(
-                    new BoneClear("rightleg", true, false, false),
-                    new BoneClear("leftleg", true, false, false)
-            )),
-            Map.entry("crawling", List.of(
-                    new BoneClear("rightarm", true, true, true),
-                    new BoneClear("leftarm", true, true, true),
-                    new BoneClear("rightleg", true, false, false),
-                    new BoneClear("leftleg", true, false, false),
-                    new BoneClear("body", true, false, false)
-            )),
-            Map.entry("crawling.legs", List.of(
-                    new BoneClear("rightleg", true, false, false),
-                    new BoneClear("leftleg", true, false, false)
-            ))
-    );
-
     private final Map<String, AnimationDefinitions.AnimationData> animations = new LinkedHashMap<>();
     private final Set<String> affectedBones = new HashSet<>();
     private final long startTimeMS = System.currentTimeMillis();
     private final Vector3f tempVec = new Vector3f();
 
     public void addAnimation(String shortName, AnimationDefinitions.AnimationData data) {
+        // Skip empty overrides. A skin's resource_patch frequently maps an animation slot to an empty
+        // placeholder animation; registering one contributes no keyframes, so it is a no-op we drop.
+        if (data == null || data.compiled() == null) {
+            return;
+        }
+        final Map<String, List<AnimateTransformation>> bones = data.compiled().boneAnimations();
+        if (bones == null || bones.isEmpty()) {
+            return;
+        }
+        boolean hasTransform = false;
+        for (List<AnimateTransformation> list : bones.values()) {
+            if (list != null && !list.isEmpty()) {
+                hasTransform = true;
+                break;
+            }
+        }
+        if (!hasTransform) {
+            return;
+        }
+
         animations.put(shortName, data);
-        affectedBones.addAll(data.compiled().boneAnimations().keySet());
+        affectedBones.addAll(bones.keySet());
     }
 
     public boolean isEmpty() {
@@ -106,37 +55,57 @@ public class PlayerAnimationManager {
         return affectedBones;
     }
 
+    /** Animation slot names that were actually registered (post-filtering). For diagnostics. */
+    public Set<String> getRegisteredAnimationNames() {
+        return animations.keySet();
+    }
+
     /**
      * Called every frame from PlayerEntityModel.setAngles() TAIL injection.
-     * For known vanilla-replacing animations, clears only the specific axes that vanilla sets.
-     * All other animations are purely additive via IModelPart.rotation.
+     * Bedrock-authoritative: the skin ships its own animations, so they define the pose. We clear
+     * vanilla's contribution on the bones those animations drive, then apply the Bedrock animations.
      */
-    @SuppressWarnings("unchecked")
     public void animate(Model model, PlayerRenderState state) {
-        List<ModelPart> parts = (List<ModelPart>) model.allParts();
-
-        // Reset affected bones' VBU rotation/offset to default before additive blending
-        for (String boneName : affectedBones) {
-            getPartByName(parts, boneName)
-                .ifPresent(part -> ((IModelPart)((Object)part)).viaBedrockUtility$resetToDefaultPose());
-        }
-
         final McBoneModel boneModel = new McBoneModel(model);
+
+        // Reset ALL bones' VBU pose to default before additive blending — mirrors the proven
+        // custom-entity path (CustomEntityRenderer.render -> McBoneModel.resetAllBones). The animation
+        // engine applies rotation/offset/scale ADDITIVELY (AnimateTransformation.Targets), so without
+        // a full reset the transforms accumulate frame-over-frame and the pose drifts.
+        boneModel.resetAllBones();
+
+        // Clear vanilla setupAnim's rotation on every bone a Bedrock animation drives. A Bedrock player
+        // is posed entirely by Bedrock animations (humanoid_base_pose sets the neutral, locomotion layers
+        // on top); there is no vanilla setupAnim in Bedrock. Since our VBU rotation is applied ADDITIVELY
+        // on top of vanilla xRot/yRot/zRot at render (ModelPartMixin.translateAndRotate), leaving vanilla's
+        // rotation in place double-poses the limbs (the splayed pose). Zeroing it on the driven bones makes
+        // the Bedrock animation authoritative. Bones with no Bedrock animation keep their vanilla pose.
+        // (For fully-custom-bone skins, vanilla never wrote these bones, so this is a harmless no-op.)
+        clearVanillaRotation(model);
+
         final Scope scope = buildScope(state);
         final long elapsed = System.currentTimeMillis() - startTimeMS;
         for (Map.Entry<String, AnimationDefinitions.AnimationData> entry : animations.entrySet()) {
-            final List<BoneClear> clears = VANILLA_CLEAR_MAP.get(entry.getKey());
-            if (clears != null) {
-                for (BoneClear bc : clears) {
-                    Optional<ModelPart> opt = getPartByName(parts, bc.boneName());
-                    opt.ifPresent(part -> {
-                        if (bc.pitch()) part.xRot = 0;
-                        if (bc.yaw()) part.yRot = 0;
-                        if (bc.roll()) part.zRot = 0;
-                    });
+            AnimationHelper.animate(scope, boneModel, entry.getValue().compiled(), elapsed, 1.0f, tempVec, null);
+        }
+    }
+
+    /** Zero vanilla setupAnim's xRot/yRot/zRot on the bones driven by registered Bedrock animations. */
+    @SuppressWarnings("unchecked")
+    private void clearVanillaRotation(Model model) {
+        if (affectedBones.isEmpty()) {
+            return;
+        }
+        for (ModelPart part : (List<ModelPart>) model.allParts()) {
+            final String name = ((IModelPart) (Object) part).viaBedrockUtility$getName();
+            for (String affected : affectedBones) {
+                if (affected.equalsIgnoreCase(name)) {
+                    part.xRot = 0.0F;
+                    part.yRot = 0.0F;
+                    part.zRot = 0.0F;
+                    break;
                 }
             }
-            AnimationHelper.animate(scope, boneModel, entry.getValue().compiled(), elapsed, 1.0f, tempVec, null);
         }
     }
 
@@ -145,27 +114,40 @@ public class PlayerAnimationManager {
         final Scope scope = CustomEntityPayloadHandler.BASE_SCOPE.copy();
 
         final MutableObjectBinding query = new MutableObjectBinding();
+
+        // Mirror CustomEntityRenderer.buildFrameScope so query-gated animation expressions evaluate
+        // correctly. With only a handful of variables bound, terms that should resolve to ~0 when the
+        // player is idle (e.g. limb-swing scaled by move speed) instead read a missing variable and
+        // can leave a wrong residual constant — which, summed across all applied animations, produces
+        // the fixed distorted pose. PlayerRenderState exposes fewer fields than the custom-entity
+        // state, so values not available here are best-effort/zero.
+        final float groundSpeed = state.walkAnimationSpeed;
+        final float headYaw = state.yRot - state.bodyRot; // head yaw relative to body
+
         query.set("life_time", Value.of(state.ageInTicks / 20.0f));
         query.set("modified_distance_moved", Value.of(state.walkAnimationPos));
-        query.set("modified_move_speed", Value.of(state.walkAnimationSpeed));
+        query.set("modified_move_speed", Value.of(groundSpeed));
         query.set("is_on_ground", Value.of(true));
         query.set("is_alive", Value.of(true));
+        query.set("ground_speed", Value.of(groundSpeed));
+        query.set("vertical_speed", Value.of(0.0));
+        query.set("distance_from_camera", Value.of(Math.sqrt(state.distanceToCameraSq)));
+
+        // Rotation queries
+        query.set("body_y_rotation", Value.of(state.bodyRot));
+        query.set("body_x_rotation", Value.of(state.xRot));
+        query.set("target_x_rotation", Value.of(state.xRot));
+        query.set("target_y_rotation", Value.of(headYaw));
+        query.set("head_x_rotation", Value.of(state.xRot));
+        query.set("head_y_rotation", Value.of(headYaw));
+
+        // Function-type queries (not derivable from PlayerRenderState — return 0 so lookups don't fail)
+        query.setFunction("position_delta", (double arg) -> 0.0);
+        query.setFunction("rotation_to_camera", (double arg) -> 0.0);
 
         scope.set("query", query);
         scope.set("q", query);
 
         return scope;
-    }
-
-    /**
-     * Finds a ModelPart by name from a flat list of parts (MC-specific helper).
-     */
-    private static Optional<ModelPart> getPartByName(List<ModelPart> parts, String name) {
-        for (ModelPart part : parts) {
-            if (((IModelPart)((Object)part)).viaBedrockUtility$getName().equalsIgnoreCase(name) && part.isEmpty()) {
-                return Optional.of(part);
-            }
-        }
-        return Optional.empty();
     }
 }

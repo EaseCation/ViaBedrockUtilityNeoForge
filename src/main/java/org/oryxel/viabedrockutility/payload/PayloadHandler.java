@@ -305,8 +305,9 @@ public class PayloadHandler {
                     }
                     if (!animManager.isEmpty()) {
                         ((IBedrockAnimatedModel) (Object) model).viaBedrockUtility$setAnimationManager(animManager);
-                        ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Loaded {} animation overrides for {}",
-                                animManager.getAffectedBones().size(), payload.getPlayerUuid());
+                        ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Loaded {} animation override(s) for {}: {}",
+                                animManager.getRegisteredAnimationNames().size(), payload.getPlayerUuid(),
+                                animManager.getRegisteredAnimationNames());
                     }
                 }
             } catch (final Exception e) {
