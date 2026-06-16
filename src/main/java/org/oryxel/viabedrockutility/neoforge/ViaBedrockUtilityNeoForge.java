@@ -7,6 +7,7 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.config.LodConfig;
+import org.oryxel.viabedrockutility.renderer.AnimationBudget;
 import org.oryxel.viabedrockutility.renderer.DeferredNameTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +24,9 @@ public class ViaBedrockUtilityNeoForge {
 		modEventBus.addListener(ViaBedrockUtility.getInstance()::registerPayloads);
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::onClientTick);
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::registerClientCommands);
+		// Reset the per-frame animation budget before entities render (AfterOpaqueBlocks fires before
+		// the entity pass). Caps full-rate MoLang animation count in dense scenes. See AnimationBudget.
+		NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent.AfterOpaqueBlocks event) -> AnimationBudget.reset());
 		// Replay VBU name tags after all entity geometry is drawn so they show through entities
 		// (faint) instead of being painted over. See DeferredNameTag for the rationale.
 		NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent.AfterEntities event) -> DeferredNameTag.flush());

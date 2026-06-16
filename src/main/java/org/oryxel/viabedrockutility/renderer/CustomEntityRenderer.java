@@ -91,6 +91,15 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         // Distance-based LOD: skip animation computation for distant entities (configurable)
         boolean shouldAnimate = LodConfig.getInstance().shouldAnimate(state.getDistanceFromCamera(), this.renderFrameCounter);
 
+        // Per-frame animation budget: distance LOD doesn't throttle near entities, so a dense lobby would
+        // animate every one of them every frame. Cap the number of full-rate animations per frame; entities
+        // that exhaust the budget fall back to a staggered cadence (renderFrameCounter is identityHashCode-
+        // seeded, spreading the throttled updates across frames) so they still animate, just less often.
+        if (shouldAnimate && !AnimationBudget.tryAcquire()) {
+            final int interval = LodConfig.getInstance().getAnimationThrottleInterval();
+            shouldAnimate = interval <= 1 || (this.renderFrameCounter % interval == 0);
+        }
+
         final Scope frameScope;
         if (shouldAnimate) {
             // Build per-frame scope with all query bindings, execute pre_animation, set up animators
