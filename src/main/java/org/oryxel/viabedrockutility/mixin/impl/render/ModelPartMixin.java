@@ -68,10 +68,24 @@ public abstract class ModelPartMixin implements IModelPart {
         matrices.translate(-this.pivot.x / 16.0F, -this.pivot.y / 16.0F, -this.pivot.z / 16.0F);
 
         matrices.translate(-this.offset.x / 16.0F, -this.offset.y / 16.0F, -this.offset.z / 16.0F);
+
+        // Re-translate to the bone's Bedrock pivot so that vanilla's rotation/scale (applied next inside
+        // the original translateAndRotate body, about the part's setPos origin) pivots about the SAME
+        // point as our VBU rotation above. With the unified coordinate scheme setPos is always 0, so that
+        // origin sits at part-space (0,0,0) = Bedrock y=24.016 ≈ the top of the model; without this,
+        // vanilla setupAnim made plain (non-Bedrock-animated) player legs rotate from the head. Undone at
+        // TAIL, so net translation stays identity and absolute cube placement is unchanged. For
+        // Bedrock-animated bones vanilla rotation is cleared (PlayerAnimationManager.clearVanillaRotation)
+        // and for entities/non-VBU parts it is 0, so this only relocates the pivot where it actually matters.
+        matrices.translate(this.pivot.x / 16.0F, this.pivot.y / 16.0F, this.pivot.z / 16.0F);
     }
 
     @Inject(method = "translateAndRotate", at = @At("TAIL"))
     public void renderTail(PoseStack matrices, CallbackInfo ci) {
+        // Undo the pivot translate added at HEAD's tail: it wrapped vanilla's rotation/scale so they pivot
+        // about the Bedrock pivot. Reverting it here keeps the bone's net translation identity.
+        matrices.translate(-this.pivot.x / 16.0F, -this.pivot.y / 16.0F, -this.pivot.z / 16.0F);
+
         // Do this after scale since well, this shouldn't be affected by scaling.
         matrices.translate(this.offset.x / 16.0F, this.offset.y / 16.0F, this.offset.z / 16.0F);
 
