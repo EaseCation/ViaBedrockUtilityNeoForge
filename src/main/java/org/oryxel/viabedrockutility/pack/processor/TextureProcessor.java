@@ -36,7 +36,10 @@ public class TextureProcessor {
                     final NativeImage image1 = NativeImage.read(image.getPngBytes());
                     client.getTextureManager().register(identifier, new DynamicTexture(() -> identifier.toString() + image1.hashCode(), image1));
                     registered++;
-                } catch (final IOException e) {
+                } catch (final IOException | RuntimeException e) {
+                    // RuntimeException covers ResourceLocationException for paths with characters
+                    // outside [a-z0-9/._-]; skip the single bad texture instead of aborting the whole
+                    // registration pass (which runs on the render thread and would crash the client).
                     failed++;
                     ViaBedrockUtilityNeoForge.LOGGER.warn("[ResourcePack:Texture] Unable to register texture {}", path, e);
                 }
