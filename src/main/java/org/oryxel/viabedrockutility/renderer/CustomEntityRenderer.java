@@ -154,15 +154,24 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                 Material.MaterialInfo.Variant skinningColor = model.material.info().getVariants().get("skinning_color");
                 RenderType renderType = skinningColor.build().apply(model.texture);
                 if (renderType != null) {
+                    // ignore_lighting / emissive -> render flat & fully bright like Bedrock. FULL_BRIGHT
+                    // maxes the lightmap, but Minecraft's entity shader also applies normal-based
+                    // directional shading (top bright, bottom dark) that the lightmap can't override;
+                    // FlatNormalVertexConsumer forces all normals up to remove it.
+                    boolean flatLight = (model.controller() != null && model.controller().ignoreLighting())
+                            || skinningColor.getDefines().contains("USE_EMISSIVE");
+
                     int effectiveLight = light;
-                    if ((model.controller() != null && model.controller().ignoreLighting())
-                            || skinningColor.getDefines().contains("USE_EMISSIVE")) {
+                    if (flatLight) {
                         effectiveLight = LightTexture.FULL_BRIGHT;
                     } else if (model.controller() != null && model.controller().lightColorMultiplier() != 1.0F) {
                         effectiveLight = scaleLight(light, model.controller().lightColorMultiplier());
                     }
 
                     VertexConsumer vertexConsumer = vertexConsumers.getBuffer(renderType);
+                    if (flatLight) {
+                        vertexConsumer = new FlatNormalVertexConsumer(vertexConsumer);
+                    }
                     model.model.renderToBuffer(matrices, vertexConsumer, effectiveLight, OverlayTexture.pack(0, 10));
                 }
             } catch (StackOverflowError soe) {
