@@ -22,6 +22,7 @@ import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mixin.impl.accessor.PlayerSkinFieldAccessor;
 import net.easecation.bedrockmotion.pack.PackManager;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
+import org.oryxel.viabedrockutility.payload.impl.entity.AnimatePayload;
 import org.oryxel.viabedrockutility.payload.impl.entity.ModelRequestPayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.BaseSkinPayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.CapeDataPayload;
@@ -78,10 +79,14 @@ public class PayloadHandler {
             this.handle(animData);
         } else if (payload instanceof SpawnParticlePayload particlePayload) {
             this.handle(particlePayload);
+        } else if (payload instanceof AnimatePayload animatePayload) {
+            this.handle(animatePayload);
         }
     }
 
     public void handle(final ModelRequestPayload payload) {}
+
+    public void handle(final AnimatePayload payload) {}
 
     public void handle(final SpawnParticlePayload payload) {
         ViaBedrockUtilityNeoForge.LOGGER.info("[Particle:L4] Handling SpawnParticlePayload: {} at ({}, {}, {}), molang={}", payload.getIdentifier(), payload.getX(), payload.getY(), payload.getZ(), payload.getMolangVarsJson());

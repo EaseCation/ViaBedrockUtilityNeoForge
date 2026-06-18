@@ -67,8 +67,9 @@ public class BasePayload implements CustomPacketPayload {
             }
 
             case ANIMATE -> {
-                // TODO: Implement this.
-                return new BasePayload();
+                final java.util.UUID uuid = buf.readUUID();
+                final String animationName = readString(buf);
+                return new AnimatePayload(uuid, animationName);
             }
 
             case CAPE -> {

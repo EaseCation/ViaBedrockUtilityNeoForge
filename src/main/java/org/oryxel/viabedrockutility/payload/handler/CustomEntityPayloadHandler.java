@@ -7,7 +7,9 @@ import org.oryxel.viabedrockutility.material.VanillaMaterials;
 import org.oryxel.viabedrockutility.material.data.Material;
 import net.easecation.bedrockmotion.pack.definitions.EntityDefinitions;
 import org.oryxel.viabedrockutility.payload.PayloadHandler;
+import org.oryxel.viabedrockutility.payload.impl.entity.AnimatePayload;
 import org.oryxel.viabedrockutility.payload.impl.entity.ModelRequestPayload;
+import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
 import team.unnamed.mocha.runtime.Scope;
 import team.unnamed.mocha.runtime.binding.JavaObjectBinding;
 import team.unnamed.mocha.runtime.standard.MochaMath;
@@ -52,5 +54,33 @@ public class CustomEntityPayloadHandler extends PayloadHandler {
         ticker.setScale(payload.getEntityData().scale());
 
         ticker.update();
+    }
+
+    @Override
+    public void handle(AnimatePayload payload) {
+        if (this.packManager == null) {
+            return;
+        }
+        final var animData = this.packManager.getAnimationDefinitions().getAnimations().get(payload.getAnimationName());
+        if (animData == null) {
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] ANIMATE: animation '{}' not found in PackManager (uuid={})", payload.getAnimationName(), payload.getEntityUuid());
+            return;
+        }
+
+        // 1) Custom model entity (MODEL_REQUEST path).
+        final CustomEntityTicker ticker = this.cachedCustomEntities.get(payload.getEntityUuid());
+        if (ticker != null) {
+            ticker.getRenderer().play(animData);
+            return;
+        }
+
+        // 2) Player / humanoid NPC (player render path): play it as a one-shot on the player's animation manager.
+        final var renderer = this.cachedPlayerRenderers.get(payload.getEntityUuid());
+        if (renderer instanceof CustomPlayerRenderer customPlayerRenderer) {
+            customPlayerRenderer.playAnimationOnce(payload.getAnimationName(), animData);
+            return;
+        }
+
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] ANIMATE: no custom-entity/player renderer for uuid={} (animation '{}')", payload.getEntityUuid(), payload.getAnimationName());
     }
 }

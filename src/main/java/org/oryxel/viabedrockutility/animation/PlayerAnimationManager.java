@@ -22,6 +22,13 @@ public class PlayerAnimationManager {
     private final long startTimeMS = System.currentTimeMillis();
     private final Vector3f tempVec = new Vector3f();
 
+    // One-shot animations triggered at runtime (server AnimateEntityPacket on a player / humanoid NPC).
+    // Each keeps its own start time, plays once and is pruned when it reaches its animation_length, and
+    // (unlike the looping skin animations) does NOT register persistent affectedBones — its bones are
+    // cleared transiently only while it is still playing, so vanilla locomotion resumes after it ends.
+    private final Map<String, AnimationDefinitions.AnimationData> onceAnimations = new LinkedHashMap<>();
+    private final Map<String, Long> onceStartMS = new HashMap<>();
+
     public void addAnimation(String shortName, AnimationDefinitions.AnimationData data) {
         // Skip empty overrides. A skin's resource_patch frequently maps an animation slot to an empty
         // placeholder animation; registering one contributes no keyframes, so it is a no-op we drop.
@@ -45,6 +52,18 @@ public class PlayerAnimationManager {
 
         animations.put(shortName, data);
         affectedBones.addAll(bones.keySet());
+    }
+
+    /**
+     * Trigger a one-shot named animation (e.g. animation.easecation.cheer) on this player/NPC. Re-triggering
+     * the same name restarts it. It plays once and is removed when it reaches its animation_length.
+     */
+    public void playOnce(final String name, final AnimationDefinitions.AnimationData data) {
+        if (data == null || data.compiled() == null) {
+            return;
+        }
+        onceAnimations.put(name, data);
+        onceStartMS.put(name, System.currentTimeMillis());
     }
 
     public boolean isEmpty() {
@@ -81,32 +100,75 @@ public class PlayerAnimationManager {
         // rotation in place double-poses the limbs (the splayed pose). Zeroing it on the driven bones makes
         // the Bedrock animation authoritative. Bones with no Bedrock animation keep their vanilla pose.
         // (For fully-custom-bone skins, vanilla never wrote these bones, so this is a harmless no-op.)
-        clearVanillaRotation(model);
+        final long now = System.currentTimeMillis();
+
+        // Prune finished one-shot animations and collect the bones still-active ones drive this frame, so
+        // their vanilla rotation is cleared only while playing (transient — not added to affectedBones).
+        Set<String> onceBones = null;
+        if (!onceAnimations.isEmpty()) {
+            final Iterator<Map.Entry<String, AnimationDefinitions.AnimationData>> it = onceAnimations.entrySet().iterator();
+            while (it.hasNext()) {
+                final Map.Entry<String, AnimationDefinitions.AnimationData> e = it.next();
+                final float len = e.getValue().compiled().lengthInSeconds();
+                final long onceElapsed = now - onceStartMS.getOrDefault(e.getKey(), now);
+                if (len > 0 && onceElapsed / 1000F >= len) { // played to its animation_length -> remove
+                    it.remove();
+                    onceStartMS.remove(e.getKey());
+                    continue;
+                }
+                final Map<String, List<AnimateTransformation>> bones = e.getValue().compiled().boneAnimations();
+                if (bones != null && !bones.isEmpty()) {
+                    if (onceBones == null) {
+                        onceBones = new HashSet<>();
+                    }
+                    onceBones.addAll(bones.keySet());
+                }
+            }
+        }
+
+        clearVanillaRotation(model, onceBones);
 
         final Scope scope = buildScope(state);
-        final long elapsed = System.currentTimeMillis() - startTimeMS;
+        final long elapsed = now - startTimeMS;
         for (Map.Entry<String, AnimationDefinitions.AnimationData> entry : animations.entrySet()) {
             AnimationHelper.animate(scope, boneModel, entry.getValue().compiled(), elapsed, 1.0f, tempVec, null);
         }
+        // One-shot animations applied on top so the temporary action overrides the looping pose.
+        for (Map.Entry<String, AnimationDefinitions.AnimationData> entry : onceAnimations.entrySet()) {
+            final long onceElapsed = now - onceStartMS.getOrDefault(entry.getKey(), now);
+            AnimationHelper.animate(scope, boneModel, entry.getValue().compiled(), onceElapsed, 1.0f, tempVec, null);
+        }
     }
 
-    /** Zero vanilla setupAnim's xRot/yRot/zRot on the bones driven by registered Bedrock animations. */
+    /**
+     * Zero vanilla setupAnim's xRot/yRot/zRot on the bones driven by registered Bedrock animations
+     * (persistent looping ones in {@code affectedBones}, plus any transient one-shot bones for this frame).
+     */
     @SuppressWarnings("unchecked")
-    private void clearVanillaRotation(Model model) {
-        if (affectedBones.isEmpty()) {
+    private void clearVanillaRotation(Model model, Set<String> transientBones) {
+        if (affectedBones.isEmpty() && (transientBones == null || transientBones.isEmpty())) {
             return;
         }
         for (ModelPart part : (List<ModelPart>) model.allParts()) {
             final String name = ((IModelPart) (Object) part).viaBedrockUtility$getName();
-            for (String affected : affectedBones) {
-                if (affected.equalsIgnoreCase(name)) {
-                    part.xRot = 0.0F;
-                    part.yRot = 0.0F;
-                    part.zRot = 0.0F;
-                    break;
-                }
+            if (matchesAny(affectedBones, name) || matchesAny(transientBones, name)) {
+                part.xRot = 0.0F;
+                part.yRot = 0.0F;
+                part.zRot = 0.0F;
             }
         }
+    }
+
+    private static boolean matchesAny(final Set<String> bones, final String name) {
+        if (bones == null || bones.isEmpty()) {
+            return false;
+        }
+        for (String bone : bones) {
+            if (bone.equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Scope buildScope(PlayerRenderState state) {

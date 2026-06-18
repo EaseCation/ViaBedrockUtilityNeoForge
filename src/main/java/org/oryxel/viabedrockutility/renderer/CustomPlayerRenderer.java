@@ -6,6 +6,9 @@ import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import net.minecraft.resources.ResourceLocation;
+import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
+import org.oryxel.viabedrockutility.animation.PlayerAnimationManager;
+import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 
 import java.util.ArrayList;
@@ -53,5 +56,20 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         for (AnimatedSkinOverlay overlay : overlays) {
             overlay.tick();
         }
+    }
+
+    /**
+     * Play a one-shot named animation on this player/NPC (server-triggered via AnimateEntityPacket).
+     * The PlayerAnimationManager lives on this renderer's model (the same instance setupAnim drives); if the
+     * player has no skin looping-animation override yet, one is created lazily so the one-shot still plays.
+     */
+    public void playAnimationOnce(final String name, final AnimationDefinitions.AnimationData data) {
+        final IBedrockAnimatedModel animModel = (IBedrockAnimatedModel) (Object) this.model;
+        PlayerAnimationManager manager = animModel.viaBedrockUtility$getAnimationManager();
+        if (manager == null) {
+            manager = new PlayerAnimationManager();
+            animModel.viaBedrockUtility$setAnimationManager(manager);
+        }
+        manager.playOnce(name, data);
     }
 }
