@@ -70,6 +70,13 @@ public class ServerResourcePackLoaderMixin {
 
         ViaBedrockUtility.getInstance().setPackManager(new PackManager(contents));
 
+        // Replay any payloads (notably the initial skin overrides) that arrived before PackManager was ready.
+        // Deferred to the client thread so it runs after PackManager is set and safely touches render objects.
+        final var handler = ViaBedrockUtility.getInstance().getPayloadHandler();
+        if (handler != null) {
+            net.minecraft.client.Minecraft.getInstance().execute(handler::flushPendingPayloads);
+        }
+
         // Load particle definitions into BEParticle
         loadParticleDefinitions(contents);
     }

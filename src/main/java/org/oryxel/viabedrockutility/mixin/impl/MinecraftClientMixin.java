@@ -22,6 +22,7 @@ public class MinecraftClientMixin {
         ViaBedrockUtility.getInstance().getPayloadHandler().getCachedCustomEntities().clear();
         ViaBedrockUtility.getInstance().getPayloadHandler().getCachedPlayerCapes().clear();
         ViaBedrockUtility.getInstance().getPayloadHandler().getCachedSkinInfo().clear();
+        ViaBedrockUtility.getInstance().getPayloadHandler().getPendingPayloads().clear();
 
         // Reset BECamera state
         CameraManager.INSTANCE.resetAll();

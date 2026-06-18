@@ -53,13 +53,24 @@ public class PayloadHandler {
     protected final Map<UUID, Map<Integer, PendingAnimation>> pendingAnimations = new ConcurrentHashMap<>();
     protected PackManager packManager;
 
+    // Payloads that arrive before the resource pack (PackManager) is ready are queued here instead of being
+    // dropped, then replayed in arrival order once the pack loads (see flushPendingPayloads). This fixes the
+    // initial skin overrides the server pushes right at join, which used to be discarded with no retry.
+    // The cap guards against unbounded growth on servers that never send a resource pack.
+    private final java.util.Queue<BasePayload> pendingPayloads = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private static final int MAX_PENDING = 1024;
+
     public void handle(final BasePayload payload) {
         if (this.packManager != ViaBedrockUtility.getInstance().getPackManager()) {
             this.packManager = ViaBedrockUtility.getInstance().getPackManager();
         }
 
         if (this.packManager == null) {
-            ViaBedrockUtilityNeoForge.LOGGER.warn("[Payload] Received {} but PackManager is null, ignoring", payload.getClass().getSimpleName());
+            if (this.pendingPayloads.size() >= MAX_PENDING) {
+                this.pendingPayloads.poll(); // drop oldest to avoid pathological buildup
+            }
+            this.pendingPayloads.add(payload);
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Payload] Queued {} until PackManager is ready ({} pending)", payload.getClass().getSimpleName(), this.pendingPayloads.size());
             return;
         }
 
@@ -81,6 +92,31 @@ public class PayloadHandler {
             this.handle(particlePayload);
         } else if (payload instanceof AnimatePayload animatePayload) {
             this.handle(animatePayload);
+        }
+    }
+
+    /**
+     * Replay payloads that were queued while PackManager was still loading. Called once the resource pack
+     * finishes loading (ServerResourcePackLoaderMixin). Runs on the client thread. Replayed payloads go back
+     * through handle(BasePayload); since PackManager is now non-null they are dispatched normally rather than
+     * re-queued. Each is isolated so one failure does not abort the rest.
+     */
+    public void flushPendingPayloads() {
+        if (this.pendingPayloads.isEmpty()) {
+            return;
+        }
+        this.packManager = ViaBedrockUtility.getInstance().getPackManager();
+        if (this.packManager == null) {
+            return; // still not ready, keep the queue for the next attempt
+        }
+        ViaBedrockUtilityNeoForge.LOGGER.info("[Payload] PackManager ready, replaying {} queued payload(s)", this.pendingPayloads.size());
+        BasePayload payload;
+        while ((payload = this.pendingPayloads.poll()) != null) {
+            try {
+                this.handle(payload);
+            } catch (final Exception e) {
+                ViaBedrockUtilityNeoForge.LOGGER.warn("[Payload] Failed to replay queued {}: {}", payload.getClass().getSimpleName(), e.getMessage());
+            }
         }
     }
 
