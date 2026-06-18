@@ -3,7 +3,6 @@ package org.oryxel.viabedrockutility.mixin.impl.network;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
@@ -18,15 +17,10 @@ import java.util.UUID;
 
 @Mixin(ClientPacketListener.class)
 public class ClientPlayNetworkHandlerMixin {
-    @Inject(method = "handlePlayerInfoRemove", at = @At("HEAD"))
-    private void handlePlayerInfoRemove(ClientboundPlayerInfoRemovePacket packet, CallbackInfo ci) {
-        if (!ViaBedrockUtility.getInstance().isViaBedrockPresent()) {
-            return;
-        }
-        for (UUID uuid : packet.profileIds()) {
-            ViaBedrockUtility.getInstance().getPayloadHandler().removePlayerCache(uuid);
-        }
-    }
+    // NOTE: deliberately NOT clearing the cached player renderer on PLAYER_INFO_REMOVE. Servers with a
+    // custom tab list (e.g. EaseCation) remove real players from the player-info list while they remain
+    // in the world; dropping the renderer there reverts them to the vanilla model (the baked PlayerInfo
+    // texture lingers). Cleanup is instead driven by EntityLeaveLevelEvent when the entity actually leaves.
 
     // Have to do this since you can't run custom command when playing in a server.
     @Inject(method = "sendChat", at = @At("HEAD"), cancellable = true)
