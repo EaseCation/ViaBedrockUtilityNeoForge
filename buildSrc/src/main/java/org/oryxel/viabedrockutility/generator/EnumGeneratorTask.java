@@ -65,7 +65,7 @@ public abstract class EnumGeneratorTask extends DefaultTask {
         outputDir.mkdirs();
 
         final Map<String, List<EnumField>> enums = new HashMap<>();
-        final Document doc = Jsoup.parse(new URL(ENUMS_URL), 10_000);
+        final Document doc = Jsoup.parse(new URL(ENUMS_URL), 60_000);
         for (Element element : doc.selectXpath("/html/body/table/tbody/tr")) {
             final Elements tableElements = element.select("td");
             if (tableElements.isEmpty()) continue;
