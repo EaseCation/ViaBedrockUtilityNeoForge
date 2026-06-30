@@ -82,9 +82,9 @@ public class ServerResourcePackLoaderMixin {
     }
 
     private void loadParticleDefinitions(List<Content> contents) {
-        // Count particle files first to avoid clearing definitions when no packs are present (e.g. on disconnect)
-        int count = 0;
-        java.util.List<java.util.Map.Entry<String, String>> pendingDefinitions = new java.util.ArrayList<>();
+        // 收集本来源（mcpack 层）的全部定义为 identifier→json；
+        // 空则保留现有定义（断线/本包无粒子时不动其它来源，避免误抹）。
+        final java.util.LinkedHashMap<String, String> defs = new java.util.LinkedHashMap<>();
         for (final Content content : contents) {
             for (final String path : content.getFilesDeep("particles/", ".json")) {
                 try {
@@ -95,22 +95,18 @@ public class ServerResourcePackLoaderMixin {
                     final com.google.gson.JsonObject desc = effect.getAsJsonObject("description");
                     if (desc == null) continue;
                     final String identifier = desc.get("identifier").getAsString();
-                    pendingDefinitions.add(java.util.Map.entry(identifier, json));
+                    defs.put(identifier, json);
                 } catch (Exception e) {
                     ViaBedrockUtilityNeoForge.LOGGER.warn("[Particle] Failed to load particle definition: {}", path, e);
                 }
             }
         }
-        if (pendingDefinitions.isEmpty()) {
+        if (defs.isEmpty()) {
             ViaBedrockUtilityNeoForge.LOGGER.info("[Particle] No particle definitions found, keeping existing definitions");
             return;
         }
-        net.easecation.beparticle.ParticleManager.INSTANCE.clear();
-        for (final var entry : pendingDefinitions) {
-            net.easecation.beparticle.ParticleManager.INSTANCE.loadDefinition(entry.getKey(), entry.getValue());
-            ViaBedrockUtilityNeoForge.LOGGER.info("[Particle:L0] Loaded particle definition: {}", entry.getKey());
-            count++;
-        }
-        ViaBedrockUtilityNeoForge.LOGGER.info("[Particle] Loaded {} particle definition(s)", count);
+        // 按来源替换：只替换本 source（mcpack 层）的定义，不再 clear 全表
+        // → 与 GeyserUtilsBridge 的散文件 bedrock_pack 层共存，互不抹除。
+        net.easecation.beparticle.ParticleManager.INSTANCE.loadDefinitions("viabedrockutility", defs);
     }
 }
