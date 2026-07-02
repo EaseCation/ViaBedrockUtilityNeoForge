@@ -10,7 +10,6 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
-import net.minecraft.client.resources.model.EquipmentAssetManager;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.resources.PlayerSkin;
@@ -35,6 +34,7 @@ import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import org.oryxel.viabedrockutility.renderer.AnimatedSkinOverlay;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
+import org.oryxel.viabedrockutility.util.EntityRendererContextUtil;
 import org.oryxel.viabedrockutility.util.GeometryUtil;
 
 import org.oryxel.viabedrockutility.util.ImageUtil;
@@ -319,9 +319,7 @@ public class PayloadHandler {
             ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Using default player model (slim={}) for {}", slim, payload.getPlayerUuid());
         }
 
-        final EntityRendererProvider.Context entityContext = new EntityRendererProvider.Context(client.getEntityRenderDispatcher(),
-                client.getItemModelResolver(), client.getMapRenderer(), client.getBlockRenderer(),
-                client.getResourceManager(), client.getEntityModels(), new EquipmentAssetManager(), client.font);
+        final EntityRendererProvider.Context entityContext = EntityRendererContextUtil.build(client);
         this.cachedPlayerRenderers.put(payload.getPlayerUuid(), new CustomPlayerRenderer(entityContext, model, slim, identifier));
         this.cachedPlayerSkins.put(payload.getPlayerUuid(), new CachedPlayerSkin(identifier, slim, info.getGeometryRaw(), info.getResourcePatch()));
         ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] CustomPlayerRenderer created for {}", payload.getPlayerUuid());

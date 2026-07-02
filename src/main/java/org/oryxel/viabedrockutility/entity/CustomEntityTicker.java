@@ -11,7 +11,6 @@ import net.easecation.bedrockmotion.pack.definitions.EntityDefinitions;
 import net.easecation.bedrockmotion.render.RenderControllerEvaluator;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
-import net.minecraft.client.resources.model.EquipmentAssetManager;
 import net.minecraft.resources.ResourceLocation;
 import org.cube.converter.data.bedrock.BedrockEntityData;
 import org.cube.converter.data.bedrock.controller.BedrockRenderController;
@@ -24,6 +23,7 @@ import org.oryxel.viabedrockutility.material.data.Material;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
 import org.oryxel.viabedrockutility.renderer.CustomEntityRenderer;
 import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
+import org.oryxel.viabedrockutility.util.EntityRendererContextUtil;
 import org.oryxel.viabedrockutility.util.GeometryUtil;
 import team.unnamed.mocha.runtime.Scope;
 import team.unnamed.mocha.runtime.value.MutableObjectBinding;
@@ -92,9 +92,7 @@ public class CustomEntityTicker implements AnimationEventListener {
 
     public CustomEntityTicker(final EntityDefinitions.EntityDefinition entityDefinition) {
         final Minecraft client = Minecraft.getInstance();
-        final EntityRendererProvider.Context context = new EntityRendererProvider.Context(client.getEntityRenderDispatcher(),
-                client.getItemModelResolver(), client.getMapRenderer(), client.getBlockRenderer(),
-                client.getResourceManager(), client.getEntityModels(), new EquipmentAssetManager(), client.font);
+        final EntityRendererProvider.Context context = EntityRendererContextUtil.build(client);
         this.renderer = new CustomEntityRenderer<>(this, new CopyOnWriteArrayList<>(), context);
 
         this.entityDefinition = entityDefinition;
