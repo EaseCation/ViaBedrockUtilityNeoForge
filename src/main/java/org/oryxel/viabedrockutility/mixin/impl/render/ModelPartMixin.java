@@ -2,6 +2,7 @@ package org.oryxel.viabedrockutility.mixin.impl.render;
 
 import net.minecraft.client.model.geom.ModelPart;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.model.geom.PartPose;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
@@ -24,12 +25,15 @@ import java.util.function.BiConsumer;
 @Mixin(ModelPart.class)
 public abstract class ModelPartMixin implements IModelPart {
     @Shadow public float x;
+    @Shadow public float y;
     @Shadow public float z;
 
     @Shadow @Final private List<ModelPart.Cube> cubes;
     @Shadow @Final private Map<String, ModelPart> children;
 
     @Shadow public abstract List<ModelPart> getAllParts();
+
+    @Shadow public abstract PartPose getInitialPose();
 
     @Shadow public float xScale;
     @Shadow public float yScale;
@@ -107,6 +111,21 @@ public abstract class ModelPartMixin implements IModelPart {
             }
             cir.setReturnValue(child);
         }
+    }
+
+    @Inject(method = "copyFrom", at = @At("TAIL"))
+    private void keepVanillaPartOriginsWhenCopyingFromVBU(ModelPart source, CallbackInfo ci) {
+        if (this.isVBUModel || !((IModelPart) (Object) source).viaBedrockUtility$isVBUModel()) {
+            return;
+        }
+
+        // Vanilla armor/cape models need their baked part offsets (legs at y=12, arms at +/-5,y=2).
+        // VBU player geometry stores cubes in absolute Bedrock coordinates and leaves ModelPart x/y/z at 0;
+        // copying those positions into vanilla layer models moves chest/legs/boots to the wrong anchors.
+        PartPose initialPose = this.getInitialPose();
+        this.x = initialPose.x();
+        this.y = initialPose.y();
+        this.z = initialPose.z();
     }
 
     @Override
