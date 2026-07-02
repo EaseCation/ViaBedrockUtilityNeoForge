@@ -119,13 +119,13 @@ public abstract class ModelPartMixin implements IModelPart {
             return;
         }
 
-        // Vanilla armor/cape models need their baked part offsets (legs at y=12, arms at +/-5,y=2).
-        // VBU player geometry stores cubes in absolute Bedrock coordinates and leaves ModelPart x/y/z at 0;
-        // copying those positions into vanilla layer models moves chest/legs/boots to the wrong anchors.
-        PartPose initialPose = this.getInitialPose();
-        this.x = initialPose.x();
-        this.y = initialPose.y();
-        this.z = initialPose.z();
+        // Vanilla armor/cape models need their baked part offsets (legs at y=12, arms at +/-5,y=2),
+        // but must still inherit dynamic pose translations from crouching, swimming, etc.
+        PartPose targetInitialPose = this.getInitialPose();
+        PartPose sourceInitialPose = source.getInitialPose();
+        this.x = targetInitialPose.x() + (source.x - sourceInitialPose.x());
+        this.y = targetInitialPose.y() + (source.y - sourceInitialPose.y());
+        this.z = targetInitialPose.z() + (source.z - sourceInitialPose.z());
     }
 
     @Override
