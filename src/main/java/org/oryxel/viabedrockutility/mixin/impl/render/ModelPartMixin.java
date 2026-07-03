@@ -19,6 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
@@ -61,6 +62,9 @@ public abstract class ModelPartMixin implements IModelPart {
 
     @Unique
     private boolean alreadySetRotation = false;
+
+    @Unique
+    private static final float VBU_ABSOLUTE_ARM_X_THRESHOLD = 1.0F;
 
     @Inject(method = "translateAndRotate", at = @At("HEAD"))
     public void render(PoseStack matrices, CallbackInfo ci) {
@@ -115,7 +119,8 @@ public abstract class ModelPartMixin implements IModelPart {
 
     @Inject(method = "copyFrom", at = @At("TAIL"))
     private void keepVanillaPartOriginsWhenCopyingFromVBU(ModelPart source, CallbackInfo ci) {
-        if (this.isVBUModel || !((IModelPart) (Object) source).viaBedrockUtility$isVBUModel()) {
+        final IModelPart sourcePart = (IModelPart) (Object) source;
+        if (this.isVBUModel || !sourcePart.viaBedrockUtility$isVBUModel()) {
             return;
         }
 
@@ -126,6 +131,25 @@ public abstract class ModelPartMixin implements IModelPart {
         this.x = targetInitialPose.x() + (source.x - sourceInitialPose.x());
         this.y = targetInitialPose.y() + (source.y - sourceInitialPose.y());
         this.z = targetInitialPose.z() + (source.z - sourceInitialPose.z());
+
+        // During the vanilla left-click swing, HumanoidModel writes the arm x position as an absolute
+        // vanilla arm origin (~+/-5). VBU player arms otherwise start at 0, so adding the armor model's
+        // baked arm x again pushes the armor sleeves out to the sides.
+        if (this.vbu$usesAbsoluteSwingArmX(sourcePart, source, sourceInitialPose)) {
+            this.x = source.x;
+        }
+    }
+
+    @Unique
+    private boolean vbu$usesAbsoluteSwingArmX(IModelPart sourcePart, ModelPart source, PartPose sourceInitialPose) {
+        final String partName = sourcePart.viaBedrockUtility$getName();
+        if (partName == null) {
+            return false;
+        }
+
+        final String normalizedName = partName.replace("_", "").toLowerCase(Locale.ROOT);
+        return ("leftarm".equals(normalizedName) || "rightarm".equals(normalizedName))
+                && Math.abs(source.x - sourceInitialPose.x()) >= VBU_ABSOLUTE_ARM_X_THRESHOLD;
     }
 
     @Override
