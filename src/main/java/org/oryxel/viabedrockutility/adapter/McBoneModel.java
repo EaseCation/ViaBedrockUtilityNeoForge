@@ -21,6 +21,11 @@ public class McBoneModel implements IBoneModel {
         this.model = model;
     }
 
+    /** The wrapped model. Used as a cache key when reusing a McBoneModel across frames. */
+    public Model getModel() {
+        return model;
+    }
+
     @Override
     public Map<String, IBoneTarget> getBoneIndex() {
         if (boneIndex == null) {

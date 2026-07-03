@@ -25,6 +25,7 @@ import org.oryxel.viabedrockutility.renderer.CustomEntityRenderer;
 import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
 import org.oryxel.viabedrockutility.util.EntityRendererContextUtil;
 import org.oryxel.viabedrockutility.util.GeometryUtil;
+import team.unnamed.mocha.runtime.IsConstantExpression;
 import team.unnamed.mocha.runtime.Scope;
 import team.unnamed.mocha.runtime.value.MutableObjectBinding;
 import team.unnamed.mocha.runtime.value.Value;
@@ -282,7 +283,21 @@ public class CustomEntityTicker implements AnimationEventListener {
                         parsedPV.put(pvEntry.getKey(), Boolean.FALSE);
                     } else {
                         try {
-                            parsedPV.put(pvEntry.getKey(), MoLangEngine.parse(pvEntry.getValue()));
+                            final List<Expression> ast = MoLangEngine.parse(pvEntry.getValue());
+                            boolean constant = true;
+                            for (Expression expr : ast) {
+                                if (!IsConstantExpression.test(expr)) {
+                                    constant = false;
+                                    break;
+                                }
+                            }
+                            if (constant) {
+                                // Pure constant expression (no query.*/variable/function call) — evaluate
+                                // once at parse time instead of running mocha every frame per entity.
+                                parsedPV.put(pvEntry.getKey(), MoLangEngine.eval(Scope.create(), ast).getAsBoolean());
+                            } else {
+                                parsedPV.put(pvEntry.getKey(), ast);
+                            }
                         } catch (IOException e) {
                             ViaBedrockUtilityNeoForge.LOGGER.warn("[Entity] Failed to parse part visibility expression: {}", pvEntry.getValue(), e);
                             parsedPV.put(pvEntry.getKey(), Boolean.TRUE);

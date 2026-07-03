@@ -50,6 +50,14 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     private final Map<CustomEntityModel<?>, McBoneModel> boneModelCache = new IdentityHashMap<>();
     private final LayeredScope reusableFrameScope = new LayeredScope(Scope.create());
 
+    // Cached max visible-bounds across models (recomputed only when the model set size changes),
+    // avoiding the repeated model-list scan in getVisualBoundingBox. The AABB itself is still
+    // allocated per call — MC's AABB is immutable and has no in-place setter, so it cannot be reused.
+    private int boundsCacheModelsSize = -1;
+    private float cachedMaxHalfWidth = 0.5f;
+    private float cachedMaxHeight = 2.0f;
+    private float cachedOffsetY = 1.0f;
+
     private final CustomEntityTicker ticker;
     private final List<Model> models;
 
@@ -216,22 +224,28 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     private net.minecraft.world.phys.AABB getVisualBoundingBox(T entity) {
         float scale = (this.ticker.getScale() != null) ? this.ticker.getScale() : 1.0f;
 
-        // Find the largest visible bounds across all models
-        float maxHalfWidth = 0.5f;
-        float maxHeight = 2.0f;
-        float offsetY = 1.0f;
-        for (Model model : this.models) {
-            var vb = model.visibleBounds();
-            if (vb != null) {
-                maxHalfWidth = Math.max(maxHalfWidth, vb.width() / 2.0f);
-                maxHeight = Math.max(maxHeight, vb.height());
-                offsetY = vb.offsetY();
+        // Cache the max visible bounds across models; recompute only when the model set changes.
+        if (this.boundsCacheModelsSize != this.models.size()) {
+            this.boundsCacheModelsSize = this.models.size();
+            float maxHalfWidth = 0.5f;
+            float maxHeight = 2.0f;
+            float offsetY = 1.0f;
+            for (Model model : this.models) {
+                var vb = model.visibleBounds();
+                if (vb != null) {
+                    maxHalfWidth = Math.max(maxHalfWidth, vb.width() / 2.0f);
+                    maxHeight = Math.max(maxHeight, vb.height());
+                    offsetY = vb.offsetY();
+                }
             }
+            this.cachedMaxHalfWidth = maxHalfWidth;
+            this.cachedMaxHeight = maxHeight;
+            this.cachedOffsetY = offsetY;
         }
 
-        maxHalfWidth *= scale;
-        maxHeight *= scale;
-        offsetY *= scale;
+        float maxHalfWidth = this.cachedMaxHalfWidth * scale;
+        float maxHeight = this.cachedMaxHeight * scale;
+        float offsetY = this.cachedOffsetY * scale;
 
         double ex = entity.getX();
         double ey = entity.getY();

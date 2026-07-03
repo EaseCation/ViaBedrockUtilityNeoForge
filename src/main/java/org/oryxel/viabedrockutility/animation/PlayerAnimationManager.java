@@ -2,6 +2,7 @@ package org.oryxel.viabedrockutility.animation;
 
 import net.easecation.bedrockmotion.animation.vanilla.AnimateTransformation;
 import net.easecation.bedrockmotion.animation.vanilla.AnimationHelper;
+import net.easecation.bedrockmotion.mocha.LayeredScope;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
@@ -21,6 +22,21 @@ public class PlayerAnimationManager {
     private final Set<String> affectedBones = new HashSet<>();
     private final long startTimeMS = System.currentTimeMillis();
     private final Vector3f tempVec = new Vector3f();
+
+    // Cached adapter for the player model. Reused across frames so the bone index (HashMap + bone
+    // list, lazily built in McBoneModel) is constructed once instead of every frame. Mirrors
+    // CustomEntityRenderer.boneModelCache. Re-created only when the underlying model swaps.
+    private McBoneModel cachedBoneModel;
+
+    // Reusable per-frame scope and query binding (mirrors CustomEntityRenderer.reusableFrameScope).
+    // Avoids BASE_SCOPE.copy() (full CaseInsensitiveStringHashMap putAll) and a new MutableObjectBinding
+    // every frame. LayeredScope layers only 'query'/'q' over the shared read-only BASE_SCOPE.
+    private final LayeredScope reusableFrameScope = new LayeredScope(CustomEntityPayloadHandler.BASE_SCOPE);
+    private final MutableObjectBinding reusableQuery = new MutableObjectBinding();
+
+    // Scratch set reused across frames to collect lowercased bone names driven by currently-playing
+    // one-shot animations. Replaces a per-frame new HashSet<>() allocation.
+    private final Set<String> scratchOnceBonesLC = new HashSet<>();
 
     // One-shot animations triggered at runtime (server AnimateEntityPacket on a player / humanoid NPC).
     // Each keeps its own start time, plays once and is pruned when it reaches its animation_length, and
@@ -51,7 +67,11 @@ public class PlayerAnimationManager {
         }
 
         animations.put(shortName, data);
-        affectedBones.addAll(bones.keySet());
+        // Store bone names lowercased: Bedrock bone names are case-insensitive, and clearVanillaRotation
+        // uses HashSet.contains (O(1)) which needs the same normalization as the queried part name.
+        for (String bone : bones.keySet()) {
+            affectedBones.add(bone.toLowerCase(Locale.ROOT));
+        }
     }
 
     /**
@@ -85,7 +105,10 @@ public class PlayerAnimationManager {
      * vanilla's contribution on the bones those animations drive, then apply the Bedrock animations.
      */
     public void animate(Model model, PlayerRenderState state) {
-        final McBoneModel boneModel = new McBoneModel(model);
+        if (cachedBoneModel == null || cachedBoneModel.getModel() != model) {
+            cachedBoneModel = new McBoneModel(model);
+        }
+        final McBoneModel boneModel = cachedBoneModel;
 
         // Reset ALL bones' VBU pose to default before additive blending — mirrors the proven
         // custom-entity path (CustomEntityRenderer.render -> McBoneModel.resetAllBones). The animation
@@ -104,7 +127,7 @@ public class PlayerAnimationManager {
 
         // Prune finished one-shot animations and collect the bones still-active ones drive this frame, so
         // their vanilla rotation is cleared only while playing (transient — not added to affectedBones).
-        Set<String> onceBones = null;
+        scratchOnceBonesLC.clear();
         if (!onceAnimations.isEmpty()) {
             final Iterator<Map.Entry<String, AnimationDefinitions.AnimationData>> it = onceAnimations.entrySet().iterator();
             while (it.hasNext()) {
@@ -118,15 +141,14 @@ public class PlayerAnimationManager {
                 }
                 final Map<String, List<AnimateTransformation>> bones = e.getValue().compiled().boneAnimations();
                 if (bones != null && !bones.isEmpty()) {
-                    if (onceBones == null) {
-                        onceBones = new HashSet<>();
+                    for (String bone : bones.keySet()) {
+                        scratchOnceBonesLC.add(bone.toLowerCase(Locale.ROOT));
                     }
-                    onceBones.addAll(bones.keySet());
                 }
             }
         }
 
-        clearVanillaRotation(model, onceBones);
+        clearVanillaRotation(model, scratchOnceBonesLC);
 
         final Scope scope = buildScope(state);
         final long elapsed = now - startTimeMS;
@@ -143,15 +165,18 @@ public class PlayerAnimationManager {
     /**
      * Zero vanilla setupAnim's xRot/yRot/zRot on the bones driven by registered Bedrock animations
      * (persistent looping ones in {@code affectedBones}, plus any transient one-shot bones for this frame).
+     * Both sets hold lowercased bone names; the part name is lowercased once per part and looked up via
+     * HashSet.contains (O(1)) instead of an O(n) equalsIgnoreCase scan per bone per frame.
      */
     @SuppressWarnings("unchecked")
-    private void clearVanillaRotation(Model model, Set<String> transientBones) {
-        if (affectedBones.isEmpty() && (transientBones == null || transientBones.isEmpty())) {
+    private void clearVanillaRotation(Model model, Set<String> transientBonesLC) {
+        if (affectedBones.isEmpty() && (transientBonesLC == null || transientBonesLC.isEmpty())) {
             return;
         }
         for (ModelPart part : (List<ModelPart>) model.allParts()) {
             final String name = ((IModelPart) (Object) part).viaBedrockUtility$getName();
-            if (matchesAny(affectedBones, name) || matchesAny(transientBones, name)) {
+            final String nameLC = name == null ? null : name.toLowerCase(Locale.ROOT);
+            if (matchesAny(affectedBones, nameLC) || matchesAny(transientBonesLC, nameLC)) {
                 part.xRot = 0.0F;
                 part.yRot = 0.0F;
                 part.zRot = 0.0F;
@@ -159,23 +184,19 @@ public class PlayerAnimationManager {
         }
     }
 
-    private static boolean matchesAny(final Set<String> bones, final String name) {
-        if (bones == null || bones.isEmpty()) {
-            return false;
-        }
-        for (String bone : bones) {
-            if (bone.equalsIgnoreCase(name)) {
-                return true;
-            }
-        }
-        return false;
+    private static boolean matchesAny(final Set<String> bonesLC, final String nameLC) {
+        return nameLC != null && bonesLC != null && !bonesLC.isEmpty() && bonesLC.contains(nameLC);
     }
 
     private Scope buildScope(PlayerRenderState state) {
-        // Start from BASE_SCOPE (contains math binding) to get math.cos, math.sin, etc.
-        final Scope scope = CustomEntityPayloadHandler.BASE_SCOPE.copy();
+        // Reuse a LayeredScope layered over the shared read-only BASE_SCOPE instead of deep-copying
+        // BASE_SCOPE every frame (mirrors CustomEntityRenderer.buildFrameScope). Only 'query'/'q' are
+        // written into the local layer; reads for 'math' fall through to BASE_SCOPE.
+        reusableFrameScope.reset(CustomEntityPayloadHandler.BASE_SCOPE);
 
-        final MutableObjectBinding query = new MutableObjectBinding();
+        // Reuse the query binding across frames. Every key below is re-set each frame (fixed set), so
+        // we rely on set()'s overwrite semantics — no clear() is needed (MutableObjectBinding has none).
+        final MutableObjectBinding query = reusableQuery;
 
         // Mirror CustomEntityRenderer.buildFrameScope so query-gated animation expressions evaluate
         // correctly. With only a handful of variables bound, terms that should resolve to ~0 when the
@@ -207,9 +228,9 @@ public class PlayerAnimationManager {
         query.setFunction("position_delta", (double arg) -> 0.0);
         query.setFunction("rotation_to_camera", (double arg) -> 0.0);
 
-        scope.set("query", query);
-        scope.set("q", query);
+        reusableFrameScope.set("query", query);
+        reusableFrameScope.set("q", query);
 
-        return scope;
+        return reusableFrameScope;
     }
 }
