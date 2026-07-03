@@ -133,13 +133,22 @@ public abstract class ModelPartMixin implements IModelPart {
         this.z = targetInitialPose.z() + (source.z - sourceInitialPose.z());
 
         // During the vanilla left-click swing, HumanoidModel writes the arm x/z positions as absolute
-        // vanilla arm origins. VBU player arms use a render-time X/Z cancellation for their visual arm
-        // geometry, while the vanilla armor model does not, so copy the visible arm's X convention and do
-        // not inherit the transient Z offset that would make sleeves drift slightly during the swing.
+        // vanilla arm origins. VBU player arms later cancel that dynamic X/Z offset after vanilla's ZYX
+        // rotation, so the armor origin has to keep only the residual that remains after the same rotation
+        // instead of inheriting the full offset (front drift) or dropping all of it (back drift).
         if (this.vbu$usesAbsoluteSwingArmPosition(sourcePart, source, sourceInitialPose)) {
-            this.x = source.x;
-            this.z = targetInitialPose.z();
+            this.vbu$copyAbsoluteSwingArmPosition(source, targetInitialPose);
         }
+    }
+
+    @Unique
+    private void vbu$copyAbsoluteSwingArmPosition(ModelPart source, PartPose targetInitialPose) {
+        final float swingOffsetX = source.x - targetInitialPose.x();
+        final float swingOffsetZ = source.z - targetInitialPose.z();
+        final Vector3f rotatedSwingOffset = new Vector3f(swingOffsetX, 0.0F, swingOffsetZ)
+                .rotate(this.vbu$tempQuaternion.rotationZYX(source.zRot, source.yRot, source.xRot));
+        this.x = targetInitialPose.x() + swingOffsetX - rotatedSwingOffset.x;
+        this.z = targetInitialPose.z() + swingOffsetZ - rotatedSwingOffset.z;
     }
 
     @Unique
