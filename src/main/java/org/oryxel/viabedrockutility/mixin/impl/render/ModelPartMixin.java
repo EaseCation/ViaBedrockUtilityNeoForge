@@ -132,16 +132,18 @@ public abstract class ModelPartMixin implements IModelPart {
         this.y = targetInitialPose.y() + (source.y - sourceInitialPose.y());
         this.z = targetInitialPose.z() + (source.z - sourceInitialPose.z());
 
-        // During the vanilla left-click swing, HumanoidModel writes the arm x position as an absolute
-        // vanilla arm origin (~+/-5). VBU player arms otherwise start at 0, so adding the armor model's
-        // baked arm x again pushes the armor sleeves out to the sides.
-        if (this.vbu$usesAbsoluteSwingArmX(sourcePart, source, sourceInitialPose)) {
+        // During the vanilla left-click swing, HumanoidModel writes the arm x/z positions as absolute
+        // vanilla arm origins. VBU player arms use a render-time X/Z cancellation for their visual arm
+        // geometry, while the vanilla armor model does not, so copy the visible arm's X convention and do
+        // not inherit the transient Z offset that would make sleeves drift slightly during the swing.
+        if (this.vbu$usesAbsoluteSwingArmPosition(sourcePart, source, sourceInitialPose)) {
             this.x = source.x;
+            this.z = targetInitialPose.z();
         }
     }
 
     @Unique
-    private boolean vbu$usesAbsoluteSwingArmX(IModelPart sourcePart, ModelPart source, PartPose sourceInitialPose) {
+    private boolean vbu$usesAbsoluteSwingArmPosition(IModelPart sourcePart, ModelPart source, PartPose sourceInitialPose) {
         final String partName = sourcePart.viaBedrockUtility$getName();
         if (partName == null) {
             return false;
