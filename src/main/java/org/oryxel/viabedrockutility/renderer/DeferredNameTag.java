@@ -7,7 +7,9 @@ import net.minecraft.network.chat.Component;
 import org.joml.Matrix4f;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Collects entity/player name tag draws during the entity render pass and replays them after all
@@ -36,7 +38,41 @@ public final class DeferredNameTag {
 
     private static final List<Entry> QUEUE = new ArrayList<>();
 
+    // Cache of Font.PreparedText (the laid-out glyph list) keyed by text content + color/bg + screen offset.
+    // vanilla drawInBatch == prepareText(...).visit(...); prepareText (Font$PreparedTextBuilder.accept: glyph
+    // lookup + GlyphInstance list build) was ~7.8% of the render thread in JFR because flush() rebuilt it for
+    // every name every frame. PreparedText is immutable and mode-independent, so we memoize it and only re-run
+    // visit() each frame (visit re-emits vertices with the per-frame pose — that part is unavoidable). The
+    // remaining transparency sort / Iris batching is NOT reclaimable and is intentionally left as-is.
+    //
+    // Key uses text.getString() (String hashCode is cached) rather than the Component itself, to avoid
+    // Component.hashCode/equals walking the sibling tree on every lookup. x/y are folded in as raw int bits;
+    // for a name tag x = -width/2 so it also disambiguates width-affecting style changes (e.g. bold).
+    // Access is render-thread-only (enqueue during entity pass, flush during AfterEntities), no sync needed.
+    private record Key(String text, int color, int backgroundColor, int xBits, int yBits) {
+    }
+
+    private static final int CACHE_CAP = 256;
+
+    private static final LinkedHashMap<Key, Font.PreparedText> CACHE =
+            new LinkedHashMap<>(CACHE_CAP * 2, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<Key, Font.PreparedText> eldest) {
+                    return size() > CACHE_CAP;
+                }
+            };
+
     private DeferredNameTag() {
+    }
+
+    /**
+     * Drop all cached prepared text. MUST be called on client resource reload: a cached PreparedText holds
+     * {@code BakedGlyph} references into the font atlas, which are rebuilt on reload — replaying stale ones
+     * would bind a freed/rebaked texture and corrupt the glyphs. Registered as a reload listener in the mod
+     * entrypoint.
+     */
+    public static void clearCache() {
+        CACHE.clear();
     }
 
     /**
@@ -59,12 +95,26 @@ public final class DeferredNameTag {
         try {
             final MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
             for (final Entry e : QUEUE) {
-                e.font().drawInBatch(e.text(), e.x(), e.y(), e.color(), false, e.pose(), bufferSource,
-                        e.mode(), e.backgroundColor(), e.packedLight());
+                // Reuse the cached glyph layout; only visit() (vertex emit with this frame's pose) runs per
+                // frame. mode is applied by the GlyphVisitor, so the SEE_THROUGH and NORMAL passes share the
+                // same cached PreparedText and differ only in the visitor.
+                final Font.PreparedText prepared = prepared(e);
+                prepared.visit(Font.GlyphVisitor.forMultiBufferSource(bufferSource, e.pose(), e.mode(), e.packedLight()));
             }
             bufferSource.endBatch();
         } finally {
             QUEUE.clear();
         }
+    }
+
+    private static Font.PreparedText prepared(final Entry e) {
+        final Key key = new Key(e.text().getString(), e.color(), e.backgroundColor(),
+                Float.floatToRawIntBits(e.x()), Float.floatToRawIntBits(e.y()));
+        Font.PreparedText cached = CACHE.get(key);
+        if (cached == null) {
+            cached = e.font().prepareText(e.text().getVisualOrderText(), e.x(), e.y(), e.color(), false, e.backgroundColor());
+            CACHE.put(key, cached);
+        }
+        return cached;
     }
 }

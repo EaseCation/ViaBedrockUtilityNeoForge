@@ -3,9 +3,12 @@ package org.oryxel.viabedrockutility.neoforge;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraft.world.entity.player.Player;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.config.LodConfig;
@@ -24,6 +27,11 @@ public class ViaBedrockUtilityNeoForge {
 		LodConfig.load();
 		ViaBedrockUtility.getInstance().init();
 		modEventBus.addListener(ViaBedrockUtility.getInstance()::registerPayloads);
+		// Clear the deferred name-tag PreparedText cache on client resource reload: cached glyphs hold
+		// BakedGlyph references into the font atlas, which the reload rebuilds. See DeferredNameTag.clearCache.
+		modEventBus.addListener((AddClientReloadListenersEvent event) -> event.addListener(
+				ResourceLocation.fromNamespaceAndPath(MOD_ID, "name_tag_cache"),
+				(ResourceManagerReloadListener) resourceManager -> DeferredNameTag.clearCache()));
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::onClientTick);
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::registerClientCommands);
 		// Reset the per-frame animation budget before entities render (AfterOpaqueBlocks fires before

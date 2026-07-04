@@ -243,6 +243,10 @@ public final class GeometryUtil {
                         "[GeometryUtil] Removing cyclic ModelPart edge in geometry '{}': {}",
                         geometryName != null ? geometryName : "unknown", cyclePath);
                 it.remove();
+                // Structural change to this part's children map — drop any cached children snapshot so
+                // ModelPartMixin's render redirect rebuilds it. Build-time only (cache not yet built), but
+                // keeps the invariant "mutate children ⇒ invalidate cache" honest.
+                ((IModelPart) ((Object) part)).viaBedrockUtility$invalidateChildrenCache();
             } else {
                 validateAndFixCycles(entry.getValue(), entry.getKey(), ancestors, path, geometryName);
             }

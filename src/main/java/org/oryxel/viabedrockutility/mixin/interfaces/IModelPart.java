@@ -23,4 +23,11 @@ public interface IModelPart {
     void viaBedrockUtility$resetToDefaultPose();
     Map<String, ModelPart> viaBedrockUtility$getChildren();
     java.util.List<ModelPart.Cube> viaBedrockUtility$getCuboids();
+
+    /**
+     * Invalidate the cached children iteration list built lazily in ModelPartMixin's render redirect.
+     * Called after the children map is structurally mutated (only happens at build time in GeometryUtil,
+     * e.g. validateAndFixCycles removing a cyclic edge) so the next render rebuilds the array snapshot.
+     */
+    default void viaBedrockUtility$invalidateChildrenCache() {}
 }

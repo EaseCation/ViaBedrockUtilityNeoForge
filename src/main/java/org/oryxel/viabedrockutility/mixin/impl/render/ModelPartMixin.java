@@ -13,11 +13,14 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -63,6 +66,19 @@ public abstract class ModelPartMixin implements IModelPart {
     @Unique
     private boolean alreadySetRotation = false;
 
+    // Cached snapshot of children.values() for the render tree walk. Vanilla ModelPart.render iterates
+    // this.children.values() every frame per bone; for deep Bedrock (VBU) models that HashMap iteration
+    // (HashIterator.nextNode) was ~2.9% of the render thread in JFR. children is immutable after build
+    // (only GeometryUtil mutates it, incl. validateAndFixCycles removals), so we snapshot it once and
+    // return the SAME list every frame (no per-frame allocation) — the enhanced-for then walks an array
+    // instead of hash buckets. Invalidated via viaBedrockUtility$invalidateChildrenCache after any
+    // structural mutation.
+    @Unique
+    private List<ModelPart> vbu$childrenList;
+
+    @Unique
+    private boolean vbu$childrenCacheBuilt;
+
     @Unique
     private static final float VBU_ABSOLUTE_ARM_X_THRESHOLD = 1.0F;
 
@@ -103,6 +119,36 @@ public abstract class ModelPartMixin implements IModelPart {
 
         // Have to do this because of how java pivot point and bedrock pivot point system works, I think? ehhh whatever it works, just don't touch it.
         matrices.translate(-this.x / 16.0F, 0, -this.z / 16.0F);
+    }
+
+    // Replace the `this.children.values()` iterated by vanilla ModelPart.render's child-render loop with a
+    // cached array-backed list, eliminating the per-frame HashMap iterator + nextNode bucket walk. Only for
+    // VBU (Bedrock) models — the 31% NPC render cost in JFR; vanilla/player models keep the original path
+    // (few bones, not a bottleneck, and preserving vanilla semantics is safest). Zero per-frame allocation:
+    // the same list reference is returned every frame once built.
+    // require = 1: this redirect MUST bind, otherwise the optimization silently no-ops (and JFR would look
+    // like "no improvement" — the exact eaten-back failure mode we want to catch). Fail loudly at load if the
+    // target ever moves. Sodium/Iris only touch Cube.compile, not render's children walk, so it binds cleanly.
+    @Redirect(
+            method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V",
+            at = @At(value = "INVOKE", target = "Ljava/util/Map;values()Ljava/util/Collection;"),
+            require = 1
+    )
+    private Collection<ModelPart> vbu$childrenValues(Map<String, ModelPart> map) {
+        if (!this.isVBUModel) {
+            return map.values();
+        }
+        if (!this.vbu$childrenCacheBuilt) {
+            this.vbu$childrenList = new ArrayList<>(map.values());
+            this.vbu$childrenCacheBuilt = true;
+        }
+        return this.vbu$childrenList;
+    }
+
+    @Override
+    public void viaBedrockUtility$invalidateChildrenCache() {
+        this.vbu$childrenCacheBuilt = false;
+        this.vbu$childrenList = null;
     }
 
     @Inject(method = "getChild", at = @At("HEAD"), cancellable = true)
