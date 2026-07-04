@@ -11,6 +11,10 @@ import org.oryxel.viabedrockutility.config.LodConfig;
  * (RenderLevelStageEvent.AfterOpaqueBlocks); each entity that wants to animate calls {@link #tryAcquire()}.
  * Entities that exhaust the budget fall back to a staggered every-N-frames cadence at the call site.
  *
+ * <p>Two INDEPENDENT pools are tracked: custom entities ({@link #tryAcquire()}) and players
+ * ({@link #tryAcquirePlayer()}). They render in the same pass but draw from separate counters, so a crowd
+ * of custom NPCs never starves player animation and vice versa. Both are refilled together in {@link #reset()}.
+ *
  * <p>Render-thread confined - no synchronization needed.
  */
 public final class AnimationBudget {
@@ -18,10 +22,13 @@ public final class AnimationBudget {
     private static boolean unlimited = true;
     private static int remaining = Integer.MAX_VALUE;
 
+    private static boolean unlimitedPlayers = true;
+    private static int remainingPlayers = Integer.MAX_VALUE;
+
     private AnimationBudget() {
     }
 
-    /** Reset the budget for a new frame from the active LOD config. */
+    /** Reset both budgets for a new frame from the active LOD config. */
     public static void reset() {
         final int max = LodConfig.getInstance().getMaxAnimatedEntitiesPerFrame();
         if (max <= 0) {
@@ -31,15 +38,36 @@ public final class AnimationBudget {
             unlimited = false;
             remaining = max;
         }
+
+        final int maxPlayers = LodConfig.getInstance().getMaxAnimatedPlayersPerFrame();
+        if (maxPlayers <= 0) {
+            unlimitedPlayers = true;
+            remainingPlayers = Integer.MAX_VALUE;
+        } else {
+            unlimitedPlayers = false;
+            remainingPlayers = maxPlayers;
+        }
     }
 
-    /** @return true if this entity may animate at full rate this frame (consuming one budget slot). */
+    /** @return true if this entity may animate at full rate this frame (consuming one entity-pool slot). */
     public static boolean tryAcquire() {
         if (unlimited) {
             return true;
         }
         if (remaining > 0) {
             remaining--;
+            return true;
+        }
+        return false;
+    }
+
+    /** @return true if this player may animate at full rate this frame (consuming one player-pool slot). */
+    public static boolean tryAcquirePlayer() {
+        if (unlimitedPlayers) {
+            return true;
+        }
+        if (remainingPlayers > 0) {
+            remainingPlayers--;
             return true;
         }
         return false;

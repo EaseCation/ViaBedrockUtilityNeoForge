@@ -33,23 +33,30 @@ public class LodConfig {
     }
 
     private Preset preset = Preset.BALANCED;
-    private LodTier tier1 = new LodTier(24.0, 2);
-    private LodTier tier2 = new LodTier(48.0, 4);
-    private LodTier tier3 = new LodTier(0, 1);
-    private double renderCullDistance = 48.0;
+    private LodTier tier1 = new LodTier(18.0, 3);
+    private LodTier tier2 = new LodTier(36.0, 5);
+    private LodTier tier3 = new LodTier(56.0, 8);
+    private double renderCullDistance = 40.0;
 
     // Per-frame animation budget: caps how many entities run full-rate MoLang animation in a single
     // frame. The distance tiers above only throttle FAR entities; in a lobby with many entities within
     // tier1 they would all animate every frame. When the budget is exhausted, remaining entities fall
     // back to animating once every {@link #animationThrottleInterval} frames (staggered per entity), so
     // dense near-distance scenes stay bounded. 0 = unlimited (no budget).
-    private int maxAnimatedEntitiesPerFrame = 32;
-    private int animationThrottleInterval = 3;
+    private int maxAnimatedEntitiesPerFrame = 24;
+    // Player-specific budget pool, INDEPENDENT from the entity pool above (players and entities don't
+    // preempt each other — they render in the same pass but draw from separate counters, reset together
+    // once per frame in AnimationBudget.reset). Caps how many players run full-rate Bedrock setupAnim
+    // per frame; the rest fall back to the {@link #animationThrottleInterval} staggered cadence. 0 =
+    // unlimited. NOTE: a newly-added field absent from an existing config file deserializes to 0
+    // (unlimited) — users must delete viabedrockutility.json to regenerate it with this default.
+    private int maxAnimatedPlayersPerFrame = 24;
+    private int animationThrottleInterval = 4;
 
     // Particle LOD settings (synced to ParticleManager on load/save)
     private boolean particleTickLodEnabled = true;
-    private int particleTickLodNearDistance = 24;
-    private int particleTickLodFarDistance = 48;
+    private int particleTickLodNearDistance = 18;
+    private int particleTickLodFarDistance = 36;
 
     public static LodConfig getInstance() {
         if (INSTANCE == null) {
@@ -92,6 +99,14 @@ public class LodConfig {
 
     public void setMaxAnimatedEntitiesPerFrame(int maxAnimatedEntitiesPerFrame) {
         this.maxAnimatedEntitiesPerFrame = maxAnimatedEntitiesPerFrame;
+    }
+
+    public int getMaxAnimatedPlayersPerFrame() {
+        return maxAnimatedPlayersPerFrame;
+    }
+
+    public void setMaxAnimatedPlayersPerFrame(int maxAnimatedPlayersPerFrame) {
+        this.maxAnimatedPlayersPerFrame = maxAnimatedPlayersPerFrame;
     }
 
     public int getAnimationThrottleInterval() {
@@ -182,28 +197,32 @@ public class LodConfig {
                 renderCullDistance = 0;
                 particleTickLodEnabled = false;
                 maxAnimatedEntitiesPerFrame = 0; // unlimited
+                maxAnimatedPlayersPerFrame = 0;  // unlimited
                 animationThrottleInterval = 1;
             }
             case BALANCED -> {
-                tier1 = new LodTier(24.0, 2);
-                tier2 = new LodTier(48.0, 4);
-                tier3 = new LodTier(0, 1);
-                renderCullDistance = 48;
+                // Kept in sync with the class-field defaults above (tightened for crowded lobbies).
+                tier1 = new LodTier(18.0, 3);
+                tier2 = new LodTier(36.0, 5);
+                tier3 = new LodTier(56.0, 8);
+                renderCullDistance = 40;
                 particleTickLodEnabled = true;
-                particleTickLodNearDistance = 24;
-                particleTickLodFarDistance = 48;
-                maxAnimatedEntitiesPerFrame = 32;
-                animationThrottleInterval = 3;
+                particleTickLodNearDistance = 18;
+                particleTickLodFarDistance = 36;
+                maxAnimatedEntitiesPerFrame = 24;
+                maxAnimatedPlayersPerFrame = 24;
+                animationThrottleInterval = 4;
             }
             case PERFORMANCE -> {
-                tier1 = new LodTier(16.0, 2);
-                tier2 = new LodTier(32.0, 4);
+                tier1 = new LodTier(16.0, 3);
+                tier2 = new LodTier(32.0, 5);
                 tier3 = new LodTier(48.0, 8);
-                renderCullDistance = 48;
+                renderCullDistance = 36;
                 particleTickLodEnabled = true;
                 particleTickLodNearDistance = 16;
                 particleTickLodFarDistance = 32;
                 maxAnimatedEntitiesPerFrame = 16;
+                maxAnimatedPlayersPerFrame = 16;
                 animationThrottleInterval = 4;
             }
             case CUSTOM -> {} // Keep current values

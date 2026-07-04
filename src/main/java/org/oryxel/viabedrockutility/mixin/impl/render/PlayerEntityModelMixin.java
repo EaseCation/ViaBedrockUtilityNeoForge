@@ -5,6 +5,7 @@ import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import org.oryxel.viabedrockutility.animation.PlayerAnimationManager;
 import org.oryxel.viabedrockutility.config.LodConfig;
 import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
+import org.oryxel.viabedrockutility.renderer.AnimationBudget;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -17,9 +18,12 @@ public abstract class PlayerEntityModelMixin implements IBedrockAnimatedModel {
     private PlayerAnimationManager animationManager;
 
     // Per-model frame counter for distance-based throttle cadence (LodConfig.shouldAnimate keys on
-    // frameCounter % interval). Incremented on every setupAnim that isn't short-circuited.
+    // frameCounter % interval). Incremented on every setupAnim that isn't short-circuited. Seeded with
+    // identityHashCode so that different players' throttled updates land on different frames (staggered),
+    // mirroring CustomEntityRenderer.renderFrameCounter — otherwise every budget-throttled player would
+    // animate on the same frame%interval==0 tick, producing a periodic spike.
     @Unique
-    private int setupAnimFrameCounter = 0;
+    private int setupAnimFrameCounter = System.identityHashCode(this);
 
     @Override
     public PlayerAnimationManager viaBedrockUtility$getAnimationManager() {
@@ -31,11 +35,18 @@ public abstract class PlayerEntityModelMixin implements IBedrockAnimatedModel {
         this.animationManager = manager;
     }
 
-    // Distance-based throttle: for distant players that have Bedrock animations, freeze the WHOLE
-    // setupAnim (vanilla pose math + the Bedrock TAIL inject below), keeping the last frame's pose —
-    // the standard animation-LOD "freeze, don't interpolate" approach (freezing keeps half the saving
-    // that interpolation would give away). Vanilla-only players (no Bedrock animations) always run the
-    // full vanilla setupAnim. Near players (LodConfig.shouldAnimate == true) are never frozen.
+    // Throttle for players that have Bedrock animations. When a player should not animate this frame, the
+    // WHOLE setupAnim is frozen (vanilla pose math + the Bedrock TAIL inject below), keeping the last
+    // frame's pose — the standard animation-LOD "freeze, don't interpolate" approach. Vanilla-only players
+    // (no Bedrock animations) always run the full vanilla setupAnim.
+    //
+    // Three stages, mirroring CustomEntityRenderer for the custom-entity pool:
+    //   1. Distance LOD (LodConfig.shouldAnimate): far players throttle by tier cadence; near players pass.
+    //   2. Player budget (AnimationBudget.tryAcquirePlayer): near players aren't distance-throttled, so a
+    //      crowded lobby would animate every one every frame. The player-INDEPENDENT budget caps how many
+    //      run full-rate; it does not compete with the custom-entity pool.
+    //   3. Budget fallback: players that exhaust the budget drop to a staggered every-N-frames cadence
+    //      (animationThrottleInterval), spread across frames by the identityHashCode-seeded counter.
     //
     // Frozen players still RENDER every frame — ModelPart.render / Cube.compile still runs (now on
     // Sodium's fast path via CuboidMixin) using the frozen pose. This mixin only skips the per-frame
@@ -48,7 +59,17 @@ public abstract class PlayerEntityModelMixin implements IBedrockAnimatedModel {
         }
         this.setupAnimFrameCounter++;
         final double distance = Math.sqrt(state.distanceToCameraSq);
-        if (!LodConfig.getInstance().shouldAnimate(distance, this.setupAnimFrameCounter)) {
+
+        // Stage 1: distance LOD.
+        boolean shouldAnimate = LodConfig.getInstance().shouldAnimate(distance, this.setupAnimFrameCounter);
+
+        // Stage 2 + 3: player budget, with staggered every-N-frames fallback when exhausted.
+        if (shouldAnimate && !AnimationBudget.tryAcquirePlayer()) {
+            final int interval = LodConfig.getInstance().getAnimationThrottleInterval();
+            shouldAnimate = interval <= 1 || (this.setupAnimFrameCounter % interval == 0);
+        }
+
+        if (!shouldAnimate) {
             ci.cancel();
         }
     }
