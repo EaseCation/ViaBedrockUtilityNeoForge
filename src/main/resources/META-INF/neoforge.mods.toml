@@ -40,3 +40,12 @@ type="required"
 versionRange="[1.0.0,)"
 ordering="AFTER"
 side="CLIENT"
+
+# Sodium: optional rendering optimization. VBU's C2 push fast path (SodiumPushBackend) activates
+# automatically when Sodium is present; without it VBU falls back to vanilla addVertex. Never required.
+[[dependencies.${mod_id}]]
+modId="sodium"
+type="optional"
+versionRange="[0.7.0,)"
+ordering="AFTER"
+side="CLIENT"

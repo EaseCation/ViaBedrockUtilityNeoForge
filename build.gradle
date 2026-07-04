@@ -64,6 +64,13 @@ dependencies {
     jarJar 'com.github.EaseCation:CubeConverter:1.3'
     jarJar 'team.unnamed:mocha:3.0.1'
 
+    // Sodium (optional at runtime): compileOnly so the C2 push fast path (SodiumPushBackend /
+    // CuboidMixin.vbu$renderCuboidFastPush) can compile against VertexBufferWriter + EntityVertex.
+    // Not bundled (jarJar) and not a required mod dependency — at runtime, if Sodium is absent,
+    // SodiumPushBackend.SUPPORTED == false and the JIT folds away the push branch, so the fallback
+    // addVertex path runs with zero Sodium footprint. Vendored in libs/ to avoid a maven dependency.
+    compileOnly files('libs/sodium-neoforge-0.7.3.jar')
+
     compileOnly 'org.projectlombok:lombok:1.18.36'
     annotationProcessor 'org.projectlombok:lombok:1.18.36'
 

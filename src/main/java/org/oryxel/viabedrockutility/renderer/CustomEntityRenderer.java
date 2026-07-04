@@ -48,7 +48,20 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
     private final Map<String, Animator> animators = new ConcurrentHashMap<>();
     private final Map<CustomEntityModel<?>, McBoneModel> boneModelCache = new IdentityHashMap<>();
+    // Resolved once per entity model: each non-wildcard part_visibility rule pre-mapped to its target
+    // ModelPart[], plus a snapshot of allParts(). Lets applyPartVisibility iterate arrays every frame
+    // instead of doing parsedPV.entrySet() iteration + partsByName.get() (HashMap get/hashCode) and
+    // entityModel.allParts() (which builds a fresh List via Stream.collect each call). Same 1:1
+    // entity-model ↔ parsed-visibility pairing as boneModelCache, so the model is a safe cache key.
+    private final Map<CustomEntityModel<?>, ResolvedPartVisibility> partVisibilityCache = new IdentityHashMap<>();
+    private static final ModelPart[] EMPTY_MODEL_PARTS = new ModelPart[0];
     private final LayeredScope reusableFrameScope = new LayeredScope(Scope.create());
+    // Reused across frames instead of allocating a new MutableObjectBinding (and its backing
+    // CaseInsensitiveStringHashMap, which lowercases + double-puts every key on every set) every frame.
+    // The query keys are a fixed set overwritten each frame, so no clear() is needed — mirrors
+    // PlayerAnimationManager.reusableQuery. This was the one buildFrameScope allocation left after the
+    // earlier GC pass; it drove ~2.6% toLowerCase + a chunk of putVal/hashCode on the render thread.
+    private final MutableObjectBinding reusableQueryBinding = new MutableObjectBinding();
 
     // Cached max visible-bounds across models (recomputed only when the model set size changes),
     // avoiding the repeated model-list scan in getVisualBoundingBox. The AABB itself is still
@@ -177,9 +190,10 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                     }
 
                     VertexConsumer vertexConsumer = vertexConsumers.getBuffer(renderType);
-                    if (flatLight) {
-                        vertexConsumer = new FlatNormalVertexConsumer(vertexConsumer);
-                    }
+                    // Plan C (emissive): instead of wrapping with FlatNormalVertexConsumer (which does not
+                    // implement Sodium VertexBufferWriter and would disable the C2 push path), signal the
+                    // flat-normal intent via a static flag read by CuboidMixin. Reset in the finally below.
+                    VbuCompileScratch.FLAT_NORMAL = flatLight;
                     model.model.renderToBuffer(matrices, vertexConsumer, effectiveLight, OverlayTexture.pack(0, 10));
                 }
             } catch (StackOverflowError soe) {
@@ -189,6 +203,10 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                 dumpModelHierarchy(model.model().root(), "", 0);
             } catch (Exception e) {
                 ViaBedrockUtilityNeoForge.LOGGER.debug("[Render] Error rendering model key={}, texture={}", model.key(), model.texture(), e);
+            } finally {
+                // Always clear the flat-normal flag after each model so it never leaks into the next one
+                // (which may not be emissive). Render-thread only, so no synchronization needed.
+                VbuCompileScratch.FLAT_NORMAL = false;
             }
 
             matrices.popPose();
@@ -377,7 +395,9 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     private Scope buildFrameScope(CustomEntityRenderState state) {
         reusableFrameScope.reset(this.ticker.getEntityScope());
 
-        final MutableObjectBinding queryBinding = new MutableObjectBinding();
+        // Reuse the instance field instead of allocating a fresh MutableObjectBinding (with its backing
+        // CaseInsensitiveStringHashMap) every frame. Keys are a fixed set overwritten each frame.
+        final MutableObjectBinding queryBinding = this.reusableQueryBinding;
 
         // Entity-level queries (variant, flags) from ticker
         this.ticker.populateEntityQueries(queryBinding);
@@ -484,39 +504,83 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
      */
     @SuppressWarnings("unchecked")
     private void applyPartVisibility(CustomEntityModel<?> entityModel, Map<String, Object> parsedPV, Scope scope) {
-        final List<ModelPart> allParts = entityModel.allParts();
+        // Resolve the rule → ModelPart[] mapping once per model (cached), then iterate arrays per frame
+        // — no parsedPV.entrySet() iteration, no partsByName.get() (HashMap get + String hashCode), and
+        // no per-frame entityModel.allParts() (which builds a fresh List via Stream.collect each call).
+        final ResolvedPartVisibility rv = partVisibilityCache.computeIfAbsent(entityModel, m -> resolvePartVisibility(m, parsedPV));
 
-        // Determine default visibility from wildcard rule
-        boolean defaultVisible = true;
-        final Object defaultRule = parsedPV.get("*");
-        if (defaultRule != null) {
-            defaultVisible = evalParsedVisibility(defaultRule, scope);
+        final boolean defaultVisible = rv.defaultRule != null ? evalParsedVisibility(rv.defaultRule, scope) : true;
+
+        // Set default visibility for all parts (snapshot array — no per-frame Stream/List allocation)
+        final ModelPart[] all = rv.allParts;
+        for (int i = 0; i < all.length; i++) {
+            all[i].visible = defaultVisible;
         }
 
-        // Set default visibility for all parts
-        for (ModelPart part : allParts) {
-            part.visible = defaultVisible;
-        }
-
-        // Override specific bones using name index — O(pv.size()) instead of O(pv.size() × allParts.size())
+        // Override specific bones via pre-resolved target arrays.
         boolean anyHidden = !defaultVisible;
-
-        final Map<String, List<ModelPart>> partsByName = entityModel.getPartsByName();
-        for (Map.Entry<String, Object> entry : parsedPV.entrySet()) {
-            if ("*".equals(entry.getKey())) continue;
-            List<ModelPart> matchingParts = partsByName.get(entry.getKey());
-            if (matchingParts != null) {
-                boolean vis = evalParsedVisibility(entry.getValue(), scope);
-                if (!vis) anyHidden = true;
-                for (ModelPart part : matchingParts) {
-                    part.visible = vis;
-                }
+        final Object[] rules = rv.rules;
+        final ModelPart[][] targets = rv.targets;
+        for (int i = 0; i < rules.length; i++) {
+            final boolean vis = evalParsedVisibility(rules[i], scope);
+            if (!vis) anyHidden = true;
+            final ModelPart[] t = targets[i];
+            for (int j = 0; j < t.length; j++) {
+                t[j].visible = vis;
             }
         }
 
         // Post-pass: only needed when some parts are hidden.
         if (anyHidden) {
             ensureAncestorsVisible(entityModel.root());
+        }
+    }
+
+    /**
+     * Builds a {@link ResolvedPartVisibility} for a model: snapshots {@code allParts()} into an array
+     * (avoiding the per-frame Stream.collect allocation) and pre-resolves each non-wildcard rule's bone
+     * name to its {@code ModelPart[]} via {@code getPartsByName()}. Called once per model, cached in
+     * {@link #partVisibilityCache}.
+     */
+    private static ResolvedPartVisibility resolvePartVisibility(final CustomEntityModel<?> entityModel, final Map<String, Object> parsedPV) {
+        final ModelPart[] allParts = entityModel.allParts().toArray(EMPTY_MODEL_PARTS);
+        final Object defaultRule = parsedPV.get("*");
+
+        // Count non-wildcard rules (the map may or may not contain a "*" entry).
+        int count = parsedPV.size();
+        if (defaultRule != null && parsedPV.containsKey("*")) {
+            count--;
+        }
+        final Object[] rules = new Object[count];
+        final ModelPart[][] targets = new ModelPart[count][];
+
+        final Map<String, List<ModelPart>> partsByName = entityModel.getPartsByName();
+        int i = 0;
+        for (Map.Entry<String, Object> entry : parsedPV.entrySet()) {
+            if ("*".equals(entry.getKey())) continue;
+            rules[i] = entry.getValue();
+            final List<ModelPart> matching = partsByName.get(entry.getKey());
+            targets[i] = (matching != null && !matching.isEmpty()) ? matching.toArray(EMPTY_MODEL_PARTS) : EMPTY_MODEL_PARTS;
+            i++;
+        }
+        return new ResolvedPartVisibility(allParts, defaultRule, rules, targets);
+    }
+
+    /**
+     * Per-model resolved part_visibility rules. Built once, reused every frame to avoid HashMap lookups
+     * and per-frame List allocation in {@link #applyPartVisibility}.
+     */
+    private static final class ResolvedPartVisibility {
+        final ModelPart[] allParts;     // snapshot of entityModel.allParts()
+        final Object defaultRule;       // "*" rule value, or null if no wildcard rule
+        final Object[] rules;           // non-wildcard rule values (Boolean or List<Expression>)
+        final ModelPart[][] targets;    // targets[i] = parts matching rules[i], pre-resolved
+
+        ResolvedPartVisibility(ModelPart[] allParts, Object defaultRule, Object[] rules, ModelPart[][] targets) {
+            this.allParts = allParts;
+            this.defaultRule = defaultRule;
+            this.rules = rules;
+            this.targets = targets;
         }
     }
 

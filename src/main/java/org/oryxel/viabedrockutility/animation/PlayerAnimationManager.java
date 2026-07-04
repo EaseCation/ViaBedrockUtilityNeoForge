@@ -104,6 +104,15 @@ public class PlayerAnimationManager {
      * Bedrock-authoritative: the skin ships its own animations, so they define the pose. We clear
      * vanilla's contribution on the bones those animations drive, then apply the Bedrock animations.
      */
+    /**
+     * Whether this player has any Bedrock animations (looping or one-shot). Used by
+     * {@link org.oryxel.viabedrockutility.mixin.impl.render.PlayerEntityModelMixin} to decide whether
+     * distance-based setupAnim throttling applies — vanilla-only players keep full-rate vanilla pose.
+     */
+    public boolean hasAnimations() {
+        return !animations.isEmpty() || !onceAnimations.isEmpty();
+    }
+
     public void animate(Model model, PlayerRenderState state) {
         if (cachedBoneModel == null || cachedBoneModel.getModel() != model) {
             cachedBoneModel = new McBoneModel(model);
