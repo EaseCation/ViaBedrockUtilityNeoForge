@@ -38,6 +38,14 @@ public class LodConfig {
     private LodTier tier3 = new LodTier(56.0, 8);
     private double renderCullDistance = 40.0;
 
+    // Distance beyond which text_display (hologram) entities are skipped entirely (EntityRenderer.shouldRender
+    // returns false — see mixin.impl.render.TextDisplayCullMixin). Each visible text_display triggers a full
+    // Iris endBatch flush via ImmediatelyFast, so culling far holograms cuts that cost at the source. Kept
+    // generous by default (holograms are often read from a distance); 0 = never cull. NOTE: a newly-added
+    // field absent from an existing config file deserializes to 0 — delete viabedrockutility.json to
+    // regenerate with the default.
+    private double textDisplayCullDistance = 64.0;
+
     // Per-frame animation budget: caps how many entities run full-rate MoLang animation in a single
     // frame. The distance tiers above only throttle FAR entities; in a lobby with many entities within
     // tier1 they would all animate every frame. When the budget is exhausted, remaining entities fall
@@ -91,6 +99,14 @@ public class LodConfig {
 
     public void setRenderCullDistance(double renderCullDistance) {
         this.renderCullDistance = renderCullDistance;
+    }
+
+    public double getTextDisplayCullDistance() {
+        return textDisplayCullDistance;
+    }
+
+    public void setTextDisplayCullDistance(double textDisplayCullDistance) {
+        this.textDisplayCullDistance = textDisplayCullDistance;
     }
 
     public int getMaxAnimatedEntitiesPerFrame() {
@@ -195,6 +211,7 @@ public class LodConfig {
                 tier2 = new LodTier(0, 1);
                 tier3 = new LodTier(0, 1);
                 renderCullDistance = 0;
+                textDisplayCullDistance = 0; // never cull holograms in high-quality
                 particleTickLodEnabled = false;
                 maxAnimatedEntitiesPerFrame = 0; // unlimited
                 maxAnimatedPlayersPerFrame = 0;  // unlimited
@@ -206,6 +223,7 @@ public class LodConfig {
                 tier2 = new LodTier(36.0, 5);
                 tier3 = new LodTier(56.0, 8);
                 renderCullDistance = 40;
+                textDisplayCullDistance = 64;
                 particleTickLodEnabled = true;
                 particleTickLodNearDistance = 18;
                 particleTickLodFarDistance = 36;
@@ -218,6 +236,7 @@ public class LodConfig {
                 tier2 = new LodTier(32.0, 5);
                 tier3 = new LodTier(48.0, 8);
                 renderCullDistance = 36;
+                textDisplayCullDistance = 48;
                 particleTickLodEnabled = true;
                 particleTickLodNearDistance = 16;
                 particleTickLodFarDistance = 32;

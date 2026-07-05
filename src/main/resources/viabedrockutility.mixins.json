@@ -24,6 +24,7 @@
     "render.ModelPartMixin",
     "render.PlayerEntityModelMixin",
     "render.PlayerEntityRenderStateMixin",
+    "render.TextDisplayCullMixin",
     "render.dispatcher.EntityRenderDispatcherMixin",
     "render.feature.CapeFeatureRendererMixin",
     "sound.SoundSystemMixin",

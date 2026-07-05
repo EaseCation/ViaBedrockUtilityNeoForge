@@ -71,6 +71,13 @@ dependencies {
     // addVertex path runs with zero Sodium footprint. Vendored in libs/ to avoid a maven dependency.
     compileOnly files('libs/sodium-neoforge-0.7.3.jar')
 
+    // Iris (optional at runtime): compileOnly so the shader-aware render-order mixin
+    // (mixin.iris.FullyBufferedMultiBufferSourceMixin / VbuShaderAwareRenderOrderManager) can compile
+    // against Iris' batchedentityrendering + IrisApi types. Not bundled and not a required dependency —
+    // at runtime, if Iris is absent, the iris mixin config ("required": false) is skipped entirely and
+    // none of these classes ever load. Vendored in libs/ to avoid a maven dependency.
+    compileOnly files('libs/iris-neoforge-1.9.6+mc1.21.8.jar')
+
     compileOnly 'org.projectlombok:lombok:1.18.36'
     annotationProcessor 'org.projectlombok:lombok:1.18.36'
 

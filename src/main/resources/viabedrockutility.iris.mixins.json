@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "package": "org.oryxel.viabedrockutility.mixin.iris",
+  "compatibilityLevel": "JAVA_21",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "FullyBufferedMultiBufferSourceMixin"
+  ]
+}

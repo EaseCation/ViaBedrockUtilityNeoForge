@@ -13,6 +13,11 @@ ViaBedrock extension mod that added support to certain things.
 [[mixins]]
 config="viabedrockutility.mixins.json"
 
+# Iris-targeting mixins, isolated in their own config with "required": false so the whole config is
+# skipped (no crash) when Iris is absent. See mixin.iris.FullyBufferedMultiBufferSourceMixin.
+[[mixins]]
+config="viabedrockutility.iris.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId="neoforge"
 type="required"
@@ -47,5 +52,15 @@ side="CLIENT"
 modId="sodium"
 type="optional"
 versionRange="[0.7.0,)"
+ordering="AFTER"
+side="CLIENT"
+
+# Iris: optional. When present, VBU downgrades Iris' per-endBatch render-order solver to the cheap
+# insertion-order manager while shaders are OFF (mixin.iris.FullyBufferedMultiBufferSourceMixin).
+# ordering=AFTER so our mixin applies over Iris' classes. Never required.
+[[dependencies.${mod_id}]]
+modId="iris"
+type="optional"
+versionRange="[1.9.0,)"
 ordering="AFTER"
 side="CLIENT"
