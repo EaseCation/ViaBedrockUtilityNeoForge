@@ -20,7 +20,8 @@ public class ClientPlayNetworkHandlerMixin {
     // NOTE: deliberately NOT clearing the cached player renderer on PLAYER_INFO_REMOVE. Servers with a
     // custom tab list (e.g. EaseCation) remove real players from the player-info list while they remain
     // in the world; dropping the renderer there reverts them to the vanilla model (the baked PlayerInfo
-    // texture lingers). Cleanup is instead driven by EntityLeaveLevelEvent when the entity actually leaves.
+    // texture lingers). Nukkit-style Human NPCs also rely on the client keeping the Bedrock model cache
+    // across RemoveEntity/AddPlayer; cleanup is therefore session-scoped and handled on disconnect.
 
     // Have to do this since you can't run custom command when playing in a server.
     @Inject(method = "sendChat", at = @At("HEAD"), cancellable = true)

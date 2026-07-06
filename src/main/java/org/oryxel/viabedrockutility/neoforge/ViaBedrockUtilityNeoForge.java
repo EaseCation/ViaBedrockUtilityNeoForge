@@ -6,10 +6,8 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
-import net.minecraft.world.entity.player.Player;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.config.LodConfig;
 import org.oryxel.viabedrockutility.renderer.AnimationBudget;
@@ -40,13 +38,7 @@ public class ViaBedrockUtilityNeoForge {
 		// Replay VBU name tags after all entity geometry is drawn so they show through entities
 		// (faint) instead of being painted over. See DeferredNameTag for the rationale.
 		NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent.AfterEntities event) -> DeferredNameTag.flush());
-		// Drop a player's cached Bedrock renderer/skin only when the player entity actually leaves the
-		// client world — NOT when it is merely removed from the tab list (custom-tab-list servers remove
-		// still-present players, which would otherwise revert them to the vanilla model).
-		NeoForge.EVENT_BUS.addListener((EntityLeaveLevelEvent event) -> {
-			if (event.getLevel().isClientSide() && event.getEntity() instanceof Player) {
-				ViaBedrockUtility.getInstance().getPayloadHandler().removePlayerCache(event.getEntity().getUUID());
-			}
-		});
+		// Keep cached player Bedrock skins/models across ordinary RemoveEntity/AddPlayer cycles. Nukkit
+		// Human NPCs may only send PlayerList skin data once, so final cleanup belongs to disconnect.
 	}
 }
