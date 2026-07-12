@@ -58,10 +58,12 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     private final LayeredScope reusableFrameScope = new LayeredScope(Scope.create());
     // Reused across frames instead of allocating a new MutableObjectBinding (and its backing
     // CaseInsensitiveStringHashMap, which lowercases + double-puts every key on every set) every frame.
-    // The query keys are a fixed set overwritten each frame, so no clear() is needed — mirrors
-    // PlayerAnimationManager.reusableQuery. This was the one buildFrameScope allocation left after the
+    // Entity flags and nullable ids are updated only when their value changes, so no clear() or full
+    // flag-map rewrite is needed. This was the one buildFrameScope allocation left after the
     // earlier GC pass; it drove ~2.6% toLowerCase + a chunk of putVal/hashCode on the render thread.
     private final MutableObjectBinding reusableQueryBinding = new MutableObjectBinding();
+    private final CustomEntityTicker.EntityQueryState reusableEntityQueryState =
+            new CustomEntityTicker.EntityQueryState();
 
     // Cached max visible-bounds across models (recomputed only when the model set size changes),
     // avoiding the repeated model-list scan in getVisualBoundingBox. The AABB itself is still
@@ -396,11 +398,11 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         reusableFrameScope.reset(this.ticker.getEntityScope());
 
         // Reuse the instance field instead of allocating a fresh MutableObjectBinding (with its backing
-        // CaseInsensitiveStringHashMap) every frame. Keys are a fixed set overwritten each frame.
+        // CaseInsensitiveStringHashMap) every frame. Entity-level keys are updated incrementally.
         final MutableObjectBinding queryBinding = this.reusableQueryBinding;
 
         // Entity-level queries (variant, flags) from ticker
-        this.ticker.populateEntityQueries(queryBinding);
+        this.ticker.populateEntityQueries(queryBinding, this.reusableEntityQueryState);
 
         // Per-frame movement and state queries
         queryBinding.set("modified_distance_moved", Value.of(state.getDistanceTraveled()));

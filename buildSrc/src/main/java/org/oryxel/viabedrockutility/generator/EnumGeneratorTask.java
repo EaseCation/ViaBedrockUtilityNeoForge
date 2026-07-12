@@ -41,7 +41,10 @@ import java.util.regex.Pattern;
 
 @SuppressWarnings("ALL")
 public abstract class EnumGeneratorTask extends DefaultTask {
-    private static final String ENUMS_URL = "https://raw.githubusercontent.com/Mojang/bedrock-protocol-docs/refs/heads/main/html/enums.html";
+    // Mojang removed the legacy combined enum document from main on 2026-07-09. Pin the final
+    // revision that still contains it so enum generation remains reproducible instead of following
+    // a mutable URL that now returns 404.
+    private static final String ENUMS_URL = "https://raw.githubusercontent.com/Mojang/bedrock-protocol-docs/b88f3eed28d59b86e7ad00dba4f0e8640d2e90b8/html/enums.html";
     private static final String ENUMS_PACKAGE = "org.oryxel.viabedrockutility.enums.bedrock";
     private static final List<String> IGNORED_FIELDS = Arrays.asList("count", "_count", "total", "all", "numenchantments", "numtagtypes", "abilitycount", "nummodes", "input_num", "9800", "total_operations", "total_operands");
     private static final Map<String, String> VALUE_REPLACEMENTS = new HashMap<>();

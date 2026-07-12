@@ -1,5 +1,7 @@
 package org.oryxel.viabedrockutility.mixin.interfaces;
 
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.model.geom.ModelPart;
 import org.joml.Vector3f;
 
@@ -11,6 +13,8 @@ public interface IModelPart {
     String viaBedrockUtility$getName();
     void viaBedrockUtility$resetEverything();
     void viaBedrockUtility$setVBUModel();
+    void viaBedrockUtility$setCubeGroup();
+    boolean viaBedrockUtility$isCubeGroup();
     void viaBedrockUtility$setNeededOffset(boolean needed);
     void viaBedrockUtility$setOffset(Vector3f vec3);
     void viaBedrockUtility$setPivot(Vector3f vec3);
@@ -23,11 +27,18 @@ public interface IModelPart {
     void viaBedrockUtility$resetToDefaultPose();
     Map<String, ModelPart> viaBedrockUtility$getChildren();
     java.util.List<ModelPart.Cube> viaBedrockUtility$getCuboids();
+    void viaBedrockUtility$renderIndexed(PoseStack matrices, VertexConsumer vertices,
+                                         int light, int overlay, int color);
 
     /**
-     * Invalidate the cached children iteration list built lazily in ModelPartMixin's render redirect.
-     * Called after the children map is structurally mutated (only happens at build time in GeometryUtil,
-     * e.g. validateAndFixCycles removing a cyclic edge) so the next render rebuilds the array snapshot.
+     * Freeze the cuboid and child snapshots used by the VBU indexed render path. GeometryUtil calls this
+     * after the complete ModelPart tree has been linked and cycle-checked.
+     */
+    default void viaBedrockUtility$freezeTopology() {}
+
+    /**
+     * Invalidate the render topology snapshots after a structural mutation. VBU model topology is normally
+     * immutable after build; this remains available so build-time repairs cannot leave stale arrays behind.
      */
     default void viaBedrockUtility$invalidateChildrenCache() {}
 }

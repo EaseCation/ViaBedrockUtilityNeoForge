@@ -1,64 +1,71 @@
 package org.oryxel.viabedrockutility.renderer;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.caffeinemc.mods.sodium.api.vertex.buffer.VertexBufferWriter;
-import net.caffeinemc.mods.sodium.api.vertex.format.common.EntityVertex;
-import org.lwjgl.system.MemoryStack;
+import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
+
+import java.lang.reflect.InvocationTargetException;
 
 /**
- * Holder-class that isolates every reference to Sodium's {@link VertexBufferWriter} / {@link EntityVertex}
- * so that when Sodium is absent at runtime this class's static initializer still succeeds
- * ({@link #SUPPORTED} = false) and the JIT folds away the C2 push branch in {@code CuboidMixin} — zero
- * Sodium footprint, no {@code NoClassDefFoundError}.
- *
- * <p>All Sodium symbol references live in method bodies here, which the JVM links lazily (only when
- * actually called). {@code CuboidMixin} passes the writer around as an opaque {@code Object} and goes
- * through these static methods, so it never directly references a Sodium type.
+ * Sodium-free facade for the optional bulk writer. The implementation class name is deliberately a string so
+ * loading this class is safe when Sodium is absent.
  */
 public final class SodiumPushBackend {
-    public static final boolean SUPPORTED;
-    static {
-        boolean ok;
-        try {
-            Class.forName("net.caffeinemc.mods.sodium.api.vertex.buffer.VertexBufferWriter");
-            ok = true;
-        } catch (ClassNotFoundException e) {
-            ok = false;
-        }
-        SUPPORTED = ok;
+    private static final String SODIUM_API_CLASS =
+            "net.caffeinemc.mods.sodium.api.vertex.buffer.VertexBufferWriter";
+    private static final String IMPLEMENTATION_CLASS =
+            "org.oryxel.viabedrockutility.renderer.SodiumVertexPushBackend";
+
+    private static final VbuVertexPushBackend BACKEND = loadBackend();
+
+    private SodiumPushBackend() {
     }
 
-    private SodiumPushBackend() {}
-
-    /**
-     * Returns {@code buffer} as a {@link VertexBufferWriter} (opaque {@code Object} to keep the caller
-     * Sodium-agnostic), or {@code null} if the buffer does not implement VertexBufferWriter (no Sodium,
-     * or a non-Sodium consumer such as an outline/decal wrapper).
-     */
-    public static Object tryOf(VertexConsumer buffer) {
-        return VertexBufferWriter.tryOf(buffer);
+    public static boolean isSupported() {
+        return BACKEND != null;
     }
 
-    /** EntityVertex.FORMAT (NEW_ENTITY) vertex stride in bytes (= 36). */
     public static int stride() {
-        return EntityVertex.STRIDE;
+        return BACKEND != null ? BACKEND.vertexStride() : 0;
     }
 
-    /**
-     * Writes one entity vertex (36 bytes) at {@code ptr}: position, color (ABGR int), uv0 (texture),
-     * overlay, light, and packed (NormI8) normal. Layout matches {@code DefaultVertexFormat.NEW_ENTITY}.
-     */
-    public static void writeVertex(long ptr, float x, float y, float z, int color,
-                                   float u, float v, int overlay, int light, int packedNormal) {
-        EntityVertex.write(ptr, x, y, z, color, u, v, overlay, light, packedNormal);
+    public static Object tryOf(VertexConsumer consumer) {
+        return BACKEND != null ? BACKEND.tryOf(consumer) : null;
     }
 
-    /**
-     * Pushes {@code count} pre-assembled vertices (each {@link #stride()} bytes, starting at {@code ptr})
-     * into the buffer behind {@code writer}. Sodium implements this as a single bulk {@code copyMemory},
-     * bypassing the per-vertex {@code addVertex} interface dispatch that dominates VBU compile CPU.
-     */
-    public static void push(MemoryStack stack, Object writer, long ptr, int count) {
-        ((VertexBufferWriter) writer).push(stack, ptr, count, EntityVertex.FORMAT);
+    public static void push(Object writer, long pointer, int vertexCount) {
+        if (BACKEND == null) {
+            throw new IllegalStateException("Sodium vertex push backend is unavailable");
+        }
+        BACKEND.push(writer, pointer, vertexCount);
+    }
+
+    private static VbuVertexPushBackend loadBackend() {
+        final ClassLoader loader = SodiumPushBackend.class.getClassLoader();
+        try {
+            // Avoid loading and verifying the implementation class when Sodium is simply not installed.
+            Class.forName(SODIUM_API_CLASS, false, loader);
+        } catch (ClassNotFoundException ignored) {
+            return null;
+        } catch (LinkageError | RuntimeException error) {
+            logIncompatibleBackend(error);
+            return null;
+        }
+
+        try {
+            final Class<?> implementation = Class.forName(IMPLEMENTATION_CLASS, true, loader);
+            return (VbuVertexPushBackend) implementation.getDeclaredConstructor().newInstance();
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException error) {
+            final Throwable cause = error instanceof InvocationTargetException invocation && invocation.getCause() != null
+                    ? invocation.getCause()
+                    : error;
+            logIncompatibleBackend(cause);
+            return null;
+        }
+    }
+
+    private static void logIncompatibleBackend(Throwable error) {
+        ViaBedrockUtilityNeoForge.LOGGER.warn(
+                "Sodium is present, but its public entity vertex API is incompatible; using vanilla vertex emission",
+                error);
     }
 }

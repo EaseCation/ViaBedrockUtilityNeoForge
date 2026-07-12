@@ -1,6 +1,5 @@
 package org.oryxel.viabedrockutility.util;
 
-import com.google.common.collect.Maps;
 import net.minecraft.client.model.*;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
@@ -22,6 +21,9 @@ import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
 import java.util.*;
 
 public final class GeometryUtil {
+    // One kill switch restores the pre-Stage-2 one-cuboid-per-part topology and vanilla tree walk.
+    private static final boolean GROUP_CUBOIDS =
+            !Boolean.getBoolean("viabedrockutility.disableIndexedRender");
 
     public static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim) {
         return buildModel(geometry, player, slim, null);
@@ -35,29 +37,20 @@ public final class GeometryUtil {
         final float uvHeight = geometry.getTextureSize().getY();
 
         final BedrockPlayerModelMetadata playerMetadata = player ? new BedrockPlayerModelMetadata(slim) : null;
-        final Map<String, PartInfo> stringToPart = new HashMap<>();
+        final Map<String, PartInfo> stringToPart = new LinkedHashMap<>();
         for (final Parent bone : geometry.getParents()) {
-            final Map<String, ModelPart> children = Maps.newHashMap();
-            final ModelPart part = new ModelPart(List.of(), children);
+            // ModelPart renders children in map iteration order. Keep cube transform groups in source order
+            // so translucent geometry retains the same vertex submission order as the ungrouped model.
+            final Map<String, ModelPart> children = new LinkedHashMap<>();
+            final List<CuboidGroup> cuboidGroups = new ArrayList<>();
 
             boolean neededOffset = switch (bone.getName().toLowerCase(Locale.ROOT)) {
                 case "rightarm", "leftarm" -> player;
                 default -> false;
             };
 
-            ((IModelPart)((Object)part)).viaBedrockUtility$setVBUModel();
-            ((IModelPart)((Object)part)).viaBedrockUtility$setName(bone.getName());
-            ((IModelPart)((Object)part)).viaBedrockUtility$setNeededOffset(neededOffset);
-            ((IModelPart)((Object)part)).viaBedrockUtility$setAngles(new Vector3f(bone.getRotation().getX() , bone.getRotation().getY(), bone.getRotation().getZ()));
-
-            // All bones (player and entity, including legs) use one coordinate convention: the bone's
-            // rotation pivot is its Bedrock pivot mapped to Java space (Y inverted, +24.016 offset), and
-            // its cubes are positioned in that same inverted-Y space (see below). No setPos is used, so
-            // geometry is placed absolutely by its cube vertices and there is no parent-origin
-            // accumulation. This matches the proven custom-entity path; legs are NOT special-cased.
-            ((IModelPart)((Object)part)).viaBedrockUtility$setPivot(new Vector3f(bone.getPivot().getX(), -bone.getPivot().getY() + 24.016F, bone.getPivot().getZ()));
-
-            // Java don't allow individual cubes to have their own rotation therefore, we have to separate each cube into ModelPart to be able to rotate.
+            // Cubes with the same adjacent transform can share one ModelPart. Do not merge non-adjacent
+            // groups: that would reorder vertices around intervening groups and break translucent models.
             for (final Cube cube : bone.getCubes().values()) {
                 final Position3V pos = cube.getPosition();
 
@@ -86,21 +79,44 @@ public final class GeometryUtil {
 
                 final ModelPart.Cube cuboid = new ModelPart.Cube(0, 0, pos.getX(), -(pos.getY() - 24.016F + sizeY), pos.getZ(), sizeX, sizeY, sizeZ, inflate, inflate, inflate, cube.isMirror(), uvWidth, uvHeight, set);
                 correctUv(cuboid, set, uvMap, uvWidth, uvHeight, cube.getInflate(), cube.isMirror());
-                ((ICuboid)(Object) cuboid).viaBedrockUtility$markAsVBU();
-
-                final ModelPart cubePart = new ModelPart(List.of(cuboid), Map.of());
-                ((IModelPart)((Object)cubePart)).viaBedrockUtility$setPivot(new Vector3f(cube.getPivot().getX(), -cube.getPivot().getY() + 24.016F, cube.getPivot().getZ()));
-                ((IModelPart)((Object)cubePart)).viaBedrockUtility$setAngles(new Vector3f(cube.getRotation().getX(), cube.getRotation().getY(), cube.getRotation().getZ()));
-                ((IModelPart)((Object)cubePart)).viaBedrockUtility$setVBUModel();
-                ((IModelPart)((Object)cubePart)).viaBedrockUtility$setNeededOffset(neededOffset);
-                ((IModelPart)((Object)cubePart)).viaBedrockUtility$setName(bone.getName());
-                children.put(cube.getParent() + cube.hashCode(), cubePart);
+                markAsVbuBox(cuboid, inflate, cube.isMirror());
+                appendCuboid(cuboidGroups, CuboidTransform.from(cube), cuboid);
             }
 
-            // Handle poly_mesh: convert pre-computed polygon data to Cuboid/Quad/Vertex
+            // poly_mesh vertices are already absolute and use the identity transform. Appending them after
+            // boxes preserves their previous relative submission position; an adjacent identity box group
+            // may absorb them without changing order.
             if (bone.getPolyMesh() != null) {
-                buildPolyMeshParts(bone.getPolyMesh(), neededOffset, bone.getName(), uvWidth, uvHeight, children);
+                buildPolyMeshCuboids(bone.getPolyMesh(), uvWidth, uvHeight, cuboidGroups);
             }
+
+            int groupIndex = 0;
+            for (CuboidGroup group : cuboidGroups) {
+                final ModelPart cubePart = new ModelPart(List.copyOf(group.cuboids), Map.of());
+                final IModelPart cubePartExtension = (IModelPart) (Object) cubePart;
+                cubePartExtension.viaBedrockUtility$setPivot(group.transform.javaPivot());
+                cubePartExtension.viaBedrockUtility$setAngles(group.transform.rotation());
+                cubePartExtension.viaBedrockUtility$setVBUModel();
+                cubePartExtension.viaBedrockUtility$setCubeGroup();
+                cubePartExtension.viaBedrockUtility$setNeededOffset(neededOffset);
+                cubePartExtension.viaBedrockUtility$setName(bone.getName());
+                children.put("\u0000vbu_cube_group_" + groupIndex++, cubePart);
+            }
+
+            // Keep cuboids in child parts so independently transformed groups can share one batch. The
+            // indexed renderer treats these internal parts as the owning bone's cuboids for visible and
+            // skipDraw semantics while continuing to traverse real child bones exactly like vanilla.
+            final ModelPart part = new ModelPart(List.of(), children);
+            final IModelPart partExtension = (IModelPart) (Object) part;
+            partExtension.viaBedrockUtility$setVBUModel();
+            partExtension.viaBedrockUtility$setName(bone.getName());
+            partExtension.viaBedrockUtility$setNeededOffset(neededOffset);
+            partExtension.viaBedrockUtility$setAngles(new Vector3f(bone.getRotation().getX(), bone.getRotation().getY(), bone.getRotation().getZ()));
+
+            // All bones (player and entity, including legs) use one coordinate convention: the bone's
+            // rotation pivot is its Bedrock pivot mapped to Java space (Y inverted, +24.016 offset), and
+            // its cubes are positioned in that same inverted-Y space. No setPos is used.
+            partExtension.viaBedrockUtility$setPivot(toJavaPivot(bone.getPivot()));
 
             String parent = bone.getParent();
             String name = bone.getName();
@@ -120,17 +136,19 @@ public final class GeometryUtil {
 
         PartInfo root = stringToPart.get("root");
         if (root == null) {
-            final Map<String, ModelPart> rootParts = Maps.newHashMap();
+            final Map<String, ModelPart> rootParts = new LinkedHashMap<>();
             final ModelPart rootPart = new ModelPart(List.of(), rootParts);
             ((IModelPart)((Object)rootPart)).viaBedrockUtility$setVBUModel();
             stringToPart.put("root", root = new PartInfo("", rootPart, rootParts));
         } else if (!player) {
-            final Map<String, ModelPart> rootParts = Maps.newHashMap();
-            root = new PartInfo("", new ModelPart(List.of(), rootParts), rootParts);
+            final Map<String, ModelPart> rootParts = new LinkedHashMap<>();
+            final ModelPart rootPart = new ModelPart(List.of(), rootParts);
+            ((IModelPart) (Object) rootPart).viaBedrockUtility$setVBUModel();
+            root = new PartInfo("", rootPart, rootParts);
         }
 
         // Detect all cycles in the parent graph (handles A→A, A→B→A, A→B→C→A, etc.)
-        final Map<String, String> parentGraph = new HashMap<>();
+        final Map<String, String> parentGraph = new LinkedHashMap<>();
         for (Map.Entry<String, PartInfo> entry : stringToPart.entrySet()) {
             if (!entry.getValue().parent.isBlank()) {
                 parentGraph.put(entry.getKey(), entry.getValue().parent);
@@ -165,12 +183,12 @@ public final class GeometryUtil {
 
         for (Map.Entry<String, PartInfo> entry : stringToPart.entrySet()) {
             if (entry.getValue().parent.isBlank() && entry.getValue().part() != root.part) {
-                root.children.put(entry.getKey(), entry.getValue().part());
+                putChild(root, entry.getKey(), entry.getValue().part());
                 continue;
             }
 
             if (cyclicBones.contains(entry.getKey())) {
-                root.children.put(entry.getKey(), entry.getValue().part());
+                putChild(root, entry.getKey(), entry.getValue().part());
                 continue;
             }
 
@@ -182,12 +200,13 @@ public final class GeometryUtil {
 
             PartInfo parentPart = stringToPart.get(entry.getValue().parent);
             if (parentPart != null) {
-                parentPart.children.put(entry.getKey(), entry.getValue().part);
+                putChild(parentPart, entry.getKey(), entry.getValue().part);
             }
         }
 
         // Validate the actual ModelPart tree for cycles (identity-based, not name-based)
         validateAndFixCycles(root.part(), "root", new IdentityHashMap<>(), new ArrayList<>(), geometryName);
+        freezeTopology(root.part(), new IdentityHashMap<>());
 
         if (player) {
             PlayerModel model = new PlayerModel(root.part(), slim);
@@ -213,6 +232,37 @@ public final class GeometryUtil {
             case "rightleg" -> "right_leg";
             default -> name.toLowerCase(Locale.ROOT);
         };
+    }
+
+    private static Vector3f toJavaPivot(Position3V pivot) {
+        return new Vector3f(pivot.getX(), -pivot.getY() + 24.016F, pivot.getZ());
+    }
+
+    private static void appendCuboid(List<CuboidGroup> groups, CuboidTransform transform, ModelPart.Cube cuboid) {
+        if (GROUP_CUBOIDS && !groups.isEmpty()) {
+            final CuboidGroup last = groups.get(groups.size() - 1);
+            if (last.transform.equals(transform)) {
+                last.cuboids.add(cuboid);
+                return;
+            }
+        }
+        groups.add(new CuboidGroup(transform, cuboid));
+    }
+
+    private static void putChild(PartInfo parent, String name, ModelPart child) {
+        parent.children.put(name, child);
+        ((IModelPart) (Object) parent.part).viaBedrockUtility$invalidateChildrenCache();
+    }
+
+    private static void freezeTopology(ModelPart part, IdentityHashMap<ModelPart, Boolean> visited) {
+        if (visited.put(part, Boolean.TRUE) != null) {
+            return;
+        }
+        final IModelPart extension = (IModelPart) (Object) part;
+        for (ModelPart child : extension.viaBedrockUtility$getChildren().values()) {
+            freezeTopology(child, visited);
+        }
+        extension.viaBedrockUtility$freezeTopology();
     }
 
     /**
@@ -243,9 +293,8 @@ public final class GeometryUtil {
                         "[GeometryUtil] Removing cyclic ModelPart edge in geometry '{}': {}",
                         geometryName != null ? geometryName : "unknown", cyclePath);
                 it.remove();
-                // Structural change to this part's children map — drop any cached children snapshot so
-                // ModelPartMixin's render redirect rebuilds it. Build-time only (cache not yet built), but
-                // keeps the invariant "mutate children ⇒ invalidate cache" honest.
+                // Structural change to this part's children map: discard any build-time snapshot before
+                // the final explicit topology freeze.
                 ((IModelPart) ((Object) part)).viaBedrockUtility$invalidateChildrenCache();
             } else {
                 validateAndFixCycles(entry.getValue(), entry.getKey(), ancestors, path, geometryName);
@@ -267,6 +316,21 @@ public final class GeometryUtil {
         // so placing one face's UV on the other requires a horizontal flip.
         if (uvA != null) map.getUvMap().put(b, new Float[]{uvA[2], uvA[1], uvA[0], uvA[3]});
         if (uvB != null) map.getUvMap().put(a, new Float[]{uvB[2], uvB[1], uvB[0], uvB[3]});
+    }
+
+    private static void markAsVbuBox(ModelPart.Cube cuboid, float inflate, boolean mirror) {
+        float x0 = cuboid.minX - inflate;
+        final float y0 = cuboid.minY - inflate;
+        final float z0 = cuboid.minZ - inflate;
+        float x1 = cuboid.maxX + inflate;
+        final float y1 = cuboid.maxY + inflate;
+        final float z1 = cuboid.maxZ + inflate;
+        if (mirror) {
+            final float swap = x0;
+            x0 = x1;
+            x1 = swap;
+        }
+        ((ICuboid) (Object) cuboid).viaBedrockUtility$markAsVBUBox(x0, y0, z0, x1, y1, z1);
     }
 
     private static void correctUv(final ModelPart.Cube cuboid, final Set<Direction> set, final UVMap map, final float uvWidth, final float uvHeight, final float inflate, final boolean mirror) {
@@ -339,9 +403,8 @@ public final class GeometryUtil {
         }
     }
 
-    private static void buildPolyMeshParts(PolyMesh polyMesh, boolean neededOffset,
-                                           String boneName, float uvWidth, float uvHeight,
-                                           Map<String, ModelPart> children) {
+    private static void buildPolyMeshCuboids(PolyMesh polyMesh, float uvWidth, float uvHeight,
+                                              List<CuboidGroup> cuboidGroups) {
         final float[][] pmPositions = polyMesh.getPositions();
         final float[][] pmNormals = polyMesh.getNormals();
         final float[][] pmUvs = polyMesh.getUvs();
@@ -430,15 +493,7 @@ public final class GeometryUtil {
             }
 
             ((ICuboid) (Object) cuboid).viaBedrockUtility$markAsVBU();
-
-            ModelPart cubePart = new ModelPart(List.of(cuboid), Map.of());
-            // poly_mesh vertices already contain absolute positions — no additional pivot/rotation needed
-            ((IModelPart) (Object) cubePart).viaBedrockUtility$setPivot(new Vector3f(0, 0, 0));
-            ((IModelPart) (Object) cubePart).viaBedrockUtility$setAngles(new Vector3f(0, 0, 0));
-            ((IModelPart) (Object) cubePart).viaBedrockUtility$setVBUModel();
-            ((IModelPart) (Object) cubePart).viaBedrockUtility$setNeededOffset(neededOffset);
-            ((IModelPart) (Object) cubePart).viaBedrockUtility$setName(boneName);
-            children.put("polymesh_" + (batch / 6) + "_" + boneName, cubePart);
+            appendCuboid(cuboidGroups, CuboidTransform.IDENTITY, cuboid);
         }
     }
 
@@ -451,6 +506,60 @@ public final class GeometryUtil {
             return nx > 0 ? Direction.EAST : Direction.WEST;
         } else {
             return nz > 0 ? Direction.SOUTH : Direction.NORTH;
+        }
+    }
+
+    private record CuboidTransform(int pivotX, int pivotY, int pivotZ,
+                                   int rotationX, int rotationY, int rotationZ) {
+        private static final CuboidTransform IDENTITY = new CuboidTransform(0, 0, 0, 0, 0, 0);
+
+        static CuboidTransform from(Cube cube) {
+            final Position3V rotation = cube.getRotation();
+            if (rotation.getX() == 0.0F && rotation.getY() == 0.0F && rotation.getZ() == 0.0F) {
+                // With no rotation the pivot translations cancel, so all such cubes share one transform.
+                return IDENTITY;
+            }
+            final Position3V pivot = cube.getPivot();
+            return new CuboidTransform(
+                    Float.floatToRawIntBits(pivot.getX()),
+                    Float.floatToRawIntBits(pivot.getY()),
+                    Float.floatToRawIntBits(pivot.getZ()),
+                    Float.floatToRawIntBits(rotation.getX()),
+                    Float.floatToRawIntBits(rotation.getY()),
+                    Float.floatToRawIntBits(rotation.getZ())
+            );
+        }
+
+        Vector3f javaPivot() {
+            if (this == IDENTITY) {
+                return new Vector3f();
+            }
+            return new Vector3f(
+                    Float.intBitsToFloat(this.pivotX),
+                    -Float.intBitsToFloat(this.pivotY) + 24.016F,
+                    Float.intBitsToFloat(this.pivotZ)
+            );
+        }
+
+        Vector3f rotation() {
+            if (this == IDENTITY) {
+                return new Vector3f();
+            }
+            return new Vector3f(
+                    Float.intBitsToFloat(this.rotationX),
+                    Float.intBitsToFloat(this.rotationY),
+                    Float.intBitsToFloat(this.rotationZ)
+            );
+        }
+    }
+
+    private static final class CuboidGroup {
+        final CuboidTransform transform;
+        final List<ModelPart.Cube> cuboids = new ArrayList<>();
+
+        CuboidGroup(CuboidTransform transform, ModelPart.Cube first) {
+            this.transform = transform;
+            this.cuboids.add(first);
         }
     }
 

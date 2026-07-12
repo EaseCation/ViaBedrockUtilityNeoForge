@@ -1,41 +1,152 @@
 package org.oryxel.viabedrockutility.renderer;
 
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
+import org.joml.Matrix3f;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
 
-/**
- * Render-thread scratch buffers for VBU's fast compile path
- * (see {@link org.oryxel.viabedrockutility.mixin.impl.render.CuboidMixin}).
- *
- * <p>Minecraft's entity render is single-threaded (the render thread calls {@code ModelPart.Cube.compile}
- * serially per cube), so static scratch is reused across all cubes — zero per-cube allocation.
- */
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
+/** Render-thread scratch state shared by VBU compiled cuboids. */
 public final class VbuCompileScratch {
-    /** Up to 8 transformed world-space corner positions, rewritten by the fast compile path each cube. */
-    public static final Vector3f[] CORNER_WORLD = new Vector3f[8];
+    public static final int FLAT_PACKED_NORMAL = 0x00007F00;
 
-    // C2.1: off-heap scratch buffer for the push fast path — allocated ONCE and reused per cube
-    // (render-thread only, serial compile). Replaces MemoryStack.stackPush() per cube: that ThreadLocal
-    // lookup was +4.8% in JFR. Sodium's BufferBuilder.push does NOT use its MemoryStack arg
-    // (javap-confirmed: only reserve + copyMemory), so CuboidMixin writes vertices here and pushes with
-    // a null stack. 24 vertices * 36 bytes (NEW_ENTITY stride) = 864 bytes.
-    // Backing ByteBuffer kept as a strong reference so its off-heap memory isn't freed by GC;
-    // PUSH_BUFFER is the raw address passed to EntityVertex.write / push.
-    private static final java.nio.ByteBuffer PUSH_BUFFER_OBJ = MemoryUtil.memAlloc(24 * 36);
-    public static final long PUSH_BUFFER = MemoryUtil.memAddress(PUSH_BUFFER_OBJ);
+    private static final boolean LITTLE_ENDIAN = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
+    private static final Direction[] DIRECTIONS = Direction.values();
 
-    // Plan C (emissive): set by CustomEntityRenderer.render before renderToBuffer when the model uses
-    // ignore_lighting / USE_EMISSIVE, read by CuboidMixin to force normals to (0,1,0) for flat-bright
-    // shading. Replaces the old FlatNormalVertexConsumer wrapper (which did not implement VertexBufferWriter
-    // and would have disabled the C2 push path). Render-thread only — no synchronization needed.
-    // CustomEntityRenderer resets it to false in a finally block after renderToBuffer returns.
-    public static boolean FLAT_NORMAL = false;
+    private static long[] transformedXY = new long[24];
+    private static long[] transformedZColor = new long[24];
 
-    static {
-        for (int i = 0; i < CORNER_WORLD.length; i++) {
-            CORNER_WORLD[i] = new Vector3f();
-        }
+    private static final Matrix3f previousNormalMatrix = new Matrix3f();
+    private static final int[] transformedDirectionNormals = new int[DIRECTIONS.length];
+    private static final Vector3f temporaryNormal = new Vector3f();
+    private static boolean normalCacheValid;
+
+    private static ByteBuffer pushBuffer;
+    private static boolean pushBufferInUse;
+
+    // Set around emissive model rendering; the render path is single-threaded.
+    public static boolean FLAT_NORMAL;
+
+    private VbuCompileScratch() {
     }
 
-    private VbuCompileScratch() {}
+    public static Object tryWriter(VertexConsumer consumer) {
+        return SodiumPushBackend.tryOf(consumer);
+    }
+
+    public static boolean tryBeginPush() {
+        if (pushBufferInUse) {
+            return false;
+        }
+        pushBufferInUse = true;
+        return true;
+    }
+
+    public static void endPush() {
+        pushBufferInUse = false;
+    }
+
+    public static long acquirePushBuffer(int vertexCount, int stride) {
+        if (!pushBufferInUse) {
+            throw new IllegalStateException("VBU push buffer acquired outside its guarded scope");
+        }
+        if (vertexCount < 0 || stride <= 0) {
+            throw new IllegalArgumentException("Invalid vertex buffer dimensions");
+        }
+
+        final int required = Math.multiplyExact(vertexCount, stride);
+        if (pushBuffer == null) {
+            pushBuffer = MemoryUtil.memAlloc(growCapacity(required));
+        } else if (pushBuffer.capacity() < required) {
+            pushBuffer = MemoryUtil.memRealloc(pushBuffer, growCapacity(required));
+        }
+        return MemoryUtil.memAddress(pushBuffer);
+    }
+
+    static void ensurePositionCapacity(int positionCount) {
+        if (transformedXY.length >= positionCount) {
+            return;
+        }
+
+        final int capacity = growCapacity(positionCount);
+        transformedXY = new long[capacity];
+        transformedZColor = new long[capacity];
+    }
+
+    static void setPosition(int index, float x, float y, float z, int colorAbgr) {
+        transformedXY[index] = packInts(Float.floatToRawIntBits(x), Float.floatToRawIntBits(y));
+        transformedZColor[index] = packInts(Float.floatToRawIntBits(z), colorAbgr);
+    }
+
+    static long transformedXY(int index) {
+        return transformedXY[index];
+    }
+
+    static long transformedZColor(int index) {
+        return transformedZColor[index];
+    }
+
+    static void prepareDirectionNormals(PoseStack.Pose pose) {
+        if (normalCacheValid && pose.normal().equals(previousNormalMatrix)) {
+            return;
+        }
+
+        for (Direction direction : DIRECTIONS) {
+            final Vector3f normal = pose.transformNormal(
+                    direction.getStepX(), direction.getStepY(), direction.getStepZ(), temporaryNormal);
+            transformedDirectionNormals[direction.ordinal()] = packNormal(normal.x(), normal.y(), normal.z());
+        }
+
+        previousNormalMatrix.set(pose.normal());
+        normalCacheValid = true;
+    }
+
+    static int directionNormal(int directionOrdinal) {
+        return transformedDirectionNormals[directionOrdinal];
+    }
+
+    static int transformNormal(PoseStack.Pose pose, float x, float y, float z) {
+        final Vector3f normal = pose.transformNormal(x, y, z, temporaryNormal);
+        return packNormal(normal.x(), normal.y(), normal.z());
+    }
+
+    static int packNormal(float x, float y, float z) {
+        return normalByte(x) | (normalByte(y) << 8) | (normalByte(z) << 16);
+    }
+
+    static long packFloats(float first, float second) {
+        return packInts(Float.floatToRawIntBits(first), Float.floatToRawIntBits(second));
+    }
+
+    static int unpackFirstInt(long packed) {
+        return LITTLE_ENDIAN ? (int) packed : (int) (packed >>> 32);
+    }
+
+    static long packInts(int first, int second) {
+        if (LITTLE_ENDIAN) {
+            return (first & 0xFFFFFFFFL) | ((second & 0xFFFFFFFFL) << 32);
+        }
+        return ((first & 0xFFFFFFFFL) << 32) | (second & 0xFFFFFFFFL);
+    }
+
+    private static int normalByte(float value) {
+        return (byte) (Mth.clamp(value, -1.0F, 1.0F) * 127.0F) & 0xFF;
+    }
+
+    private static int growCapacity(int required) {
+        if (required <= 0) {
+            return 1;
+        }
+
+        int capacity = 1;
+        while (capacity < required && capacity > 0) {
+            capacity <<= 1;
+        }
+        return capacity > 0 ? capacity : required;
+    }
 }

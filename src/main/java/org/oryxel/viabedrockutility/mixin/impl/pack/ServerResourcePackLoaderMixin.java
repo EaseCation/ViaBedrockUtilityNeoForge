@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Mixin(DownloadedPackSource.class)
 public class ServerResourcePackLoaderMixin {
@@ -107,6 +108,28 @@ public class ServerResourcePackLoaderMixin {
         }
         // 按来源替换：只替换本 source（mcpack 层）的定义，不再 clear 全表
         // → 与 GeyserUtilsBridge 的散文件 bedrock_pack 层共存，互不抹除。
-        net.easecation.beparticle.ParticleManager.INSTANCE.loadDefinitions("viabedrockutility", defs);
+        final net.easecation.beparticle.ParticleManager manager = net.easecation.beparticle.ParticleManager.INSTANCE;
+        try {
+            // Newer BEParticle builds can atomically replace all definitions owned by one source. The
+            // published 1.0.0 API only exposes loadDefinition, so discover the richer optional method
+            // without making it a hard compile/runtime requirement.
+            final java.lang.reflect.Method replaceMethod = java.util.Arrays.stream(manager.getClass().getMethods())
+                    .filter(method -> method.getName().equals("loadDefinitions") && method.getParameterCount() == 2)
+                    .filter(method -> method.getParameterTypes()[0].isAssignableFrom(String.class))
+                    .filter(method -> method.getParameterTypes()[1].isAssignableFrom(defs.getClass()))
+                    .findFirst()
+                    .orElse(null);
+            if (replaceMethod != null) {
+                replaceMethod.invoke(manager, "viabedrockutility", defs);
+                return;
+            }
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            ViaBedrockUtilityNeoForge.LOGGER.warn(
+                    "[Particle] Source-aware definition replacement failed; loading definitions individually", e);
+        }
+
+        for (Map.Entry<String, String> definition : defs.entrySet()) {
+            manager.loadDefinition(definition.getKey(), definition.getValue());
+        }
     }
 }

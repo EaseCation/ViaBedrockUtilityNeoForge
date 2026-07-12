@@ -21,6 +21,7 @@
     "pack.ServerResourcePackLoaderMixin",
     "render.CuboidMixin",
     "render.EntityRendererNameTagMixin",
+    "render.LevelRendererMixin",
     "render.ModelPartMixin",
     "render.PlayerEntityModelMixin",
     "render.PlayerEntityRenderStateMixin",

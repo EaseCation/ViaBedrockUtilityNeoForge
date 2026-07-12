@@ -1,11 +1,17 @@
 package org.oryxel.viabedrockutility.mixin.impl.render;
 
 import net.minecraft.client.model.geom.ModelPart;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.core.Direction;
 import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.util.RandomSource;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
+import org.oryxel.viabedrockutility.renderer.VbuCompileScratch;
+import org.oryxel.viabedrockutility.renderer.VbuCuboidBatchRenderer;
+import org.oryxel.viabedrockutility.renderer.VbuRenderMetrics;
 import net.easecation.bedrockmotion.util.MathUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,14 +19,12 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -31,6 +35,11 @@ public abstract class ModelPartMixin implements IModelPart {
     @Shadow public float x;
     @Shadow public float y;
     @Shadow public float z;
+    @Shadow public float xRot;
+    @Shadow public float yRot;
+    @Shadow public float zRot;
+    @Shadow public boolean visible;
+    @Shadow public boolean skipDraw;
 
     @Shadow @Final private List<ModelPart.Cube> cubes;
     @Shadow @Final private Map<String, ModelPart> children;
@@ -46,6 +55,7 @@ public abstract class ModelPartMixin implements IModelPart {
     private String name = "";
 
     @Unique private boolean isVBUModel;
+    @Unique private boolean vbu$cubeGroup;
     @Unique private boolean neededOffset;
 
     @Unique
@@ -66,32 +76,52 @@ public abstract class ModelPartMixin implements IModelPart {
     @Unique
     private boolean alreadySetRotation = false;
 
-    // Cached snapshot of children.values() for the render tree walk. Vanilla ModelPart.render iterates
-    // this.children.values() every frame per bone; for deep Bedrock (VBU) models that HashMap iteration
-    // (HashIterator.nextNode) was ~2.9% of the render thread in JFR. children is immutable after build
-    // (only GeometryUtil mutates it, incl. validateAndFixCycles removals), so we snapshot it once and
-    // return the SAME list every frame (no per-frame allocation) — the enhanced-for then walks an array
-    // instead of hash buckets. Invalidated via viaBedrockUtility$invalidateChildrenCache after any
-    // structural mutation.
-    @Unique
-    private List<ModelPart> vbu$childrenList;
+    @Unique private static final ModelPart[] vbu$EMPTY_CHILDREN = new ModelPart[0];
+    @Unique private static final ModelPart.Cube[] vbu$EMPTY_CUBES = new ModelPart.Cube[0];
+    @Unique private ModelPart[] vbu$childrenArray;
+    @Unique private ModelPart.Cube[] vbu$cubesArray;
+    @Unique private VbuCuboidBatchRenderer.Batch vbu$compiledBatch;
+    @Unique private ModelPart.Cube[] vbu$attachmentCubes;
 
     @Unique
-    private boolean vbu$childrenCacheBuilt;
+    private static final ModelPart.Cube vbu$EMPTY_ATTACHMENT_CUBE = new ModelPart.Cube(
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, false, 1, 1, java.util.Set.<Direction>of());
 
     @Unique
     private static final float VBU_ABSOLUTE_ARM_X_THRESHOLD = 1.0F;
+    @Unique
+    private static final boolean vbu$INDEXED_RENDER_ENABLED =
+            !Boolean.getBoolean("viabedrockutility.disableIndexedRender");
 
     @Inject(method = "translateAndRotate", at = @At("HEAD"))
     public void render(PoseStack matrices, CallbackInfo ci) {
-        // Offset is needed for rotating too!
-        matrices.translate(this.offset.x / 16.0F, this.offset.y / 16.0F, this.offset.z / 16.0F);
+        if (!this.isVBUModel) {
+            return;
+        }
 
-        matrices.translate(this.pivot.x / 16.0F, this.pivot.y / 16.0F, this.pivot.z / 16.0F);
-        matrices.mulPose(this.vbu$tempQuaternion.rotationZYX(this.rotation.z * MathUtil.DEGREES_TO_RADIANS, this.rotation.y * MathUtil.DEGREES_TO_RADIANS, this.rotation.x * MathUtil.DEGREES_TO_RADIANS));
-        matrices.translate(-this.pivot.x / 16.0F, -this.pivot.y / 16.0F, -this.pivot.z / 16.0F);
-
-        matrices.translate(-this.offset.x / 16.0F, -this.offset.y / 16.0F, -this.offset.z / 16.0F);
+        final boolean hasCustomRotation = this.rotation.x != 0.0F
+                || this.rotation.y != 0.0F || this.rotation.z != 0.0F;
+        if (hasCustomRotation) {
+            // Offset participates in the custom rotation, but the final offset is applied at TAIL so it
+            // remains unaffected by vanilla scale.
+            if (this.vbu$hasOffset()) {
+                matrices.translate(this.offset.x / 16.0F, this.offset.y / 16.0F, this.offset.z / 16.0F);
+            }
+            if (this.vbu$hasPivot()) {
+                matrices.translate(this.pivot.x / 16.0F, this.pivot.y / 16.0F, this.pivot.z / 16.0F);
+            }
+            matrices.mulPose(this.vbu$tempQuaternion.rotationZYX(
+                    this.rotation.z * MathUtil.DEGREES_TO_RADIANS,
+                    this.rotation.y * MathUtil.DEGREES_TO_RADIANS,
+                    this.rotation.x * MathUtil.DEGREES_TO_RADIANS));
+            if (this.vbu$hasPivot()) {
+                matrices.translate(-this.pivot.x / 16.0F, -this.pivot.y / 16.0F, -this.pivot.z / 16.0F);
+            }
+            if (this.vbu$hasOffset()) {
+                matrices.translate(-this.offset.x / 16.0F, -this.offset.y / 16.0F, -this.offset.z / 16.0F);
+            }
+        }
 
         // Re-translate to the bone's Bedrock pivot so that vanilla's rotation/scale (applied next inside
         // the original translateAndRotate body, about the part's setPos origin) pivots about the SAME
@@ -101,54 +131,240 @@ public abstract class ModelPartMixin implements IModelPart {
         // TAIL, so net translation stays identity and absolute cube placement is unchanged. For
         // Bedrock-animated bones vanilla rotation is cleared (PlayerAnimationManager.clearVanillaRotation)
         // and for entities/non-VBU parts it is 0, so this only relocates the pivot where it actually matters.
-        matrices.translate(this.pivot.x / 16.0F, this.pivot.y / 16.0F, this.pivot.z / 16.0F);
+        if (this.vbu$needsVanillaPivotWrapper()) {
+            matrices.translate(this.pivot.x / 16.0F, this.pivot.y / 16.0F, this.pivot.z / 16.0F);
+        }
     }
 
     @Inject(method = "translateAndRotate", at = @At("TAIL"))
     public void renderTail(PoseStack matrices, CallbackInfo ci) {
+        if (!this.isVBUModel) {
+            return;
+        }
+
         // Undo the pivot translate added at HEAD's tail: it wrapped vanilla's rotation/scale so they pivot
         // about the Bedrock pivot. Reverting it here keeps the bone's net translation identity.
-        matrices.translate(-this.pivot.x / 16.0F, -this.pivot.y / 16.0F, -this.pivot.z / 16.0F);
+        if (this.vbu$needsVanillaPivotWrapper()) {
+            matrices.translate(-this.pivot.x / 16.0F, -this.pivot.y / 16.0F, -this.pivot.z / 16.0F);
+        }
 
         // Do this after scale since well, this shouldn't be affected by scaling.
-        matrices.translate(this.offset.x / 16.0F, this.offset.y / 16.0F, this.offset.z / 16.0F);
+        if (this.vbu$hasOffset()) {
+            matrices.translate(this.offset.x / 16.0F, this.offset.y / 16.0F, this.offset.z / 16.0F);
+        }
 
-        if (!this.isVBUModel || !this.neededOffset) {
+        if (!this.neededOffset) {
             return;
         }
 
         // Have to do this because of how java pivot point and bedrock pivot point system works, I think? ehhh whatever it works, just don't touch it.
-        matrices.translate(-this.x / 16.0F, 0, -this.z / 16.0F);
+        if (this.x != 0.0F || this.z != 0.0F) {
+            matrices.translate(-this.x / 16.0F, 0, -this.z / 16.0F);
+        }
     }
 
-    // Replace the `this.children.values()` iterated by vanilla ModelPart.render's child-render loop with a
-    // cached array-backed list, eliminating the per-frame HashMap iterator + nextNode bucket walk. Only for
-    // VBU (Bedrock) models — the 31% NPC render cost in JFR; vanilla/player models keep the original path
-    // (few bones, not a bottleneck, and preserving vanilla semantics is safest). Zero per-frame allocation:
-    // the same list reference is returned every frame once built.
-    // require = 1: this redirect MUST bind, otherwise the optimization silently no-ops (and JFR would look
-    // like "no improvement" — the exact eaten-back failure mode we want to catch). Fail loudly at load if the
-    // target ever moves. Sodium/Iris only touch Cube.compile, not render's children walk, so it binds cleanly.
-    @Redirect(
+    @Unique
+    private boolean vbu$hasPivot() {
+        return this.pivot.x != 0.0F || this.pivot.y != 0.0F || this.pivot.z != 0.0F;
+    }
+
+    @Unique
+    private boolean vbu$hasOffset() {
+        return this.offset.x != 0.0F || this.offset.y != 0.0F || this.offset.z != 0.0F;
+    }
+
+    @Unique
+    private boolean vbu$needsVanillaPivotWrapper() {
+        return this.vbu$hasPivot()
+                && (this.xRot != 0.0F || this.yRot != 0.0F || this.zRot != 0.0F
+                || this.xScale != 1.0F || this.yScale != 1.0F || this.zScale != 1.0F);
+    }
+
+    /**
+     * Mirrors Minecraft 1.21.8's five-argument ModelPart.render exactly, replacing only List/Map iteration
+     * with immutable array snapshots for VBU parts. Child calls remain recursive so rendering a player arm,
+     * head, or any other subtree directly keeps vanilla PoseStack and visibility semantics.
+     */
+    @Inject(
             method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V",
-            at = @At(value = "INVOKE", target = "Ljava/util/Map;values()Ljava/util/Collection;"),
+            at = @At("HEAD"),
+            cancellable = true,
             require = 1
     )
-    private Collection<ModelPart> vbu$childrenValues(Map<String, ModelPart> map) {
-        if (!this.isVBUModel) {
-            return map.values();
+    private void vbu$interceptIndexedRender(PoseStack matrices, VertexConsumer vertices, int light, int overlay,
+                                            int color, CallbackInfo ci) {
+        if (!this.isVBUModel || !vbu$INDEXED_RENDER_ENABLED) {
+            return;
         }
-        if (!this.vbu$childrenCacheBuilt) {
-            this.vbu$childrenList = new ArrayList<>(map.values());
-            this.vbu$childrenCacheBuilt = true;
+        ci.cancel();
+
+        VbuRenderMetrics.recordModelRender();
+        this.viaBedrockUtility$renderIndexed(matrices, vertices, light, overlay, color);
+    }
+
+    @Override
+    public void viaBedrockUtility$renderIndexed(PoseStack matrices, VertexConsumer vertices,
+                                                 int light, int overlay, int color) {
+        this.vbu$ensureTopologyCache();
+        // Cube groups are an internal split of their owning bone's geometry. Layers may toggle every
+        // ModelPart and then enable only a canonical bone, so group-local visibility must not override
+        // the owner's state.
+        if ((!this.vbu$cubeGroup && !this.visible)
+                || (this.vbu$cubesArray.length == 0 && this.vbu$childrenArray.length == 0)) {
+            return;
         }
-        return this.vbu$childrenList;
+        VbuRenderMetrics.recordPart();
+
+        matrices.pushPose();
+        try {
+            ((ModelPart) (Object) this).translateAndRotate(matrices);
+            if (this.vbu$cubeGroup || !this.skipDraw) {
+                final PoseStack.Pose pose = matrices.last();
+                final ModelPart.Cube[] cubes = this.vbu$cubesArray;
+                if (cubes.length > 0 && (this.vbu$compiledBatch == null
+                        || !VbuCuboidBatchRenderer.tryRender(
+                        pose, vertices, this.vbu$compiledBatch,
+                        light, overlay, color, VbuCompileScratch.FLAT_NORMAL))) {
+                    for (int i = 0; i < cubes.length; i++) {
+                        cubes[i].compile(pose, vertices, light, overlay, color);
+                    }
+                }
+            }
+
+            final ModelPart[] children = this.vbu$childrenArray;
+            for (int i = 0; i < children.length; i++) {
+                final ModelPart child = children[i];
+                final IModelPart extension = (IModelPart) (Object) child;
+                if (extension.viaBedrockUtility$isVBUModel()) {
+                    if (extension.viaBedrockUtility$isCubeGroup() && this.skipDraw) {
+                        continue;
+                    }
+                    extension.viaBedrockUtility$renderIndexed(matrices, vertices, light, overlay, color);
+                } else {
+                    child.render(matrices, vertices, light, overlay, color);
+                }
+            }
+        } finally {
+            matrices.popPose();
+        }
+    }
+
+    @Unique
+    private void vbu$ensureTopologyCache() {
+        if (this.vbu$cubesArray == null) {
+            this.vbu$cubesArray = this.cubes.isEmpty() ? vbu$EMPTY_CUBES : this.cubes.toArray(vbu$EMPTY_CUBES);
+            this.vbu$compiledBatch = VbuCuboidBatchRenderer.compile(this.vbu$cubesArray);
+        }
+        if (this.vbu$childrenArray == null) {
+            this.vbu$childrenArray = this.children.isEmpty() ? vbu$EMPTY_CHILDREN : this.children.values().toArray(vbu$EMPTY_CHILDREN);
+        }
+        if (this.vbu$attachmentCubes == null) {
+            this.vbu$attachmentCubes = this.vbu$buildAttachmentCubes();
+        }
+    }
+
+    @Unique
+    private ModelPart.Cube[] vbu$buildAttachmentCubes() {
+        if (this.vbu$childrenArray.length == 0) {
+            return vbu$EMPTY_CUBES;
+        }
+
+        final List<ModelPart.Cube> attachmentCubes = new ArrayList<>();
+        for (ModelPart child : this.vbu$childrenArray) {
+            final IModelPart extension = (IModelPart) (Object) child;
+            if (!extension.viaBedrockUtility$isCubeGroup()) {
+                continue;
+            }
+
+            final List<ModelPart.Cube> childCubes = extension.viaBedrockUtility$getCuboids();
+            if (childCubes.isEmpty()) {
+                continue;
+            }
+            final Vector3f childRotation = extension.viaBedrockUtility$getRotation();
+            final boolean rotated = childRotation.x != 0.0F
+                    || childRotation.y != 0.0F || childRotation.z != 0.0F;
+            final Vector3f childPivot = extension.viaBedrockUtility$getPivot();
+            for (ModelPart.Cube cube : childCubes) {
+                // Normal boxes already expose useful bounds. Rotated cubes and poly meshes need a
+                // bone-local AABB because StuckInBodyLayer never applies the cube-group transform.
+                if (!rotated && (cube.minX != cube.maxX || cube.minY != cube.maxY || cube.minZ != cube.maxZ)) {
+                    attachmentCubes.add(cube);
+                } else {
+                    final ModelPart.Cube bounds = vbu$createAttachmentBounds(
+                            cube, childPivot, childRotation, rotated);
+                    if (bounds != null) {
+                        attachmentCubes.add(bounds);
+                    }
+                }
+            }
+        }
+
+        return attachmentCubes.isEmpty()
+                ? vbu$EMPTY_CUBES
+                : attachmentCubes.toArray(vbu$EMPTY_CUBES);
+    }
+
+    @Unique
+    private static ModelPart.Cube vbu$createAttachmentBounds(ModelPart.Cube cube,
+                                                              Vector3f pivot,
+                                                              Vector3f rotation,
+                                                              boolean rotated) {
+        final Quaternionf quaternion = rotated
+                ? new Quaternionf().rotationZYX(
+                        rotation.z * MathUtil.DEGREES_TO_RADIANS,
+                        rotation.y * MathUtil.DEGREES_TO_RADIANS,
+                        rotation.x * MathUtil.DEGREES_TO_RADIANS)
+                : null;
+        final Vector3f position = new Vector3f();
+        float minX = Float.POSITIVE_INFINITY;
+        float minY = Float.POSITIVE_INFINITY;
+        float minZ = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
+        float maxY = Float.NEGATIVE_INFINITY;
+        float maxZ = Float.NEGATIVE_INFINITY;
+
+        for (ModelPart.Polygon polygon : cube.polygons) {
+            if (polygon == null) {
+                continue;
+            }
+            for (ModelPart.Vertex vertex : polygon.vertices()) {
+                position.set(vertex.pos());
+                if (quaternion != null) {
+                    position.sub(pivot);
+                    quaternion.transform(position);
+                    position.add(pivot);
+                }
+                minX = Math.min(minX, position.x);
+                minY = Math.min(minY, position.y);
+                minZ = Math.min(minZ, position.z);
+                maxX = Math.max(maxX, position.x);
+                maxY = Math.max(maxY, position.y);
+                maxZ = Math.max(maxZ, position.z);
+            }
+        }
+
+        if (!Float.isFinite(minX) || !Float.isFinite(maxX)) {
+            return null;
+        }
+        return new ModelPart.Cube(
+                0, 0, minX, minY, minZ, maxX - minX, maxY - minY, maxZ - minZ,
+                0, 0, 0, false, 1, 1, java.util.Set.<Direction>of());
+    }
+
+    @Override
+    public void viaBedrockUtility$freezeTopology() {
+        this.vbu$cubesArray = this.cubes.isEmpty() ? vbu$EMPTY_CUBES : this.cubes.toArray(vbu$EMPTY_CUBES);
+        this.vbu$compiledBatch = VbuCuboidBatchRenderer.compile(this.vbu$cubesArray);
+        this.vbu$childrenArray = this.children.isEmpty() ? vbu$EMPTY_CHILDREN : this.children.values().toArray(vbu$EMPTY_CHILDREN);
+        this.vbu$attachmentCubes = this.vbu$buildAttachmentCubes();
     }
 
     @Override
     public void viaBedrockUtility$invalidateChildrenCache() {
-        this.vbu$childrenCacheBuilt = false;
-        this.vbu$childrenList = null;
+        this.vbu$cubesArray = null;
+        this.vbu$childrenArray = null;
+        this.vbu$compiledBatch = null;
+        this.vbu$attachmentCubes = null;
     }
 
     @Inject(method = "getChild", at = @At("HEAD"), cancellable = true)
@@ -161,6 +377,19 @@ public abstract class ModelPartMixin implements IModelPart {
             }
             cir.setReturnValue(child);
         }
+    }
+
+    @Inject(method = "getRandomCube", at = @At("HEAD"), cancellable = true)
+    private void vbu$getAttachmentCube(RandomSource random, CallbackInfoReturnable<ModelPart.Cube> cir) {
+        if (!this.isVBUModel || !this.cubes.isEmpty()) {
+            return;
+        }
+
+        this.vbu$ensureTopologyCache();
+        final ModelPart.Cube[] attachmentCubes = this.vbu$attachmentCubes;
+        cir.setReturnValue(attachmentCubes.length > 0
+                ? attachmentCubes[random.nextInt(attachmentCubes.length)]
+                : vbu$EMPTY_ATTACHMENT_CUBE);
     }
 
     @Inject(method = "copyFrom", at = @At("TAIL"))
@@ -232,6 +461,16 @@ public abstract class ModelPartMixin implements IModelPart {
     @Override
     public void viaBedrockUtility$setVBUModel() {
         this.isVBUModel = true;
+    }
+
+    @Override
+    public void viaBedrockUtility$setCubeGroup() {
+        this.vbu$cubeGroup = true;
+    }
+
+    @Override
+    public boolean viaBedrockUtility$isCubeGroup() {
+        return this.vbu$cubeGroup;
     }
 
     @Override

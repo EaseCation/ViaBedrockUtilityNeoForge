@@ -214,18 +214,29 @@ public class CustomEntityTicker implements AnimationEventListener {
      * Shared between update() (render controller evaluation) and renderer's buildFrameScope().
      */
     public void populateEntityQueries(final MutableObjectBinding queryBinding) {
-        if (this.variant != null) {
-            queryBinding.set("variant", Value.of(this.variant));
-        }
-        if (this.markVariant != null) {
-            queryBinding.set("mark_variant", Value.of(this.markVariant));
-        }
-        if (this.skinId != null) {
-            queryBinding.set("skin_id", Value.of(this.skinId));
-        }
+        populateEntityQueries(queryBinding, this.variant, this.markVariant, this.skinId,
+                this.entityFlags(), BedrockMappings.getBedrockEntityFlagMoLangQueries());
+    }
 
-        final Set<ActorFlags> entityFlags = this.entityFlags();
-        for (Map.Entry<ActorFlags, String> entry : BedrockMappings.getBedrockEntityFlagMoLangQueries().entrySet()) {
+    public void populateEntityQueries(final MutableObjectBinding queryBinding, final EntityQueryState previous) {
+        populateEntityQueries(queryBinding, previous, this.variant, this.markVariant, this.skinId,
+                this.entityFlags(), BedrockMappings.getBedrockEntityFlagMoLangQueries());
+    }
+
+    static void populateEntityQueries(final MutableObjectBinding queryBinding,
+                                      final Integer variant, final Integer markVariant, final Integer skinId,
+                                      final Set<ActorFlags> entityFlags,
+                                      final Map<ActorFlags, String> flagQueries) {
+        if (variant != null) {
+            queryBinding.set("variant", Value.of(variant));
+        }
+        if (markVariant != null) {
+            queryBinding.set("mark_variant", Value.of(markVariant));
+        }
+        if (skinId != null) {
+            queryBinding.set("skin_id", Value.of(skinId));
+        }
+        for (Map.Entry<ActorFlags, String> entry : flagQueries.entrySet()) {
             if (entityFlags.contains(entry.getKey())) {
                 queryBinding.set(entry.getValue(), Value.of(true));
             }
@@ -233,6 +244,58 @@ public class CustomEntityTicker implements AnimationEventListener {
         if (entityFlags.contains(ActorFlags.ONFIRE)) {
             queryBinding.set("is_onfire", Value.of(true));
         }
+    }
+
+    static void populateEntityQueries(final MutableObjectBinding queryBinding,
+                                      final EntityQueryState previous,
+                                      final Integer variant, final Integer markVariant, final Integer skinId,
+                                      final Set<ActorFlags> entityFlags,
+                                      final Map<ActorFlags, String> flagQueries) {
+        if (!Objects.equals(previous.variant, variant)) {
+            queryBinding.set("variant", variant != null ? Value.of(variant) : Value.nil());
+            previous.variant = variant;
+        }
+        if (!Objects.equals(previous.markVariant, markVariant)) {
+            queryBinding.set("mark_variant", markVariant != null ? Value.of(markVariant) : Value.nil());
+            previous.markVariant = markVariant;
+        }
+        if (!Objects.equals(previous.skinId, skinId)) {
+            queryBinding.set("skin_id", skinId != null ? Value.of(skinId) : Value.nil());
+            previous.skinId = skinId;
+        }
+
+        for (ActorFlags flag : entityFlags) {
+            if (!previous.flags.contains(flag)) {
+                final String query = flagQueries.get(flag);
+                if (query != null) {
+                    queryBinding.set(query, Value.of(true));
+                }
+            }
+        }
+        for (ActorFlags flag : previous.flags) {
+            if (!entityFlags.contains(flag)) {
+                final String query = flagQueries.get(flag);
+                if (query != null) {
+                    queryBinding.set(query, Value.of(false));
+                }
+            }
+        }
+
+        final boolean onFire = entityFlags.contains(ActorFlags.ONFIRE);
+        final boolean wasOnFire = previous.flags.contains(ActorFlags.ONFIRE);
+        if (onFire != wasOnFire) {
+            queryBinding.set("is_onfire", Value.of(onFire));
+        }
+
+        previous.flags.clear();
+        previous.flags.addAll(entityFlags);
+    }
+
+    public static final class EntityQueryState {
+        private Integer variant;
+        private Integer markVariant;
+        private Integer skinId;
+        private final EnumSet<ActorFlags> flags = EnumSet.noneOf(ActorFlags.class);
     }
 
     public void update() {

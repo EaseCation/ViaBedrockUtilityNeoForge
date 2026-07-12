@@ -26,6 +26,10 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+def sodiumTestEnabled = providers.gradleProperty('vbuTestSodium')
+        .map { it.toBoolean() }
+        .getOrElse(false)
+
 neoForge {
     version = neo_version
 
@@ -45,6 +49,14 @@ neoForge {
             sourceSet sourceSets.main
         }
     }
+
+    // Runs JUnit with the NeoForge/Minecraft classpath and Mixin bootstrap, without launching a game client.
+    // testedMod also adds sourceSets.test to this mod's transformed classloader; without it, JUnit can
+    // discover test class names but ModLauncher's module classloader cannot load their bytecode.
+    unitTest {
+        testedMod = mods."${mod_id}"
+        enable()
+    }
 }
 
 dependencies {
@@ -59,16 +71,19 @@ dependencies {
         exclude group: 'com.github.EaseCation', module: 'CubeConverter'
     }
     implementation 'nakern.be_camera:bedrockcameralib:1.2.0'
+    // bedrockcameralib exposes Kotlin 2.1 Function types in its public API but its POM does not declare
+    // kotlin-stdlib. Keep it on both the compile classpath and the standalone mod's JarJar runtime.
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
+    jarJar 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
     implementation 'net.easecation.beparticle:beparticle:1.0.0'
     implementation 'com.github.EaseCation:CubeConverter:1.3'
     jarJar 'com.github.EaseCation:CubeConverter:1.3'
     jarJar 'team.unnamed:mocha:3.0.1'
 
-    // Sodium (optional at runtime): compileOnly so the C2 push fast path (SodiumPushBackend /
-    // CuboidMixin.vbu$renderCuboidFastPush) can compile against VertexBufferWriter + EntityVertex.
-    // Not bundled (jarJar) and not a required mod dependency — at runtime, if Sodium is absent,
-    // SodiumPushBackend.SUPPORTED == false and the JIT folds away the push branch, so the fallback
-    // addVertex path runs with zero Sodium footprint. Vendored in libs/ to avoid a maven dependency.
+    // Sodium (optional at runtime): compileOnly lets the isolated SodiumVertexPushBackend compile against
+    // VertexBufferWriter + EntityVertex. SodiumPushBackend loads that adapter reflectively and fails closed
+    // to the vanilla emitter when Sodium is absent or its public vertex ABI is incompatible. It is neither
+    // JarJar-bundled nor declared as a required mod dependency. Vendored in libs/ to avoid a Maven dependency.
     compileOnly files('libs/sodium-neoforge-0.7.3.jar')
 
     // Iris (optional at runtime): compileOnly so the shader-aware render-order mixin
@@ -82,6 +97,15 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok:1.18.36'
 
     testImplementation 'com.google.code.gson:gson:2.10.1'
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // The default test runtime deliberately excludes Sodium. Opt in to the integration profile with
+    // `-PvbuTestSodium=true`; compileOnly remains available to compile Sodium-specific test references.
+    if (sodiumTestEnabled) {
+        testRuntimeOnly files('libs/sodium-neoforge-0.7.3.jar')
+    }
 }
 
 def enumSourceDir = layout.buildDirectory.dir("generated/enums/main/java")
@@ -122,5 +146,54 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 test {
-    failOnNoDiscoveredTests = false
+    useJUnitPlatform()
+    systemProperty 'vbu.testSodium', sodiumTestEnabled.toString()
+    // Legacy parser utilities are executable main classes in src/test, not JUnit tests. Their default-package
+    // classes are also intentionally outside the tested mod's named module.
+    exclude 'AnimationParserTest.class', 'MaterialParserTest.class'
+    failOnNoDiscoveredTests = true
+}
+
+def productionJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
+tasks.register('verifyNoBundledSodium') {
+    group = 'verification'
+    description = 'Verifies that the optional Sodium dependency is not bundled into the production jar.'
+    dependsOn tasks.named('jar')
+    inputs.file(productionJar)
+
+    doLast { task ->
+        final File jarFile = task.inputs.files.singleFile
+        final java.util.zip.ZipFile zip = new java.util.zip.ZipFile(jarFile)
+        try {
+            final List<String> forbiddenEntries = []
+            final Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries()
+            while (entries.hasMoreElements()) {
+                final String name = entries.nextElement().name
+                final String lowerName = name.toLowerCase(Locale.ROOT)
+                if (name.startsWith('net/caffeinemc/') || (lowerName.endsWith('.jar') && lowerName.contains('sodium'))) {
+                    forbiddenEntries.add(name)
+                }
+            }
+
+            final java.util.zip.ZipEntry metadata = zip.getEntry('META-INF/jarjar/metadata.json')
+            if (metadata != null) {
+                final String contents = zip.getInputStream(metadata).withCloseable {
+                    new String(it.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                }.toLowerCase(Locale.ROOT)
+                if (contents.contains('net.caffeinemc') || contents.contains('"sodium"')) {
+                    forbiddenEntries.add(metadata.name + ' (references Sodium)')
+                }
+            }
+
+            if (!forbiddenEntries.isEmpty()) {
+                throw new GradleException("Optional Sodium classes/artifacts were bundled into ${jarFile.name}: ${forbiddenEntries}")
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.named('check').configure {
+    dependsOn tasks.named('verifyNoBundledSodium')
 }
