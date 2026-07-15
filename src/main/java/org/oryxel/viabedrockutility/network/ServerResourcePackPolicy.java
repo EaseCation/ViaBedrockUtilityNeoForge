@@ -6,7 +6,11 @@ public final class ServerResourcePackPolicy {
     private ServerResourcePackPolicy() {
     }
 
-    public static ServerData.ServerPackStatus effectiveStatus(ServerData.ServerPackStatus ignored) {
+    public static ServerData.ServerPackStatus autoAccept(
+            ServerData.ServerPackStatus ignored,
+            Runnable allowServerPacks
+    ) {
+        allowServerPacks.run();
         return ServerData.ServerPackStatus.ENABLED;
     }
 }
