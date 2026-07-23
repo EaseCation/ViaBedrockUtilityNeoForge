@@ -76,6 +76,14 @@ public final class DeferredNameTag {
     }
 
     /**
+     * Drops name-tag draws that have been queued for this frame without invalidating cached glyph layouts.
+     * This is a stable integration point for privacy overlays that must fail closed before deferred replay.
+     */
+    public static void clearPending() {
+        QUEUE.clear();
+    }
+
+    /**
      * Capture one {@code Font.drawInBatch} call for deferred replay. The {@code pose} is the live
      * {@code poseStack.last().pose()} which is reused/mutated after the caller returns, so it is copied here.
      */
@@ -103,7 +111,7 @@ public final class DeferredNameTag {
             }
             bufferSource.endBatch();
         } finally {
-            QUEUE.clear();
+            clearPending();
         }
     }
 
