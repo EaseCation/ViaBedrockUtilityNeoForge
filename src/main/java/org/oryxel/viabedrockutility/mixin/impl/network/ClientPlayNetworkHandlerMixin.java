@@ -61,7 +61,7 @@ public class ClientPlayNetworkHandlerMixin {
         if (split[0].equals("reset")) {
             cache.getRenderer().reset();
         } else if (split[0].equals("test") && split.length == 3) {
-            cache.getRenderer().play(ViaBedrockUtility.getInstance().getPackManager().getAnimationDefinitions().getAnimations().get(split[2]));
+            cache.getRenderer().playExplicit(ViaBedrockUtility.getInstance().getPackManager().getAnimationDefinitions().getAnimations().get(split[2]));
         }
     }
 }

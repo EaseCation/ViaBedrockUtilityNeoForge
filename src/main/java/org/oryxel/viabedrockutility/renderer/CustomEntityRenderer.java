@@ -49,13 +49,19 @@ import java.util.concurrent.ConcurrentHashMap;
 public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, CustomEntityRenderer.CustomEntityRenderState> {
     private static final Value VAL_TRUE = Value.of(1.0);
     private static final Value VAL_FALSE = Value.of(0.0);
-
     private final Map<String, Animator> animators = new ConcurrentHashMap<>();
+    private final Map<Animator, ExplicitAnimationState> explicitAnimators = new ConcurrentHashMap<>();
     private final Map<CustomEntityModel<?>, McBoneModel> boneModelCache = new IdentityHashMap<>();
     private final Map<Model, FrozenMeshEntry> frozenEntries = new IdentityHashMap<>();
     private final Map<Model, String> frozenFailures = new IdentityHashMap<>();
     private final Map<Model, Boolean> frozenStaticGeometrySafe = new IdentityHashMap<>();
     private final FrozenMeshStateController frozenState = new FrozenMeshStateController();
+    // Explicit actions must remain visible at distance until their animator finishes.
+    private boolean explicitAnimationActive;
+    // Metadata changes get one uncached pose refresh before distance freezing resumes.
+    private int forcedDynamicAnimationFrames;
+    private long queryRebakeNotBeforeNanos;
+    private boolean clearFailuresBeforeQueryRebake;
     private boolean hasRetainedAnimatedPose;
     // Resolved once per entity model: each non-wildcard part_visibility rule pre-mapped to its target
     // ModelPart[], plus a snapshot of allParts(). Lets applyPartVisibility iterate arrays every frame
@@ -121,9 +127,14 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         this.renderFrameCounter++;
 
         LodConfig config = LodConfig.getInstance();
+        boolean queryRebakePending = this.isQueryRebakePending();
         FrozenMeshState previousFrozenState = this.frozenState.state();
+        boolean allowFrozenPose = config.isFrozenMeshEnabled()
+                && !this.explicitAnimationActive
+                && this.forcedDynamicAnimationFrames == 0
+                && !queryRebakePending;
         FrozenMeshState currentFrozenState = this.frozenState.update(
-                config.isFrozenMeshEnabled(), state.getDistanceFromCamera(),
+                allowFrozenPose, state.getDistanceFromCamera(),
                 config.getFrozenMeshEnterDistance(), config.getFrozenMeshExitDistance());
         if (currentFrozenState == FrozenMeshState.DYNAMIC
                 && previousFrozenState != FrozenMeshState.DYNAMIC) {
@@ -133,14 +144,16 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         boolean initializeFrozenPose = this.frozenState.requiresInitialPose(this.hasRetainedAnimatedPose);
 
         // Distance-based LOD: skip animation computation for distant entities (configurable)
-        boolean shouldAnimate = initializeFrozenPose || (!useFrozenPose
+        boolean forceAnimationUpdate = initializeFrozenPose || this.explicitAnimationActive
+                || this.forcedDynamicAnimationFrames > 0;
+        boolean shouldAnimate = forceAnimationUpdate || (!useFrozenPose
                 && config.shouldAnimate(state.getDistanceFromCamera(), this.renderFrameCounter));
 
         // Per-frame animation budget: distance LOD doesn't throttle near entities, so a dense lobby would
         // animate every one of them every frame. Cap the number of full-rate animations per frame; entities
         // that exhaust the budget fall back to a staggered cadence (renderFrameCounter is identityHashCode-
         // seeded, spreading the throttled updates across frames) so they still animate, just less often.
-        if (shouldAnimate && !initializeFrozenPose && !AnimationBudget.tryAcquire()) {
+        if (shouldAnimate && !forceAnimationUpdate && !AnimationBudget.tryAcquire()) {
             final int interval = config.getAnimationThrottleInterval();
             shouldAnimate = interval <= 1 || (this.renderFrameCounter % interval == 0);
         }
@@ -247,7 +260,61 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         if (this.frozenState.state() == FrozenMeshState.BAKE_PENDING) {
             this.frozenState.bakingComplete();
         }
+        if (this.forcedDynamicAnimationFrames > 0) {
+            this.forcedDynamicAnimationFrames--;
+        }
+        if (this.explicitAnimationActive) {
+            boolean freezeAfterCompletedCycle = config.isFrozenMeshEnabled()
+                    && state.getDistanceFromCamera() >= config.getFrozenMeshEnterDistance();
+            this.updateExplicitAnimationState(freezeAfterCompletedCycle);
+        }
         super.render(state, matrices, vertexConsumers, light);
+    }
+
+    private void updateExplicitAnimationState(boolean freezeAfterCompletedCycle) {
+        boolean active = false;
+        long nowNanos = System.nanoTime();
+        for (Map.Entry<Animator, ExplicitAnimationState> entry : this.explicitAnimators.entrySet()) {
+            Animator animator = entry.getKey();
+            ExplicitAnimationState animation = entry.getValue();
+            if (animation.shouldRelease(nowNanos, freezeAfterCompletedCycle)) {
+                this.explicitAnimators.remove(animator, animation);
+            } else {
+                active = true;
+            }
+        }
+        this.explicitAnimationActive = active;
+    }
+
+    /** Wakes this entity for an explicit server-triggered animation. */
+    public void requestExplicitAnimation() {
+        this.explicitAnimationActive = true;
+        this.invalidateFrozenPose("explicit_animation");
+    }
+
+    /** Refreshes one pose after a server metadata/query value changed. */
+    public void requestAnimationRefresh() {
+        this.forcedDynamicAnimationFrames = Math.max(this.forcedDynamicAnimationFrames, 1);
+        this.queryRebakeNotBeforeNanos = System.nanoTime()
+                + FrozenMeshAnimationPolicy.QUERY_REBAKE_STABLE_NANOS;
+        this.clearFailuresBeforeQueryRebake = true;
+        this.invalidateFrozenPose("query_changed");
+    }
+
+    private boolean isQueryRebakePending() {
+        if (this.queryRebakeNotBeforeNanos == 0L) {
+            return false;
+        }
+        if (FrozenMeshAnimationPolicy.queryRebakePending(
+                this.queryRebakeNotBeforeNanos, System.nanoTime())) {
+            return true;
+        }
+        this.queryRebakeNotBeforeNanos = 0L;
+        if (this.clearFailuresBeforeQueryRebake) {
+            this.frozenFailures.clear();
+            this.clearFailuresBeforeQueryRebake = false;
+        }
+        return false;
     }
 
     private boolean tryQueueFrozen(Model model, RenderType renderType, MultiBufferSource vertexConsumers,
@@ -343,18 +410,27 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     }
 
     public void invalidateFrozenMeshes(String reason) {
-        for (FrozenMeshEntry entry : this.frozenEntries.values()) {
-            if (entry.isValid()) {
-                FrozenEntityMeshCache.global().remove(entry, reason);
-            }
-        }
-        this.frozenEntries.clear();
+        this.removeFrozenEntries(reason);
         this.frozenFailures.clear();
         this.frozenStaticGeometrySafe.clear();
         if ("model_change".equals(reason)) {
             this.hasRetainedAnimatedPose = false;
         }
         this.frozenState.reset();
+    }
+
+    private void invalidateFrozenPose(String reason) {
+        this.removeFrozenEntries(reason);
+        this.frozenState.reset();
+    }
+
+    private void removeFrozenEntries(String reason) {
+        for (FrozenMeshEntry entry : this.frozenEntries.values()) {
+            if (entry.isValid()) {
+                FrozenEntityMeshCache.global().remove(entry, reason);
+            }
+        }
+        this.frozenEntries.clear();
     }
 
     // Bedrock render controller "light_color_multiplier": a scalar applied to the light color
@@ -588,6 +664,12 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
      */
     private void evaluateAnimationConditions(final Scope frameScope) {
         this.animators.forEach((animId, animator) -> {
+            // A server-triggered action is authoritative and must not inherit a similarly named
+            // entity-definition condition that can leave its blend weight at zero forever.
+            if (this.explicitAnimationActive && this.explicitAnimators.containsKey(animator)) {
+                animator.setBlendWeight(1.0f);
+                return;
+            }
             final List<Expression> parsedCondition = this.ticker.getParsedAnimationConditions().get(animId);
             if (parsedCondition != null) {
                 try {
@@ -790,6 +872,11 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     public void reset() {
         this.animators.values().forEach(Animator::stop);
         this.animators.clear();
+        this.explicitAnimators.clear();
+        this.explicitAnimationActive = false;
+        this.forcedDynamicAnimationFrames = 0;
+        this.queryRebakeNotBeforeNanos = 0L;
+        this.clearFailuresBeforeQueryRebake = false;
         this.hasRetainedAnimatedPose = false;
         this.invalidateFrozenMeshes("animation_reset");
     }
@@ -799,6 +886,49 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
             return;
         }
 
-        this.animators.put(data.animation().getIdentifier(), new Animator(this.ticker, data));
+        Animator animator = new Animator(this.ticker, data);
+        Animator replaced = this.animators.put(data.animation().getIdentifier(), animator);
+        if (replaced != null) {
+            this.explicitAnimators.remove(replaced);
+        }
+    }
+
+    public void playExplicit(final AnimationDefinitions.AnimationData data) {
+        if (data == null) {
+            return;
+        }
+
+        Animator animator = new Animator(this.ticker, data);
+        Animator replaced = this.animators.put(data.animation().getIdentifier(), animator);
+        if (replaced != null) {
+            this.explicitAnimators.remove(replaced);
+        }
+        boolean looping = Boolean.TRUE.equals(data.animation().getLoop().getValue());
+        this.explicitAnimators.put(animator, new ExplicitAnimationState(
+                animator, looping, data.compiled().lengthInSeconds(), System.nanoTime()));
+        this.requestExplicitAnimation();
+    }
+
+    private static final class ExplicitAnimationState {
+        private final Animator animator;
+        private final boolean looping;
+        private final boolean zeroDuration;
+        private final long timeoutAtNanos;
+        private int renderedFrames;
+
+        private ExplicitAnimationState(Animator animator, boolean looping, float durationSeconds, long nowNanos) {
+            this.animator = animator;
+            this.looping = looping;
+            this.zeroDuration = durationSeconds <= 0.0F;
+            this.timeoutAtNanos = nowNanos + FrozenMeshAnimationPolicy.explicitTimeoutNanos(durationSeconds);
+        }
+
+        private boolean shouldRelease(long nowNanos, boolean freezeAfterCompletedCycle) {
+            this.renderedFrames++;
+            return FrozenMeshAnimationPolicy.shouldReleaseExplicit(
+                    this.looping, this.zeroDuration, this.renderedFrames,
+                    this.animator.isDonePlaying(), nowNanos >= this.timeoutAtNanos,
+                    freezeAfterCompletedCycle);
+        }
     }
 }

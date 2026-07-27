@@ -48,9 +48,10 @@ public class CustomEntityPayloadHandler extends PayloadHandler {
         }
 
         ticker.setEntityFlags(payload.getEntityData().flags());
-        ticker.setVariant(payload.getEntityData().variant());
-        ticker.setMarkVariant(payload.getEntityData().mark_variant());
-        ticker.setSkinId(payload.getEntityData().skinId());
+        ticker.updateRenderQueries(
+                payload.getEntityData().variant(),
+                payload.getEntityData().mark_variant(),
+                payload.getEntityData().skinId());
         ticker.setScale(payload.getEntityData().scale());
 
         ticker.update();
@@ -70,7 +71,7 @@ public class CustomEntityPayloadHandler extends PayloadHandler {
         // 1) Custom model entity (MODEL_REQUEST path).
         final CustomEntityTicker ticker = this.cachedCustomEntities.get(payload.getEntityUuid());
         if (ticker != null) {
-            ticker.getRenderer().play(animData);
+            ticker.getRenderer().playExplicit(animData);
             return;
         }
 

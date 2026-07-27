@@ -64,11 +64,25 @@ public class CustomEntityTicker implements AnimationEventListener {
     @Getter
     private final CustomEntityRenderer<?> renderer;
 
-    @Setter
     private Integer variant, markVariant, skinId;
+    private boolean renderQueriesInitialized;
 
     @Setter @Getter
     private Float scale;
+
+    public void updateRenderQueries(final Integer variant, final Integer markVariant, final Integer skinId) {
+        boolean changed = !Objects.equals(this.variant, variant)
+                || !Objects.equals(this.markVariant, markVariant)
+                || !Objects.equals(this.skinId, skinId);
+        this.variant = variant;
+        this.markVariant = markVariant;
+        this.skinId = skinId;
+
+        if (this.renderQueriesInitialized && changed) {
+            this.renderer.requestAnimationRefresh();
+        }
+        this.renderQueriesInitialized = true;
+    }
 
     // Updated by renderer each frame with entity world position
     @Setter @Getter
