@@ -11,6 +11,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.*;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
+import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -23,6 +26,7 @@ import net.minecraft.util.Mth;
 import com.mojang.math.Axis;
 import net.minecraft.world.phys.Vec3;
 import org.cube.converter.data.bedrock.controller.BedrockRenderController;
+import org.joml.Matrix4f;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
 import org.oryxel.viabedrockutility.config.LodConfig;
 import org.oryxel.viabedrockutility.entity.CustomEntityTicker;
@@ -48,6 +52,11 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
     private final Map<String, Animator> animators = new ConcurrentHashMap<>();
     private final Map<CustomEntityModel<?>, McBoneModel> boneModelCache = new IdentityHashMap<>();
+    private final Map<Model, FrozenMeshEntry> frozenEntries = new IdentityHashMap<>();
+    private final Map<Model, String> frozenFailures = new IdentityHashMap<>();
+    private final Map<Model, Boolean> frozenStaticGeometrySafe = new IdentityHashMap<>();
+    private final FrozenMeshStateController frozenState = new FrozenMeshStateController();
+    private boolean hasRetainedAnimatedPose;
     // Resolved once per entity model: each non-wildcard part_visibility rule pre-mapped to its target
     // ModelPart[], plus a snapshot of allParts(). Lets applyPartVisibility iterate arrays every frame
     // instead of doing parsedPV.entrySet() iteration + partsByName.get() (HashMap get/hashCode) and
@@ -111,15 +120,28 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
         this.renderFrameCounter++;
 
+        LodConfig config = LodConfig.getInstance();
+        FrozenMeshState previousFrozenState = this.frozenState.state();
+        FrozenMeshState currentFrozenState = this.frozenState.update(
+                config.isFrozenMeshEnabled(), state.getDistanceFromCamera(),
+                config.getFrozenMeshEnterDistance(), config.getFrozenMeshExitDistance());
+        if (currentFrozenState == FrozenMeshState.DYNAMIC
+                && previousFrozenState != FrozenMeshState.DYNAMIC) {
+            this.invalidateFrozenMeshes("near_transition");
+        }
+        boolean useFrozenPose = currentFrozenState != FrozenMeshState.DYNAMIC;
+        boolean initializeFrozenPose = this.frozenState.requiresInitialPose(this.hasRetainedAnimatedPose);
+
         // Distance-based LOD: skip animation computation for distant entities (configurable)
-        boolean shouldAnimate = LodConfig.getInstance().shouldAnimate(state.getDistanceFromCamera(), this.renderFrameCounter);
+        boolean shouldAnimate = initializeFrozenPose || (!useFrozenPose
+                && config.shouldAnimate(state.getDistanceFromCamera(), this.renderFrameCounter));
 
         // Per-frame animation budget: distance LOD doesn't throttle near entities, so a dense lobby would
         // animate every one of them every frame. Cap the number of full-rate animations per frame; entities
         // that exhaust the budget fall back to a staggered cadence (renderFrameCounter is identityHashCode-
         // seeded, spreading the throttled updates across frames) so they still animate, just less often.
-        if (shouldAnimate && !AnimationBudget.tryAcquire()) {
-            final int interval = LodConfig.getInstance().getAnimationThrottleInterval();
+        if (shouldAnimate && !initializeFrozenPose && !AnimationBudget.tryAcquire()) {
+            final int interval = config.getAnimationThrottleInterval();
             shouldAnimate = interval <= 1 || (this.renderFrameCounter % interval == 0);
         }
 
@@ -171,6 +193,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                 if (model.parsedPartVisibility() != null && !model.parsedPartVisibility().isEmpty()) {
                     applyPartVisibility(model.model(), model.parsedPartVisibility(), frameScope);
                 }
+                this.hasRetainedAnimatedPose = true;
             }
 
             try {
@@ -191,12 +214,20 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                         effectiveLight = scaleLight(light, model.controller().lightColorMultiplier());
                     }
 
-                    VertexConsumer vertexConsumer = vertexConsumers.getBuffer(renderType);
-                    // Plan C (emissive): instead of wrapping with FlatNormalVertexConsumer (which does not
-                    // implement Sodium VertexBufferWriter and would disable the C2 push path), signal the
-                    // flat-normal intent via a static flag read by CuboidMixin. Reset in the finally below.
-                    VbuCompileScratch.FLAT_NORMAL = flatLight;
-                    model.model.renderToBuffer(matrices, vertexConsumer, effectiveLight, OverlayTexture.pack(0, 10));
+                    boolean queuedFrozen = false;
+                    if (useFrozenPose) {
+                        VbuRenderMetrics.recordFrozenCandidate();
+                        queuedFrozen = this.tryQueueFrozen(
+                                model, renderType, vertexConsumers, effectiveLight, flatLight,
+                                matrices.last().pose());
+                    }
+                    if (!queuedFrozen) {
+                        VertexConsumer vertexConsumer = vertexConsumers.getBuffer(renderType);
+                        // Signal flat normals without wrapping the consumer, preserving Sodium's writer.
+                        VbuCompileScratch.FLAT_NORMAL = flatLight;
+                        model.model.renderToBuffer(
+                                matrices, vertexConsumer, effectiveLight, OverlayTexture.pack(0, 10));
+                    }
                 }
             } catch (StackOverflowError soe) {
                 ViaBedrockUtilityNeoForge.LOGGER.error(
@@ -213,7 +244,117 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
             matrices.popPose();
         }
+        if (this.frozenState.state() == FrozenMeshState.BAKE_PENDING) {
+            this.frozenState.bakingComplete();
+        }
         super.render(state, matrices, vertexConsumers, light);
+    }
+
+    private boolean tryQueueFrozen(Model model, RenderType renderType, MultiBufferSource vertexConsumers,
+                                   int effectiveLight, boolean flatLight, Matrix4f rootPose) {
+        String priorFailure = this.frozenFailures.get(model);
+        if (priorFailure != null) {
+            VbuRenderMetrics.recordFrozenFallback(priorFailure, 1);
+            return false;
+        }
+        if (!FrozenMeshEligibility.isRenderContextEligible(
+                        renderType, model.texture(), vertexConsumers)
+                || !this.frozenStaticGeometrySafe.computeIfAbsent(
+                        model, ignored -> !FrozenMeshEligibility.hasDynamicUv(model.model()))) {
+            this.frozenFailures.put(model, "eligibility");
+            VbuRenderMetrics.recordFrozenFallback("eligibility", 1);
+            return false;
+        }
+
+        FrozenMeshEntry entry = this.frozenEntries.get(model);
+        if (entry != null && entry.isFailed()) {
+            this.frozenEntries.remove(model);
+            this.frozenFailures.put(model, "draw_error");
+            return false;
+        }
+        if (entry != null && (!entry.isValid()
+                || entry.packedLight() != effectiveLight
+                || entry.renderType() != renderType)) {
+            if (entry.isValid()) {
+                FrozenEntityMeshCache.global().remove(entry,
+                        entry.packedLight() != effectiveLight ? "light" : "material");
+            }
+            this.frozenEntries.remove(model);
+            entry = null;
+            this.frozenState.requestBake();
+        }
+
+        if (entry == null) {
+            entry = this.bakeFrozenMesh(model, renderType, effectiveLight, flatLight);
+            if (entry == null) {
+                return false;
+            }
+            this.frozenEntries.put(model, entry);
+        } else {
+            FrozenEntityMeshCache.global().touch(entry);
+            VbuRenderMetrics.recordFrozenCacheHit();
+        }
+
+        if (!FrozenMeshDrawQueue.enqueue(
+                entry, rootPose, model.model(), effectiveLight, flatLight)) {
+            VbuRenderMetrics.recordFrozenFallback("draw_error", 1);
+            return false;
+        }
+        return true;
+    }
+
+    private FrozenMeshEntry bakeFrozenMesh(Model model, RenderType renderType,
+                                           int effectiveLight, boolean flatLight) {
+        try (ByteBufferBuilder allocation = new ByteBufferBuilder(renderType.bufferSize())) {
+            BufferBuilder builder = new BufferBuilder(allocation, renderType.mode(), renderType.format());
+            PoseStack identityPose = new PoseStack();
+            VbuCompileScratch.FLAT_NORMAL = flatLight;
+            model.model().renderToBuffer(
+                    identityPose, builder, effectiveLight, OverlayTexture.pack(0, 10));
+            try (MeshData mesh = builder.build()) {
+                if (mesh == null || mesh.drawState().vertexCount() < 128) {
+                    this.frozenFailures.put(model, "too_small");
+                    VbuRenderMetrics.recordFrozenFallback("too_small", 1);
+                    return null;
+                }
+                FrozenMeshBackend.Handle handle = FrozenMeshDrawQueue.upload(
+                        model.key() + "/" + model.geometry(), mesh.vertexBuffer());
+                FrozenMeshEntry entry = new FrozenMeshEntry(
+                        handle, renderType, mesh.drawState().vertexCount(),
+                        mesh.drawState().indexCount(), mesh.drawState().mode(), effectiveLight);
+                if (!FrozenEntityMeshCache.global().add(entry)) {
+                    this.frozenFailures.put(model, "cache_full");
+                    VbuRenderMetrics.recordFrozenFallback("cache_full", 1);
+                    return null;
+                }
+                VbuRenderMetrics.recordFrozenUpload(entry.sizeBytes());
+                return entry;
+            }
+        } catch (Throwable error) {
+            this.frozenFailures.put(model, "upload_error");
+            VbuRenderMetrics.recordFrozenFallback("upload_error", 1);
+            ViaBedrockUtilityNeoForge.LOGGER.debug(
+                    "[FrozenMesh] Failed to bake model key={}, geometry={}",
+                    model.key(), model.geometry(), error);
+            return null;
+        } finally {
+            VbuCompileScratch.FLAT_NORMAL = false;
+        }
+    }
+
+    public void invalidateFrozenMeshes(String reason) {
+        for (FrozenMeshEntry entry : this.frozenEntries.values()) {
+            if (entry.isValid()) {
+                FrozenEntityMeshCache.global().remove(entry, reason);
+            }
+        }
+        this.frozenEntries.clear();
+        this.frozenFailures.clear();
+        this.frozenStaticGeometrySafe.clear();
+        if ("model_change".equals(reason)) {
+            this.hasRetainedAnimatedPose = false;
+        }
+        this.frozenState.reset();
     }
 
     // Bedrock render controller "light_color_multiplier": a scalar applied to the light color
@@ -649,6 +790,8 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     public void reset() {
         this.animators.values().forEach(Animator::stop);
         this.animators.clear();
+        this.hasRetainedAnimatedPose = false;
+        this.invalidateFrozenMeshes("animation_reset");
     }
 
     public void play(final AnimationDefinitions.AnimationData data) {

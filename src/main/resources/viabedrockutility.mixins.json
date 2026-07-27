@@ -9,6 +9,8 @@
   },
   "client": [
     "MinecraftClientMixin",
+    "accessor.CompositeRenderTypeAccessor",
+    "accessor.CompositeStateAccessor",
     "accessor.EntityRenderDispatcherAccessor",
     "accessor.PlayerSkinFieldAccessor",
     "entity.EntityMixin",

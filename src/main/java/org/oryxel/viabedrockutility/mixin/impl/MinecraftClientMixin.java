@@ -4,6 +4,8 @@ import nakern.be_camera.camera.CameraManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
+import org.oryxel.viabedrockutility.renderer.FrozenEntityMeshCache;
+import org.oryxel.viabedrockutility.renderer.FrozenMeshDrawQueue;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -13,6 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class MinecraftClientMixin {
     @Inject(method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;Z)V", at = @At("HEAD"))
     private void disconnect(Screen disconnectionScreen, boolean transferring, CallbackInfo ci) {
+        FrozenMeshDrawQueue.clear();
+        FrozenEntityMeshCache.global().invalidateAll("disconnect");
         ViaBedrockUtility.getInstance().setViaBedrockPresent(false);
         if (ViaBedrockUtility.getInstance().getPayloadHandler() == null) {
             return;
@@ -31,5 +35,11 @@ public class MinecraftClientMixin {
 
         // Clear BEParticle emitters (keep definitions for reconnect)
         net.easecation.beparticle.ParticleManager.INSTANCE.clearEmitters();
+    }
+
+    @Inject(method = "close", at = @At("HEAD"))
+    private void vbu$closeFrozenMeshes(CallbackInfo ci) {
+        FrozenMeshDrawQueue.clear();
+        FrozenEntityMeshCache.global().invalidateAll("client_close");
     }
 }

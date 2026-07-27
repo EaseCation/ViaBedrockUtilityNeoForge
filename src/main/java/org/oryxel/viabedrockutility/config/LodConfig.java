@@ -2,22 +2,38 @@ package org.oryxel.viabedrockutility.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.neoforged.fml.loading.FMLPaths;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
+import org.oryxel.viabedrockutility.renderer.FrozenEntityMeshCache;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class LodConfig {
+    static final int CURRENT_CONFIG_VERSION = 3;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static LodConfig INSTANCE;
+
+    private int configVersion = CURRENT_CONFIG_VERSION;
+    private OptimizationMode optimizationMode = OptimizationMode.AUTO;
+    private Preset manualPreset = Preset.BALANCED;
+    private LodDetailedSettings customSettings = LodDetailedSettings.balancedDefaults();
+    private transient HardwareProfile hardwareProfile;
 
     public enum Preset {
         HIGH_QUALITY,
         BALANCED,
         PERFORMANCE,
+        EXTREME,
         CUSTOM
+    }
+
+    public enum OptimizationMode {
+        AUTO,
+        MANUAL
     }
 
     public static class LodTier {
@@ -37,6 +53,10 @@ public class LodConfig {
     private LodTier tier2 = new LodTier(36.0, 5);
     private LodTier tier3 = new LodTier(56.0, 8);
     private double renderCullDistance = 40.0;
+    private boolean frozenMeshEnabled = false;
+    private double frozenMeshEnterDistance = 18.0;
+    private double frozenMeshExitDistance = 15.0;
+    private long frozenMeshMaxGpuBytes = 134_217_728L;
 
     // Distance beyond which text_display (hologram) entities are skipped entirely (EntityRenderer.shouldRender
     // returns false — see mixin.impl.render.TextDisplayCullMixin). Each visible text_display triggers a full
@@ -81,6 +101,49 @@ public class LodConfig {
         this.preset = preset;
     }
 
+    public OptimizationMode getOptimizationMode() {
+        return optimizationMode;
+    }
+
+    public Preset getManualPreset() {
+        return manualPreset;
+    }
+
+    public LodDetailedSettings getCustomSettings() {
+        return customSettings;
+    }
+
+    public HardwareProfile getHardwareProfile() {
+        if (hardwareProfile == null) {
+            hardwareProfile = HardwareProfile.detect();
+        }
+        return hardwareProfile;
+    }
+
+    public Preset getAutomaticPreset() {
+        return getHardwareProfile().recommendedPreset();
+    }
+
+    /** Applies the UI selection immediately and invalidates meshes baked under the previous policy. */
+    public void applySelectionAndSave(OptimizationMode mode, Preset selectedManualPreset) {
+        applySelectionAndSave(mode, selectedManualPreset, customSettings);
+    }
+
+    public void applySelectionAndSave(
+            OptimizationMode mode,
+            Preset selectedManualPreset,
+            LodDetailedSettings selectedCustomSettings
+    ) {
+        optimizationMode = mode == null ? OptimizationMode.AUTO : mode;
+        manualPreset = sanitizeManualPreset(selectedManualPreset);
+        customSettings = (selectedCustomSettings == null
+                ? LodDetailedSettings.balancedDefaults()
+                : selectedCustomSettings).normalized();
+        applySelectedPreset();
+        save();
+        FrozenEntityMeshCache.global().invalidateAll("settings_changed");
+    }
+
     public LodTier getTier1() {
         return tier1;
     }
@@ -95,6 +158,38 @@ public class LodConfig {
 
     public double getRenderCullDistance() {
         return renderCullDistance;
+    }
+
+    public boolean isFrozenMeshEnabled() {
+        return frozenMeshEnabled;
+    }
+
+    public void setFrozenMeshEnabled(boolean frozenMeshEnabled) {
+        this.frozenMeshEnabled = frozenMeshEnabled;
+    }
+
+    public double getFrozenMeshEnterDistance() {
+        return frozenMeshEnterDistance;
+    }
+
+    public void setFrozenMeshEnterDistance(double frozenMeshEnterDistance) {
+        this.frozenMeshEnterDistance = frozenMeshEnterDistance;
+    }
+
+    public double getFrozenMeshExitDistance() {
+        return frozenMeshExitDistance;
+    }
+
+    public void setFrozenMeshExitDistance(double frozenMeshExitDistance) {
+        this.frozenMeshExitDistance = frozenMeshExitDistance;
+    }
+
+    public long getFrozenMeshMaxGpuBytes() {
+        return frozenMeshMaxGpuBytes;
+    }
+
+    public void setFrozenMeshMaxGpuBytes(long frozenMeshMaxGpuBytes) {
+        this.frozenMeshMaxGpuBytes = frozenMeshMaxGpuBytes;
     }
 
     public void setRenderCullDistance(double renderCullDistance) {
@@ -216,20 +311,27 @@ public class LodConfig {
                 maxAnimatedEntitiesPerFrame = 0; // unlimited
                 maxAnimatedPlayersPerFrame = 0;  // unlimited
                 animationThrottleInterval = 1;
+                frozenMeshEnabled = true;
+                frozenMeshEnterDistance = 32.0;
+                frozenMeshExitDistance = 28.0;
+                frozenMeshMaxGpuBytes = 128L * LodDetailedSettings.MIB;
             }
             case BALANCED -> {
-                // Kept in sync with the class-field defaults above (tightened for crowded lobbies).
-                tier1 = new LodTier(18.0, 3);
-                tier2 = new LodTier(36.0, 5);
-                tier3 = new LodTier(56.0, 8);
-                renderCullDistance = 40;
-                textDisplayCullDistance = 64;
+                tier1 = new LodTier(20.0, 2);
+                tier2 = new LodTier(40.0, 4);
+                tier3 = new LodTier(64.0, 6);
+                renderCullDistance = 64;
+                textDisplayCullDistance = 80;
                 particleTickLodEnabled = true;
-                particleTickLodNearDistance = 18;
-                particleTickLodFarDistance = 36;
-                maxAnimatedEntitiesPerFrame = 24;
-                maxAnimatedPlayersPerFrame = 24;
-                animationThrottleInterval = 4;
+                particleTickLodNearDistance = 20;
+                particleTickLodFarDistance = 40;
+                maxAnimatedEntitiesPerFrame = 32;
+                maxAnimatedPlayersPerFrame = 32;
+                animationThrottleInterval = 3;
+                frozenMeshEnabled = true;
+                frozenMeshEnterDistance = 24.0;
+                frozenMeshExitDistance = 20.0;
+                frozenMeshMaxGpuBytes = 128L * LodDetailedSettings.MIB;
             }
             case PERFORMANCE -> {
                 tier1 = new LodTier(16.0, 3);
@@ -243,9 +345,76 @@ public class LodConfig {
                 maxAnimatedEntitiesPerFrame = 16;
                 maxAnimatedPlayersPerFrame = 16;
                 animationThrottleInterval = 4;
+                frozenMeshEnabled = true;
+                frozenMeshEnterDistance = 18.0;
+                frozenMeshExitDistance = 15.0;
+                frozenMeshMaxGpuBytes = 128L * LodDetailedSettings.MIB;
+            }
+            case EXTREME -> {
+                tier1 = new LodTier(12.0, 4);
+                tier2 = new LodTier(24.0, 8);
+                tier3 = new LodTier(36.0, 12);
+                renderCullDistance = 28;
+                textDisplayCullDistance = 32;
+                particleTickLodEnabled = true;
+                particleTickLodNearDistance = 12;
+                particleTickLodFarDistance = 24;
+                maxAnimatedEntitiesPerFrame = 8;
+                maxAnimatedPlayersPerFrame = 8;
+                animationThrottleInterval = 6;
+                frozenMeshEnabled = true;
+                frozenMeshEnterDistance = 12.0;
+                frozenMeshExitDistance = 9.0;
+                frozenMeshMaxGpuBytes = 128L * LodDetailedSettings.MIB;
             }
             case CUSTOM -> {} // Keep current values
         }
+        syncParticleSettings();
+    }
+
+    private void applySelectedPreset() {
+        if (optimizationMode == null) {
+            optimizationMode = OptimizationMode.AUTO;
+        }
+        if (manualPreset == null) {
+            manualPreset = Preset.BALANCED;
+        }
+        Preset selected = optimizationMode == OptimizationMode.AUTO
+                ? getAutomaticPreset()
+                : sanitizeManualPreset(manualPreset);
+        applyPreset(selected);
+        if (selected == Preset.CUSTOM) {
+            applyDetailedSettings(customSettings);
+        }
+        ViaBedrockUtilityNeoForge.LOGGER.info(
+                "[Config] Optimization mode={}, effective preset={}, render-thread score={}",
+                optimizationMode,
+                selected,
+                getHardwareProfile().performanceScore()
+        );
+    }
+
+    private static Preset sanitizeManualPreset(Preset preset) {
+        return preset == null ? Preset.BALANCED : preset;
+    }
+
+    private void applyDetailedSettings(LodDetailedSettings settings) {
+        LodDetailedSettings value = settings.normalized();
+        tier1 = new LodTier(value.tier1Distance(), value.tier1FrameInterval());
+        tier2 = new LodTier(value.tier2Distance(), value.tier2FrameInterval());
+        tier3 = new LodTier(value.tier3Distance(), value.tier3FrameInterval());
+        renderCullDistance = value.renderCullDistance();
+        textDisplayCullDistance = value.textDisplayCullDistance();
+        maxAnimatedEntitiesPerFrame = value.maxAnimatedEntitiesPerFrame();
+        maxAnimatedPlayersPerFrame = value.maxAnimatedPlayersPerFrame();
+        animationThrottleInterval = value.animationThrottleInterval();
+        frozenMeshEnabled = value.frozenMeshEnabled();
+        frozenMeshEnterDistance = value.frozenMeshEnterDistance();
+        frozenMeshExitDistance = value.frozenMeshExitDistance();
+        frozenMeshMaxGpuBytes = value.frozenMeshMaxGpuBytes();
+        particleTickLodEnabled = value.particleTickLodEnabled();
+        particleTickLodNearDistance = value.particleTickLodNearDistance();
+        particleTickLodFarDistance = value.particleTickLodFarDistance();
         syncParticleSettings();
     }
 
@@ -258,11 +427,16 @@ public class LodConfig {
         if (Files.exists(path)) {
             try {
                 String json = Files.readString(path);
-                INSTANCE = GSON.fromJson(json, LodConfig.class);
+                JsonObject source = JsonParser.parseString(json).getAsJsonObject();
+                INSTANCE = GSON.fromJson(source, LodConfig.class);
                 if (INSTANCE == null) {
                     INSTANCE = new LodConfig();
                 }
-                INSTANCE.syncParticleSettings();
+                boolean migrated = INSTANCE.migrate(source);
+                INSTANCE.applySelectedPreset();
+                if (migrated) {
+                    INSTANCE.save();
+                }
                 ViaBedrockUtilityNeoForge.LOGGER.debug("[Config] Loaded LOD config: preset={}", INSTANCE.preset);
             } catch (Exception e) {
                 ViaBedrockUtilityNeoForge.LOGGER.warn("[Config] Failed to load config, using defaults", e);
@@ -270,10 +444,59 @@ public class LodConfig {
             }
         } else {
             INSTANCE = new LodConfig();
-            INSTANCE.syncParticleSettings();
+            INSTANCE.applySelectedPreset();
             INSTANCE.save();
             ViaBedrockUtilityNeoForge.LOGGER.debug("[Config] Created default config file");
         }
+    }
+
+    boolean migrate(JsonObject source) {
+        boolean changed = false;
+        if (!source.has("optimizationMode")) {
+            optimizationMode = preset == Preset.CUSTOM ? OptimizationMode.MANUAL : OptimizationMode.AUTO;
+            changed = true;
+        }
+        if (!source.has("manualPreset")) {
+            manualPreset = preset == null ? Preset.BALANCED : preset;
+            changed = true;
+        }
+        if (!source.has("customSettings") || customSettings == null) {
+            customSettings = LodDetailedSettings.from(this);
+            changed = true;
+        } else {
+            LodDetailedSettings normalized = customSettings.normalized();
+            if (!normalized.equals(customSettings)) {
+                customSettings = normalized;
+                changed = true;
+            }
+        }
+        if (!source.has("frozenMeshEnterDistance") || frozenMeshEnterDistance <= 0.0) {
+            frozenMeshEnterDistance = 18.0;
+            changed = true;
+        }
+        if (!source.has("frozenMeshExitDistance") || frozenMeshExitDistance <= 0.0) {
+            frozenMeshExitDistance = 15.0;
+            changed = true;
+        }
+        if (!source.has("frozenMeshMaxGpuBytes") || frozenMeshMaxGpuBytes <= 0L) {
+            frozenMeshMaxGpuBytes = 134_217_728L;
+            changed = true;
+        }
+        if (!source.has("frozenMeshEnabled")) {
+            // Existing PERFORMANCE users opted into the aggressive preset. Migrate them to the new
+            // fast path; the other presets remain conservative and CUSTOM has no value to preserve.
+            frozenMeshEnabled = preset == Preset.PERFORMANCE;
+            changed = true;
+        }
+        if (frozenMeshExitDistance >= frozenMeshEnterDistance) {
+            frozenMeshExitDistance = Math.max(0.0, frozenMeshEnterDistance - 3.0);
+            changed = true;
+        }
+        if (configVersion != CURRENT_CONFIG_VERSION) {
+            configVersion = CURRENT_CONFIG_VERSION;
+            changed = true;
+        }
+        return changed;
     }
 
     public void save() {

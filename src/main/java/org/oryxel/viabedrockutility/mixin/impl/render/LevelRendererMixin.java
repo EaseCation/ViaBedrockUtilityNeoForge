@@ -26,13 +26,4 @@ public abstract class LevelRendererMixin {
         VbuRenderMetrics.beginFrame();
     }
 
-    @Inject(method = "renderEntities", at = @At("RETURN"))
-    private void vbu$endEntityFrame(PoseStack poses,
-                                    MultiBufferSource.BufferSource buffers,
-                                    Camera camera,
-                                    DeltaTracker deltaTracker,
-                                    List<Entity> entities,
-                                    CallbackInfo ci) {
-        VbuRenderMetrics.endFrame();
-    }
 }

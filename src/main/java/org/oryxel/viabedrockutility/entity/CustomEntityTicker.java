@@ -314,6 +314,8 @@ public class CustomEntityTicker implements AnimationEventListener {
             return;
         }
 
+        this.renderer.invalidateFrozenMeshes("model_change");
+
         ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] update(): render controller changed, evaluatedModels={}", this.models.size());
         final Set<String> old = new HashSet<>(this.availableModels);
         this.availableModels.clear();
