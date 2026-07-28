@@ -11,25 +11,57 @@ final class CoincidentFaceUv {
     private CoincidentFaceUv() {
     }
 
-    static Float[] southUv(UVMap map, float sizeZ, float inflate, float textureWidth, float textureHeight) {
-        return southUv(map.getUvType(), map.getUvMap(), sizeZ, inflate, textureWidth, textureHeight);
+    static Float[] northUv(UVMap map, float sizeZ, float inflate, boolean mirror,
+                           float textureWidth, float textureHeight) {
+        Float[] north = map.getUvMap().get(Direction.NORTH);
+        if (!mirror && hasRepeatedFaces(map.getUvType(), map.getUvMap(), sizeZ, inflate,
+                textureWidth, textureHeight)) {
+            return flipU(north);
+        }
+        return north;
+    }
+
+    static Float[] southUv(UVMap map, float sizeZ, float inflate, boolean mirror,
+                           float textureWidth, float textureHeight) {
+        return southUv(map.getUvType(), map.getUvMap(), sizeZ, inflate, mirror,
+                textureWidth, textureHeight);
+    }
+
+    static Float[] northUv(UVMap.UVType uvType, Map<Direction, Float[]> faces,
+                           float sizeZ, float inflate, boolean mirror,
+                           float textureWidth, float textureHeight) {
+        Float[] north = faces.get(Direction.NORTH);
+        return !mirror && hasRepeatedFaces(uvType, faces, sizeZ, inflate, textureWidth, textureHeight)
+                ? flipU(north)
+                : north;
     }
 
     static Float[] southUv(UVMap.UVType uvType, Map<Direction, Float[]> faces,
-                           float sizeZ, float inflate, float textureWidth, float textureHeight) {
+                           float sizeZ, float inflate, boolean mirror,
+                           float textureWidth, float textureHeight) {
         Float[] south = faces.get(Direction.SOUTH);
-        if (uvType != UVMap.UVType.BOX || Math.abs(sizeZ) > EPSILON || Math.abs(inflate) > EPSILON) {
+        if (!hasRepeatedFaces(uvType, faces, sizeZ, inflate, textureWidth, textureHeight)) {
             return south;
         }
 
         Float[] north = faces.get(Direction.NORTH);
-        if (!repeatEquivalent(north, south, textureWidth, textureHeight)) {
-            return south;
-        }
-
         // NORTH and SOUTH use opposite vertex winding. Flip U so their repeated texture
-        // samples occupy the same pixels instead of exposing a mirrored alpha silhouette.
-        return new Float[]{north[2], north[1], north[0], north[3]};
+        // samples occupy the same pixels. The cube mirror then selects the outward direction.
+        return mirror ? flipU(north) : north;
+    }
+
+    private static boolean hasRepeatedFaces(UVMap.UVType uvType, Map<Direction, Float[]> faces,
+                                            float sizeZ, float inflate,
+                                            float textureWidth, float textureHeight) {
+        return uvType == UVMap.UVType.BOX
+                && Math.abs(sizeZ) <= EPSILON
+                && Math.abs(inflate) <= EPSILON
+                && repeatEquivalent(faces.get(Direction.NORTH), faces.get(Direction.SOUTH),
+                textureWidth, textureHeight);
+    }
+
+    private static Float[] flipU(Float[] uv) {
+        return new Float[]{uv[2], uv[1], uv[0], uv[3]};
     }
 
     private static boolean repeatEquivalent(Float[] first, Float[] second,
