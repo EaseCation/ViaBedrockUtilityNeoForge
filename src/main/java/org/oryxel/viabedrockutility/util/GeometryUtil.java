@@ -398,7 +398,8 @@ public final class GeometryUtil {
         }
 
         if (set.contains(Direction.SOUTH)) {
-            final Float[] uv = map.getUvMap().get(org.cube.converter.util.element.Direction.SOUTH);
+            final Float[] uv = CoincidentFaceUv.southUv(
+                    map, h - z - inflate * 2F, inflate, uvWidth, uvHeight);
             sides[s] = new ModelPart.Polygon(new ModelPart.Vertex[]{vertex5, vertex6, vertex7, vertex8}, uv[0], uv[1], uv[2], uv[3], uvWidth, uvHeight, mirror, Direction.SOUTH);
         }
     }
