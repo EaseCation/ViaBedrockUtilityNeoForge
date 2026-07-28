@@ -14,9 +14,9 @@ class CoincidentFaceUvTest {
     void leftWingFacesAlignToOutwardProjection() {
         Map<Direction, Float[]> faces = wingFaces(false);
 
-        assertArrayEquals(new Float[]{64F, 0F, 0F, 64F},
-                CoincidentFaceUv.northUv(UVMap.UVType.BOX, faces, 0F, 0F, false, 64F, 64F));
         assertArrayEquals(new Float[]{0F, 0F, 64F, 64F},
+                CoincidentFaceUv.northUv(UVMap.UVType.BOX, faces, 0F, 0F, false, 64F, 64F));
+        assertArrayEquals(new Float[]{64F, 0F, 0F, 64F},
                 CoincidentFaceUv.southUv(UVMap.UVType.BOX, faces, 0F, 0F, false, 64F, 64F));
     }
 
@@ -24,9 +24,9 @@ class CoincidentFaceUvTest {
     void mirroredRightWingFacesAlignToOutwardProjection() {
         Map<Direction, Float[]> faces = wingFaces(true);
 
-        assertArrayEquals(new Float[]{64F, 0F, 0F, 64F},
-                CoincidentFaceUv.northUv(UVMap.UVType.BOX, faces, 0F, 0F, true, 64F, 64F));
         assertArrayEquals(new Float[]{0F, 0F, 64F, 64F},
+                CoincidentFaceUv.northUv(UVMap.UVType.BOX, faces, 0F, 0F, true, 64F, 64F));
+        assertArrayEquals(new Float[]{64F, 0F, 0F, 64F},
                 CoincidentFaceUv.southUv(UVMap.UVType.BOX, faces, 0F, 0F, true, 64F, 64F));
     }
 

@@ -14,7 +14,7 @@ final class CoincidentFaceUv {
     static Float[] northUv(UVMap map, float sizeZ, float inflate, boolean mirror,
                            float textureWidth, float textureHeight) {
         Float[] north = map.getUvMap().get(Direction.NORTH);
-        if (!mirror && hasRepeatedFaces(map.getUvType(), map.getUvMap(), sizeZ, inflate,
+        if (mirror && hasRepeatedFaces(map.getUvType(), map.getUvMap(), sizeZ, inflate,
                 textureWidth, textureHeight)) {
             return flipU(north);
         }
@@ -31,7 +31,7 @@ final class CoincidentFaceUv {
                            float sizeZ, float inflate, boolean mirror,
                            float textureWidth, float textureHeight) {
         Float[] north = faces.get(Direction.NORTH);
-        return !mirror && hasRepeatedFaces(uvType, faces, sizeZ, inflate, textureWidth, textureHeight)
+        return mirror && hasRepeatedFaces(uvType, faces, sizeZ, inflate, textureWidth, textureHeight)
                 ? flipU(north)
                 : north;
     }
@@ -45,9 +45,9 @@ final class CoincidentFaceUv {
         }
 
         Float[] north = faces.get(Direction.NORTH);
-        // NORTH and SOUTH use opposite vertex winding. Flip U so their repeated texture
-        // samples occupy the same pixels. The cube mirror then selects the outward direction.
-        return mirror ? flipU(north) : north;
+        // NORTH and SOUTH use opposite vertex winding. Select the matching projection
+        // for the cube's mirror state so both faces show the same intended artwork.
+        return mirror ? north : flipU(north);
     }
 
     private static boolean hasRepeatedFaces(UVMap.UVType uvType, Map<Direction, Float[]> faces,
