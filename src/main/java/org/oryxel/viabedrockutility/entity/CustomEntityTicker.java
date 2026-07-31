@@ -330,8 +330,11 @@ public class CustomEntityTicker implements AnimationEventListener {
 
         this.renderer.invalidateFrozenMeshes("model_change");
 
-        ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] update(): render controller changed, evaluatedModels={}", this.models.size());
-        final Set<String> old = new HashSet<>(this.availableModels);
+        final ModelReconciliation reconciliation = reconcileModelKeys(this.availableModels, this.models);
+        ViaBedrockUtilityNeoForge.LOGGER.debug(
+                "[Entity] update(): render controller changed, evaluatedModels={}, retainedModels={}, addedModels={}, removedModels={}",
+                this.models.size(), reconciliation.retainedKeys().size(), reconciliation.addedKeys().size(), reconciliation.removedKeys().size());
+        final Set<String> reusableModelKeys = reconciliation.retainedKeys();
         this.availableModels.clear();
         for (RenderControllerEvaluator.EvaluatedModel model : this.models) {
             final ResourceLocation texture = ResourceLocation.parse(model.textureValue().toLowerCase(Locale.ROOT));
@@ -342,7 +345,7 @@ public class CustomEntityTicker implements AnimationEventListener {
                 continue;
             }
 
-            if (old.contains(model.key())) {
+            if (reusableModelKeys.contains(model.key())) {
                 this.availableModels.add(model.key());
                 continue;
             }
@@ -447,13 +450,35 @@ public class CustomEntityTicker implements AnimationEventListener {
         );
 
         if (!newModels.isEmpty() && !this.models.equals(newModels)) {
-            this.availableModels.clear();
             this.models.clear();
             this.models.addAll(newModels);
             return true;
         } else {
             return false;
         }
+    }
+
+    static ModelReconciliation reconcileModelKeys(
+            final Set<String> availableModelKeys,
+            final Collection<RenderControllerEvaluator.EvaluatedModel> evaluatedModels) {
+        final Set<String> evaluatedModelKeys = new HashSet<>();
+        for (RenderControllerEvaluator.EvaluatedModel model : evaluatedModels) {
+            evaluatedModelKeys.add(model.key());
+        }
+
+        final Set<String> retainedKeys = new HashSet<>(availableModelKeys);
+        retainedKeys.retainAll(evaluatedModelKeys);
+
+        final Set<String> addedKeys = new HashSet<>(evaluatedModelKeys);
+        addedKeys.removeAll(availableModelKeys);
+
+        final Set<String> removedKeys = new HashSet<>(availableModelKeys);
+        removedKeys.removeAll(evaluatedModelKeys);
+
+        return new ModelReconciliation(Set.copyOf(retainedKeys), Set.copyOf(addedKeys), Set.copyOf(removedKeys));
+    }
+
+    record ModelReconciliation(Set<String> retainedKeys, Set<String> addedKeys, Set<String> removedKeys) {
     }
 
     private Material evalMaterial(final Scope executionScope, BedrockRenderController controller) {
