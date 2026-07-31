@@ -30,8 +30,8 @@
     "render.TextDisplayCullMixin",
     "render.dispatcher.EntityRenderDispatcherMixin",
     "render.feature.CapeFeatureRendererMixin",
+    "render.item.ContextDimensionMixin",
     "sound.SoundSystemMixin",
     "world.ClientWorldMixin"
   ]
 }
-
