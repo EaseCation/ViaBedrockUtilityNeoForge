@@ -3,6 +3,7 @@
   "package": "org.oryxel.viabedrockutility.mixin.impl",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "pack.ReloadableResourceManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
