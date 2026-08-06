@@ -108,7 +108,7 @@ BECamera               ← Bedrock Camera API 库 (相机控制/路径插值)
 | [BedrockMotion](https://github.com/EaseCation/BedrockMotion) | 1.0.0 | mavenLocal / JitPack | 骨骼动画引擎 |
 | [BECamera](https://github.com/EaseCation/BECamera) | 1.2.0 | mavenLocal | Bedrock Camera API |
 | [BEParticle](https://github.com/EaseCation/BEParticleNeoForge) | 1.0.0 | 本地工作区 / Maven | NeoForge 客户端粒子引擎 |
-| NeoForge | 21.8.53 | Maven | 客户端 Mod 运行时 |
+| NeoForge | 21.8.52 | Maven | 客户端 Mod 运行时 |
 | Lombok | 1.18.36 | Maven | 编译期注解处理 |
 
 ## 支持的 Minecraft 版本
@@ -129,7 +129,7 @@ BECamera               ← Bedrock Camera API 库 (相机控制/路径插值)
 
 ### 安装
 
-1. 安装适用于 Minecraft 1.21.8 的 NeoForge 21.8.53
+1. 安装适用于 Minecraft 1.21.8 的 NeoForge 21.8.52
 2. 将 `viabedrockutility-1.0.0.jar`、`bedrockcameralib-1.2.0.jar` 和 `beparticle-1.0.0.jar` 放入客户端 `mods/` 目录
 3. 配置 ViaProxy 连接 Bedrock 服务器
 4. 启动游戏，通过 ViaProxy 代理连接

@@ -108,7 +108,7 @@ BECamera               ← Bedrock Camera API library (camera control / path int
 | [BedrockMotion](https://github.com/EaseCation/BedrockMotion) | 1.0.0 | mavenLocal / JitPack | Skeletal animation engine |
 | [BECamera](https://github.com/EaseCation/BECamera) | 1.2.0 | mavenLocal | Bedrock Camera API |
 | [BEParticle](https://github.com/EaseCation/BEParticleNeoForge) | 1.0.0 | Local workspace / Maven | Bedrock particle engine used by the NeoForge client stack |
-| NeoForge | 21.8.53 | Maven | Client mod runtime |
+| NeoForge | 21.8.52 | Maven | Client mod runtime |
 | Lombok | 1.18.36 | Maven | Compile-time annotation processing |
 
 ## Supported Minecraft Versions
@@ -129,7 +129,7 @@ Current NeoForge workspace target: **1.21.8**.
 
 ### Installation
 
-1. Install NeoForge 21.8.53 for Minecraft 1.21.8
+1. Install NeoForge 21.8.52 for Minecraft 1.21.8
 2. Place `viabedrockutility-1.0.0.jar`, `bedrockcameralib-1.2.0.jar`, and `beparticle-1.0.0.jar` into the client `mods/` directory
 3. Configure ViaProxy to connect to a Bedrock server
 4. Launch the game and connect through the ViaProxy proxy
