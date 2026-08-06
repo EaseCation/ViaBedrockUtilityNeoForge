@@ -44,6 +44,9 @@ public class ViaBedrockUtilityNeoForge {
 		NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent.AfterOpaqueBlocks event) -> {
 			AnimationBudget.reset();
 			FrozenMeshDrawQueue.clear();
+			// Only name tags submitted after the main opaque pass belong to the main camera. Iris has
+			// already rendered shadow-map entities with a different projection and no AfterEntities event.
+			DeferredNameTag.beginMainEntityPass();
 		});
 		// Replay VBU name tags after all entity geometry is drawn so they show through entities
 		// (faint) instead of being painted over. See DeferredNameTag for the rationale.
@@ -52,6 +55,8 @@ public class ViaBedrockUtilityNeoForge {
 				FrozenMeshDrawQueue.flush();
 				DeferredNameTag.flush();
 			} finally {
+				// Prevent an exception in either deferred renderer from leaving the next auxiliary pass armed.
+				DeferredNameTag.endMainEntityPass();
 				VbuRenderMetrics.endFrame();
 			}
 		});

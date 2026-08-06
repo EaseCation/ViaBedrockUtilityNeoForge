@@ -16,7 +16,10 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * geometry instead of interleaved with it. See {@link DeferredNameTag} for the full rationale.
  *
  * <p>Both {@code drawInBatch} calls inside {@code renderNameTag} (the faint SEE_THROUGH pass and the opaque
- * NORMAL pass) share this one signature, so a single redirect covers both.
+ * NORMAL pass) share this one signature, so a single redirect covers both. Capture is restricted to VBU's
+ * explicit main-view entity window. Iris renders shadow-map entities through the same method with a different
+ * camera and no NeoForge {@code AfterEntities} event; those calls must remain inline or their shadow-space
+ * matrices will be replayed later in screen space.
  *
  * <p>Deferring <b>all</b> name tags - not just VBU's custom entity/player renderers - is deliberate:
  * "floating text" on servers is implemented via armor-stand name tags (which also flow through this very
@@ -39,7 +42,8 @@ public class EntityRendererNameTagMixin {
                                                 final int color, final boolean dropShadow, final Matrix4f pose,
                                                 final MultiBufferSource bufferSource, final Font.DisplayMode mode,
                                                 final int backgroundColor, final int packedLight) {
-        if (ViaBedrockUtility.getInstance().isViaBedrockPresent()) {
+        if (ViaBedrockUtility.getInstance().isViaBedrockPresent()
+                && DeferredNameTag.isMainEntityPassActive()) {
             DeferredNameTag.enqueue(font, text, x, y, color, pose, mode, backgroundColor, packedLight);
         } else {
             font.drawInBatch(text, x, y, color, dropShadow, pose, bufferSource, mode, backgroundColor, packedLight);

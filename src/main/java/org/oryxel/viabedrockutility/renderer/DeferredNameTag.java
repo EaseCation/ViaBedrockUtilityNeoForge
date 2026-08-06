@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Collects entity/player name tag draws during the entity render pass and replays them after all
+ * Collects entity/player name tag draws during the main entity render pass and replays them after all
  * entity geometry has been flushed ({@link net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterEntities}).
  *
  * <p>Why: vanilla draws the name in two passes - a faint {@code SEE_THROUGH} pass (no depth write) and
@@ -27,8 +27,15 @@ import java.util.Map;
  * pass shows through every entity (like it already does through blocks) and the opaque pass shows only
  * where the name is unobscured - independent of entity render order.
  *
- * <p>Render-thread confined: {@link #enqueue} runs during entity rendering and {@link #flush} during the
- * AfterEntities stage, both on the render thread, so no synchronization is needed.
+ * <p>The queue is explicitly opened by {@link #beginMainEntityPass()} after opaque blocks and closed by
+ * {@link #flush()} after main-view entities. Shader mods such as Iris render entities once more into a shadow
+ * map before this window. Those auxiliary renders use a different camera/projection and do not emit NeoForge's
+ * {@code AfterEntities} event, so accepting their matrices would leak shadow-space labels into the main-view
+ * replay. {@link #isMainEntityPassActive()} lets the name-tag redirect retain inline rendering outside the
+ * main-view window instead.
+ *
+ * <p>Render-thread confined: all lifecycle and queue methods run on the render thread, so no synchronization
+ * is needed.
  */
 public final class DeferredNameTag {
 
@@ -37,6 +44,8 @@ public final class DeferredNameTag {
     }
 
     private static final List<Entry> QUEUE = new ArrayList<>();
+
+    private static boolean mainEntityPassActive;
 
     // Cache of Font.PreparedText (the laid-out glyph list) keyed by text content + color/bg + screen offset.
     // vanilla drawInBatch == prepareText(...).visit(...); prepareText (Font$PreparedTextBuilder.accept: glyph
@@ -84,6 +93,32 @@ public final class DeferredNameTag {
     }
 
     /**
+     * Opens the main-view entity capture window. Any unconsumed entries are from an incomplete or auxiliary
+     * render pass and must not be replayed with the new main-view projection.
+     */
+    public static void beginMainEntityPass() {
+        clearPending();
+        mainEntityPassActive = true;
+    }
+
+    /**
+     * Returns whether name tags currently belong to the main-view entity pass and may be safely deferred to
+     * {@link #flush()}. Calls outside this window must keep their original inline buffer/source semantics.
+     */
+    public static boolean isMainEntityPassActive() {
+        return mainEntityPassActive;
+    }
+
+    /**
+     * Closes the capture window and discards anything that could not be replayed. This is also the failure-path
+     * cleanup used when an earlier end-of-entity renderer throws before {@link #flush()} completes.
+     */
+    public static void endMainEntityPass() {
+        mainEntityPassActive = false;
+        clearPending();
+    }
+
+    /**
      * Capture one {@code Font.drawInBatch} call for deferred replay. The {@code pose} is the live
      * {@code poseStack.last().pose()} which is reused/mutated after the caller returns, so it is copied here.
      */
@@ -97,6 +132,7 @@ public final class DeferredNameTag {
      * NORMAL pass) after every entity body has been drawn, then flush once and clear.
      */
     public static void flush() {
+        mainEntityPassActive = false;
         if (QUEUE.isEmpty()) {
             return;
         }
