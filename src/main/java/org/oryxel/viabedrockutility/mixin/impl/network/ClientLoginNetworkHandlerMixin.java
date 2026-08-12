@@ -6,8 +6,10 @@ import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
 import net.minecraft.network.protocol.login.ClientboundLoginFinishedPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.payload.MinecraftRegisterPayload;
+import net.neoforged.neoforge.network.registration.ChannelAttributes;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
+import org.oryxel.viabedrockutility.payload.PlayerStatePayload;
 import org.oryxel.viabedrockutility.payload.impl.camera.CameraPayload;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -30,10 +32,13 @@ public class ClientLoginNetworkHandlerMixin {
         // Let ViaBedrock know that we want to receive full bedrock pack, also we have to do this to send it early.
         // Also use a different identifier to avoiding sending the same one twice.
         ViaBedrockUtility.getInstance().setViaBedrockPresent(false);
+        ViaBedrockUtility.getInstance().resetPlayerState();
+        ChannelAttributes.getOrCreateAdHocChannels(this.connection).add(PlayerStatePayload.TYPE.id());
         ViaBedrockUtilityNeoForge.LOGGER.info("[Handshake] Login success, sending confirm channel registration to ViaBedrock...");
         this.connection.send(new ServerboundCustomPayloadPacket(new MinecraftRegisterPayload(Set.of(
                 ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "confirm"),
-                ResourceLocation.fromNamespaceAndPath(CameraPayload.CONFIRM_CHANNEL_ID, CameraPayload.CONFIRM_CHANNEL_PATH)
+                ResourceLocation.fromNamespaceAndPath(CameraPayload.CONFIRM_CHANNEL_ID, CameraPayload.CONFIRM_CHANNEL_PATH),
+                PlayerStatePayload.TYPE.id()
         ))));
     }
 }
