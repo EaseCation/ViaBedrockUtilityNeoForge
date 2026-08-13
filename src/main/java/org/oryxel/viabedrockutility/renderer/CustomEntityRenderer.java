@@ -65,6 +65,10 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     private long queryRebakeNotBeforeNanos;
     private boolean clearFailuresBeforeQueryRebake;
     private boolean hasRetainedAnimatedPose;
+    private long poseRevision;
+    private int meshBudgetDecisionFrame = Integer.MIN_VALUE;
+    private boolean meshRebuildGranted;
+    private boolean forceMeshRebuildThisFrame;
     // Resolved once per entity model: each non-wildcard part_visibility rule pre-mapped to its target
     // ModelPart[], plus a snapshot of allParts(). Lets applyPartVisibility iterate arrays every frame
     // instead of doing parsedPV.entrySet() iteration + partsByName.get() (HashMap get/hashCode) and
@@ -129,8 +133,10 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         this.renderFrameCounter++;
 
         LodConfig config = LodConfig.getInstance();
+        if (!config.isFrozenMeshEnabled() && !this.frozenEntries.isEmpty()) {
+            this.invalidateFrozenMeshes("cache_disabled");
+        }
         boolean queryRebakePending = this.isQueryRebakePending();
-        FrozenMeshState previousFrozenState = this.frozenState.state();
         boolean allowFrozenPose = config.isFrozenMeshEnabled()
                 && !this.explicitAnimationActive
                 && this.forcedDynamicAnimationFrames == 0
@@ -138,16 +144,13 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         FrozenMeshState currentFrozenState = this.frozenState.update(
                 allowFrozenPose, state.getDistanceFromCamera(),
                 config.getFrozenMeshEnterDistance(), config.getFrozenMeshExitDistance());
-        if (currentFrozenState == FrozenMeshState.DYNAMIC
-                && previousFrozenState != FrozenMeshState.DYNAMIC) {
-            this.invalidateFrozenMeshes("near_transition");
-        }
         boolean useFrozenPose = currentFrozenState != FrozenMeshState.DYNAMIC;
         boolean initializeFrozenPose = this.frozenState.requiresInitialPose(this.hasRetainedAnimatedPose);
 
         // Distance-based LOD: skip animation computation for distant entities (configurable)
         boolean forceAnimationUpdate = initializeFrozenPose || this.explicitAnimationActive
                 || this.forcedDynamicAnimationFrames > 0;
+        this.forceMeshRebuildThisFrame = forceAnimationUpdate;
         boolean shouldAnimate = forceAnimationUpdate || (!useFrozenPose
                 && config.shouldAnimate(state.getDistanceFromCamera(), this.renderFrameCounter));
 
@@ -158,6 +161,14 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         if (shouldAnimate && !forceAnimationUpdate && !AnimationBudget.tryAcquire()) {
             final int interval = config.getAnimationThrottleInterval();
             shouldAnimate = interval <= 1 || (this.renderFrameCounter % interval == 0);
+        }
+        // Once every model layer has a reusable pose mesh, animation and mesh expansion become one
+        // operation. If this entity misses the rotating rebuild budget, keep both its bones and GPU
+        // mesh at the previous revision instead of calculating a pose that cannot be displayed.
+        if (shouldAnimate && !forceAnimationUpdate && config.isFrozenMeshEnabled()
+                && this.hasCompleteReusablePoseMesh() && !this.tryAcquireMeshRebuildBudget()) {
+            shouldAnimate = false;
+            VbuRenderMetrics.recordPoseMeshBudgetDeferral();
         }
 
         final Scope frameScope;
@@ -175,6 +186,10 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
             }
         } else {
             frameScope = null;
+        }
+
+        if (shouldAnimate) {
+            this.poseRevision++;
         }
 
         float s = (this.ticker.getScale() != null) ? this.ticker.getScale() : 1.0F;
@@ -229,14 +244,16 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                         effectiveLight = scaleLight(light, model.controller().lightColorMultiplier());
                     }
 
-                    boolean queuedFrozen = false;
-                    if (useFrozenPose) {
-                        VbuRenderMetrics.recordFrozenCandidate();
-                        queuedFrozen = this.tryQueueFrozen(
+                    boolean queuedCachedMesh = false;
+                    if (config.isFrozenMeshEnabled()) {
+                        queuedCachedMesh = this.tryQueuePoseMesh(
                                 model, renderType, vertexConsumers, effectiveLight, flatLight,
                                 matrices.last().pose());
                     }
-                    if (!queuedFrozen) {
+                    if (useFrozenPose) {
+                        VbuRenderMetrics.recordFrozenCandidate();
+                    }
+                    if (!queuedCachedMesh) {
                         VertexConsumer vertexConsumer = vertexConsumers.getBuffer(renderType);
                         // Signal flat normals without wrapping the consumer, preserving Sodium's writer.
                         VbuCompileScratch.FLAT_NORMAL = flatLight;
@@ -327,55 +344,103 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         return false;
     }
 
-    private boolean tryQueueFrozen(Model model, RenderType renderType, MultiBufferSource vertexConsumers,
-                                   int effectiveLight, boolean flatLight, Matrix4f rootPose) {
-        String priorFailure = this.frozenFailures.get(model);
-        if (priorFailure != null) {
-            VbuRenderMetrics.recordFrozenFallback(priorFailure, 1);
-            return false;
-        }
+    private boolean tryQueuePoseMesh(Model model, RenderType renderType, MultiBufferSource vertexConsumers,
+                                     int effectiveLight, boolean flatLight, Matrix4f rootPose) {
+        FrozenMeshEntry entry = this.frozenEntries.get(model);
         if (!FrozenMeshEligibility.isRenderContextEligible(
                         renderType, model.texture(), vertexConsumers)
                 || !this.frozenStaticGeometrySafe.computeIfAbsent(
                         model, ignored -> !FrozenMeshEligibility.hasDynamicUv(model.model()))) {
+            if (entry != null && entry.isValid()) {
+                FrozenEntityMeshCache.global().remove(entry, "eligibility");
+                this.frozenEntries.remove(model);
+            }
             this.frozenFailures.put(model, "eligibility");
             VbuRenderMetrics.recordFrozenFallback("eligibility", 1);
             return false;
         }
+        String priorFailure = this.frozenFailures.get(model);
+        if (priorFailure != null) {
+            VbuRenderMetrics.recordFrozenFallback(priorFailure, 1);
+            return entry != null && FrozenEntityMeshCache.global().touch(entry)
+                    && FrozenMeshDrawQueue.enqueue(
+                            entry, rootPose, model.model(), effectiveLight, flatLight);
+        }
 
-        FrozenMeshEntry entry = this.frozenEntries.get(model);
         if (entry != null && entry.isFailed()) {
             this.frozenEntries.remove(model);
             this.frozenFailures.put(model, "draw_error");
             return false;
         }
-        if (entry != null && (!entry.isValid()
-                || entry.packedLight() != effectiveLight
-                || entry.renderType() != renderType)) {
-            if (entry.isValid()) {
-                FrozenEntityMeshCache.global().remove(entry,
-                        entry.packedLight() != effectiveLight ? "light" : "material");
-            }
+        if (entry != null && !entry.isValid()) {
             this.frozenEntries.remove(model);
             entry = null;
             this.frozenState.requestBake();
         }
 
-        if (entry == null) {
+        boolean stalePose = entry == null
+                || entry.poseRevision() != this.poseRevision
+                || entry.packedLight() != effectiveLight
+                || entry.renderType() != renderType;
+        if (stalePose && this.tryAcquireMeshRebuildBudget()) {
+            FrozenMeshEntry previous = entry;
             entry = this.bakeFrozenMesh(model, renderType, effectiveLight, flatLight);
-            if (entry == null) {
-                return false;
+            if (entry != null) {
+                this.frozenEntries.put(model, entry);
+            } else {
+                entry = previous;
+                if (previous != null && previous.isValid()) {
+                    // A transient upload failure must not strand an otherwise drawable entity on an
+                    // old pose forever. Retain the old mesh now and retry on a later budget window.
+                    this.frozenFailures.remove(model);
+                }
             }
-            this.frozenEntries.put(model, entry);
-        } else {
-            FrozenEntityMeshCache.global().touch(entry);
+            if (previous != null && entry != previous && previous.isValid()) {
+                FrozenEntityMeshCache.global().remove(previous,
+                        previous.packedLight() != effectiveLight ? "light"
+                                : previous.renderType() != renderType ? "material" : "pose_changed");
+            }
+        }
+
+        if (entry == null || !FrozenEntityMeshCache.global().touch(entry)) {
+            this.frozenEntries.remove(model);
+            return false;
+        }
+        if (!stalePose || entry.poseRevision() != this.poseRevision) {
             VbuRenderMetrics.recordFrozenCacheHit();
+        }
+        if (entry.poseRevision() != this.poseRevision) {
+            VbuRenderMetrics.recordPoseMeshStaleDraw();
         }
 
         if (!FrozenMeshDrawQueue.enqueue(
                 entry, rootPose, model.model(), effectiveLight, flatLight)) {
             VbuRenderMetrics.recordFrozenFallback("draw_error", 1);
             return false;
+        }
+        return true;
+    }
+
+    private boolean tryAcquireMeshRebuildBudget() {
+        if (this.forceMeshRebuildThisFrame) {
+            return true;
+        }
+        if (this.meshBudgetDecisionFrame != this.renderFrameCounter) {
+            this.meshBudgetDecisionFrame = this.renderFrameCounter;
+            this.meshRebuildGranted = PoseMeshRebuildBudget.tryAcquire();
+        }
+        return this.meshRebuildGranted;
+    }
+
+    private boolean hasCompleteReusablePoseMesh() {
+        if (this.models.isEmpty() || this.frozenEntries.size() < this.models.size()) {
+            return false;
+        }
+        for (Model model : this.models) {
+            FrozenMeshEntry entry = this.frozenEntries.get(model);
+            if (entry == null || !entry.isValid() || entry.isFailed()) {
+                return false;
+            }
         }
         return true;
     }
@@ -398,7 +463,8 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                         model.key() + "/" + model.geometry(), mesh.vertexBuffer());
                 FrozenMeshEntry entry = new FrozenMeshEntry(
                         handle, renderType, mesh.drawState().vertexCount(),
-                        mesh.drawState().indexCount(), mesh.drawState().mode(), effectiveLight);
+                        mesh.drawState().indexCount(), mesh.drawState().mode(), effectiveLight,
+                        this.poseRevision);
                 if (!FrozenEntityMeshCache.global().add(entry)) {
                     this.frozenFailures.put(model, "cache_full");
                     VbuRenderMetrics.recordFrozenFallback("cache_full", 1);
@@ -430,7 +496,9 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     }
 
     private void invalidateFrozenPose(String reason) {
-        this.removeFrozenEntries(reason);
+        // Preserve the previous GPU mesh as a safe visual fallback until the rebuild budget grants
+        // this entity a slot. The next animated pose receives another revision as normal.
+        this.poseRevision++;
         this.frozenState.reset();
     }
 

@@ -10,17 +10,24 @@ public final class FrozenMeshEntry implements AutoCloseable {
     private final int indexCount;
     private final VertexFormat.Mode mode;
     private final int packedLight;
+    private final long poseRevision;
     private boolean valid = true;
     private boolean failed;
 
     public FrozenMeshEntry(FrozenMeshBackend.Handle handle, RenderType renderType, int vertexCount,
                            int indexCount, VertexFormat.Mode mode, int packedLight) {
+        this(handle, renderType, vertexCount, indexCount, mode, packedLight, 0L);
+    }
+
+    public FrozenMeshEntry(FrozenMeshBackend.Handle handle, RenderType renderType, int vertexCount,
+                           int indexCount, VertexFormat.Mode mode, int packedLight, long poseRevision) {
         this.handle = handle;
         this.renderType = renderType;
         this.vertexCount = vertexCount;
         this.indexCount = indexCount;
         this.mode = mode;
         this.packedLight = packedLight;
+        this.poseRevision = poseRevision;
     }
 
     public FrozenMeshBackend.Handle handle() { return handle; }
@@ -29,6 +36,7 @@ public final class FrozenMeshEntry implements AutoCloseable {
     public int indexCount() { return indexCount; }
     public VertexFormat.Mode mode() { return mode; }
     public int packedLight() { return packedLight; }
+    public long poseRevision() { return poseRevision; }
     public long sizeBytes() { return handle.sizeBytes(); }
     public boolean isValid() { return valid && !handle.isClosed(); }
     public boolean isFailed() { return failed; }

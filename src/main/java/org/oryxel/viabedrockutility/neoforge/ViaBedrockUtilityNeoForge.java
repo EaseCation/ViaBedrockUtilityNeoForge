@@ -14,6 +14,7 @@ import org.oryxel.viabedrockutility.renderer.AnimationBudget;
 import org.oryxel.viabedrockutility.renderer.DeferredNameTag;
 import org.oryxel.viabedrockutility.renderer.FrozenEntityMeshCache;
 import org.oryxel.viabedrockutility.renderer.FrozenMeshDrawQueue;
+import org.oryxel.viabedrockutility.renderer.PoseMeshRebuildBudget;
 import org.oryxel.viabedrockutility.renderer.VbuRenderMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +44,7 @@ public class ViaBedrockUtilityNeoForge {
 		// the entity pass). Caps full-rate MoLang animation count in dense scenes. See AnimationBudget.
 		NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent.AfterOpaqueBlocks event) -> {
 			AnimationBudget.reset();
+			PoseMeshRebuildBudget.reset();
 			FrozenMeshDrawQueue.clear();
 			// Only name tags submitted after the main opaque pass belong to the main camera. Iris has
 			// already rendered shadow-map entities with a different projection and no AfterEntities event.
@@ -58,6 +60,7 @@ public class ViaBedrockUtilityNeoForge {
 				// Prevent an exception in either deferred renderer from leaving the next auxiliary pass armed.
 				DeferredNameTag.endMainEntityPass();
 				VbuRenderMetrics.endFrame();
+				PoseMeshRebuildBudget.endFrame();
 			}
 		});
 		// Keep cached player Bedrock skins/models across ordinary RemoveEntity/AddPlayer cycles. Nukkit

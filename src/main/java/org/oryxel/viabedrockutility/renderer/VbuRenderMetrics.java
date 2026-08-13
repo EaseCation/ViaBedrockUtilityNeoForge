@@ -38,6 +38,8 @@ public final class VbuRenderMetrics {
     private static long frozenReloadInvalidations;
     private static long frozenLruInvalidations;
     private static long frozenLifecycleInvalidations;
+    private static long poseMeshBudgetDeferrals;
+    private static long poseMeshStaleDraws;
 
     private VbuRenderMetrics() {
     }
@@ -74,6 +76,8 @@ public final class VbuRenderMetrics {
         frozenReloadInvalidations = 0;
         frozenLruInvalidations = 0;
         frozenLifecycleInvalidations = 0;
+        poseMeshBudgetDeferrals = 0;
+        poseMeshStaleDraws = 0;
     }
 
     public static void endFrame() {
@@ -113,6 +117,8 @@ public final class VbuRenderMetrics {
             event.frozenReloadInvalidations = frozenReloadInvalidations;
             event.frozenLruInvalidations = frozenLruInvalidations;
             event.frozenLifecycleInvalidations = frozenLifecycleInvalidations;
+            event.poseMeshBudgetDeferrals = poseMeshBudgetDeferrals;
+            event.poseMeshStaleDraws = poseMeshStaleDraws;
             event.commit();
         }
     }
@@ -221,6 +227,20 @@ public final class VbuRenderMetrics {
         }
     }
 
+    public static void recordPoseMeshBudgetDeferral() {
+        if (ENABLED && frameActive) {
+            hasVbuWork = true;
+            poseMeshBudgetDeferrals++;
+        }
+    }
+
+    public static void recordPoseMeshStaleDraw() {
+        if (ENABLED && frameActive) {
+            hasVbuWork = true;
+            poseMeshStaleDraws++;
+        }
+    }
+
     public static void recordFrozenFallback(String reason, long count) {
         if (!ENABLED || !frameActive) {
             return;
@@ -282,5 +302,7 @@ public final class VbuRenderMetrics {
         @Label("Frozen Reload Invalidations") public long frozenReloadInvalidations;
         @Label("Frozen LRU Invalidations") public long frozenLruInvalidations;
         @Label("Frozen Lifecycle Invalidations") public long frozenLifecycleInvalidations;
+        @Label("Pose Mesh Budget Deferrals") public long poseMeshBudgetDeferrals;
+        @Label("Pose Mesh Stale Draws") public long poseMeshStaleDraws;
     }
 }
