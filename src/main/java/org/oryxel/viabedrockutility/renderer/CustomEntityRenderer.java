@@ -56,6 +56,8 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     private final Map<Model, String> frozenFailures = new IdentityHashMap<>();
     private final Map<Model, Boolean> frozenStaticGeometrySafe = new IdentityHashMap<>();
     private final FrozenMeshStateController frozenState = new FrozenMeshStateController();
+    // A broken model can throw every frame; preserve the first diagnostic without repeating file I/O.
+    private boolean renderFailureReported;
     // Explicit actions must remain visible at distance until their animator finishes.
     private boolean explicitAnimationActive;
     // Metadata changes get one uncached pose refresh before distance freezing resumes.
@@ -243,12 +245,20 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                     }
                 }
             } catch (StackOverflowError soe) {
-                ViaBedrockUtilityNeoForge.LOGGER.error(
-                        "[VBU] StackOverflow rendering model! key='{}', geometry='{}', texture='{}'",
-                        model.key(), model.geometry(), model.texture());
-                dumpModelHierarchy(model.model().root(), "", 0);
+                if (!this.renderFailureReported) {
+                    this.renderFailureReported = true;
+                    ViaBedrockUtilityNeoForge.LOGGER.error(
+                            "[VBU] StackOverflow rendering model! key='{}', geometry='{}', texture='{}'",
+                            model.key(), model.geometry(), model.texture());
+                    dumpModelHierarchy(model.model().root(), "", 0);
+                }
             } catch (Exception e) {
-                ViaBedrockUtilityNeoForge.LOGGER.debug("[Render] Error rendering model key={}, texture={}", model.key(), model.texture(), e);
+                if (!this.renderFailureReported) {
+                    this.renderFailureReported = true;
+                    ViaBedrockUtilityNeoForge.LOGGER.debug(
+                            "[Render] Error rendering model key={}, texture={}",
+                            model.key(), model.texture(), e);
+                }
             } finally {
                 // Always clear the flat-normal flag after each model so it never leaks into the next one
                 // (which may not be emissive). Render-thread only, so no synchronization needed.

@@ -6,9 +6,8 @@ import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import org.oryxel.viabedrockutility.renderer.CustomEntityRenderer;
 import net.minecraft.world.entity.Entity;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
-import org.oryxel.viabedrockutility.entity.CustomEntityTicker;
-import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
+import org.oryxel.viabedrockutility.renderer.EntityRendererLookup;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -18,26 +17,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(EntityRenderDispatcher.class)
 public abstract class EntityRenderDispatcherMixin {
     // Intercept both custom player renderers and custom entity renderers before vanilla lookup occurs.
-    private int mixinLogCounter = 0;
     @Inject(method = "getRenderer(Lnet/minecraft/world/entity/Entity;)Lnet/minecraft/client/renderer/entity/EntityRenderer;", at = @At("HEAD"), cancellable = true)
     public <T extends Entity> void getRenderer(T entity, CallbackInfoReturnable<EntityRenderer<? super T, ?>> cir) {
         if (!ViaBedrockUtility.getInstance().isViaBedrockPresent()) {
             return;
         }
 
-        final EntityRenderer<?, ?> playerRenderer = ViaBedrockUtility.getInstance().getPayloadHandler().getCachedPlayerRenderers().get(entity.getUUID());
-        if (playerRenderer != null) {
-            cir.setReturnValue((EntityRenderer<? super T, ?>) playerRenderer);
-            return;
-        }
-
-        final CustomEntityTicker data = ViaBedrockUtility.getInstance().getPayloadHandler().getCachedCustomEntities().get(entity.getUUID());
-        if (data != null && data.getRenderer() != null) {
-            if (mixinLogCounter++ % 200 == 0) {
-                ViaBedrockUtilityNeoForge.LOGGER.debug("[Mixin] getRenderer intercepted for entity uuid={}, returning custom renderer with {} models",
-                    entity.getUUID(), data.getRenderer().getModels().size());
-            }
-            cir.setReturnValue((EntityRenderer<? super T, ?>) data.getRenderer());
+        final EntityRenderer<?, ?> renderer = EntityRendererLookup.find(
+                entity.getUUID(),
+                ViaBedrockUtility.getInstance().getPayloadHandler()
+        );
+        if (renderer != null) {
+            cir.setReturnValue((EntityRenderer<? super T, ?>) renderer);
         }
     }
 

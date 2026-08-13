@@ -99,6 +99,7 @@ dependencies {
     testImplementation 'com.google.code.gson:gson:2.10.1'
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.objenesis:objenesis:3.3'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     // The default test runtime deliberately excludes Sodium. Opt in to the integration profile with
