@@ -830,8 +830,12 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
     private boolean ensureAncestorsVisibleImpl(ModelPart part, int depth) {
         if (depth > 200) {
-            ViaBedrockUtilityNeoForge.LOGGER.error("[VBU] ensureAncestorsVisible depth > 200 — likely cycle! bone='{}'",
-                    ((IModelPart) ((Object) part)).viaBedrockUtility$getName());
+            if (!this.renderFailureReported) {
+                this.renderFailureReported = true;
+                ViaBedrockUtilityNeoForge.LOGGER.error(
+                        "[VBU] ensureAncestorsVisible depth > 200 - likely cycle! bone='{}'",
+                        ((IModelPart) ((Object) part)).viaBedrockUtility$getName());
+            }
             return false;
         }
         boolean anyChildVisible = false;
