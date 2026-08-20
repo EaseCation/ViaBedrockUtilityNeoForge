@@ -17,26 +17,10 @@ public class MinecraftClientMixin {
     private void disconnect(Screen disconnectionScreen, boolean transferring, CallbackInfo ci) {
         FrozenMeshDrawQueue.clear();
         FrozenEntityMeshCache.global().invalidateAll("disconnect");
-        ViaBedrockUtility.getInstance().setViaBedrockPresent(false);
-        ViaBedrockUtility.getInstance().resetPlayerState();
-        ViaBedrockUtility.getInstance().getAttachableRuntimeManager().clear();
-        if (ViaBedrockUtility.getInstance().getPayloadHandler() == null) {
-            return;
-        }
-
-        ViaBedrockUtility.getInstance().getPayloadHandler().getCachedPlayerRenderers().clear();
-        ViaBedrockUtility.getInstance().getPayloadHandler().getCachedCustomEntities().clear();
-        ViaBedrockUtility.getInstance().getPayloadHandler().getCachedPlayerCapes().clear();
-        ViaBedrockUtility.getInstance().getPayloadHandler().getCachedPlayerSkins().clear();
-        ViaBedrockUtility.getInstance().getPayloadHandler().getCachedSkinInfo().clear();
-        ViaBedrockUtility.getInstance().getPayloadHandler().getPendingAnimations().clear();
-        ViaBedrockUtility.getInstance().getPayloadHandler().getPendingPayloads().clear();
+        ViaBedrockUtility.getInstance().endConnection();
 
         // Reset BECamera state
         CameraManager.INSTANCE.resetAll();
-
-        // Clear BEParticle emitters (keep definitions for reconnect)
-        net.easecation.beparticle.ParticleManager.INSTANCE.clearEmitters();
     }
 
     @Inject(method = "close", at = @At("HEAD"))

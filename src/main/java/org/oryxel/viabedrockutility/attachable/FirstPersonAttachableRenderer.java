@@ -31,8 +31,9 @@ public final class FirstPersonAttachableRenderer {
         }
         final var renderer = ViaBedrockUtility.getInstance().getPayloadHandler()
                 .getCachedPlayerRenderers().get(player.getUUID());
+        final AttachableItemSnapshot item = ViaBedrockUtility.getInstance()
+                .getAttachableRuntimeManager().snapshotIfCandidate(event.getItemStack());
         if (!(renderer instanceof CustomPlayerRenderer customRenderer)) {
-            final AttachableItemSnapshot item = AttachableItemSnapshot.of(event.getItemStack());
             if (!item.isEmpty() && DIAGNOSED.add("renderer:" + item.itemIdentifier())) {
                 ViaBedrockUtilityNeoForge.LOGGER.debug(
                         "[Attachable] First-person event for {}, item={}, itemClass={}, customRenderer={}",
@@ -53,7 +54,6 @@ public final class FirstPersonAttachableRenderer {
                 player.getUUID(), "minecraft:player", player.getAttackAnim(partialTick),
                 player.getXRot(partialTick), Mth.wrapDegrees(player.getYRot(partialTick) - bodyYaw));
 
-        final AttachableItemSnapshot item = AttachableItemSnapshot.of(event.getItemStack());
         if (!item.isEmpty() && DIAGNOSED.add("entry:" + item.itemIdentifier())) {
             ViaBedrockUtilityNeoForge.LOGGER.debug(
                     "[Attachable] First-person event reached runtime manager: owner={}, item={}, itemClass={}, metadata={}",

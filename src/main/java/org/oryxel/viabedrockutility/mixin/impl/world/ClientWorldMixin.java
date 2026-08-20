@@ -21,10 +21,7 @@ public abstract class ClientWorldMixin {
 
         Entity entity = ((ClientLevel) (Object) this).getEntity(entityId);
         if (entity != null) {
-            var ticker = handler.getCachedCustomEntities().remove(entity.getUUID());
-            if (ticker != null) {
-                ticker.getRenderer().invalidateFrozenMeshes("entity_removed");
-            }
+            handler.removeCustomEntity(entity.getUUID());
         }
     }
 }

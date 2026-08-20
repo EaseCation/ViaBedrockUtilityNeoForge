@@ -49,10 +49,10 @@ public class CustomEntityTicker implements AnimationEventListener {
     private Set<ActorFlags> entityFlags = EnumSet.noneOf(ActorFlags.class);
 
     private final CustomEntityPayloadHandler payloadHandler = ViaBedrockUtility.getInstance().getPayloadHandler();
-    private final PackManager packManager = ViaBedrockUtility.getInstance().getPackManager();
-    private final org.oryxel.viabedrockutility.pack.definitions.MaterialDefinitions vbuMaterialDefinitions =
-            new org.oryxel.viabedrockutility.pack.definitions.MaterialDefinitions(this.packManager);
+    private final PackManager packManager;
+    private final org.oryxel.viabedrockutility.pack.definitions.MaterialDefinitions vbuMaterialDefinitions;
 
+    @Getter
     private final EntityDefinitions.EntityDefinition entityDefinition;
     private final Map<String, String> inverseGeometryMap = new HashMap<>();
     private final Map<String, String> inverseTextureMap = new HashMap<>();
@@ -112,11 +112,19 @@ public class CustomEntityTicker implements AnimationEventListener {
     private boolean hasPlayInitAnimation;
 
     public CustomEntityTicker(final EntityDefinitions.EntityDefinition entityDefinition) {
+        this(Objects.requireNonNull(ViaBedrockUtility.getInstance().getPackManager(), "packManager"),
+                entityDefinition);
+    }
+
+    public CustomEntityTicker(final PackManager packManager,
+                              final EntityDefinitions.EntityDefinition entityDefinition) {
+        this.packManager = Objects.requireNonNull(packManager, "packManager");
+        this.vbuMaterialDefinitions =
+                new org.oryxel.viabedrockutility.pack.definitions.MaterialDefinitions(this.packManager);
+        this.entityDefinition = Objects.requireNonNull(entityDefinition, "entityDefinition");
         final Minecraft client = Minecraft.getInstance();
         final EntityRendererProvider.Context context = EntityRendererContextUtil.build(client);
         this.renderer = new CustomEntityRenderer<>(this, new CopyOnWriteArrayList<>(), context);
-
-        this.entityDefinition = entityDefinition;
 
         // Load particle_effects alias map from entity definition
         final Map<String, String> pe = entityDefinition.entityData().getParticleEffects();

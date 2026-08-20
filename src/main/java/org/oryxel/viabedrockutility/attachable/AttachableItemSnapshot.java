@@ -17,6 +17,11 @@ public record AttachableItemSnapshot(ResourceLocation itemIdentifier, ItemStack 
                 : new AttachableItemSnapshot(BuiltInRegistries.ITEM.getKey(stack.getItem()), stack);
     }
 
+    static AttachableItemSnapshot of(ResourceLocation itemIdentifier, ItemStack stack) {
+        return itemIdentifier == null || stack == null || stack.isEmpty()
+                ? EMPTY : new AttachableItemSnapshot(itemIdentifier, stack);
+    }
+
     public boolean isEmpty() {
         return itemIdentifier == null || stack.isEmpty();
     }

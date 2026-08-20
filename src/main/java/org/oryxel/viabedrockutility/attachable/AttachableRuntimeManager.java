@@ -8,9 +8,12 @@ import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.ItemDisplayContext;
+import net.minecraft.world.item.ItemStack;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.attachable.AttachableDebugLog.AttemptStage;
 import org.oryxel.viabedrockutility.attachable.AttachableDebugLog.DebugAttempt;
@@ -19,10 +22,11 @@ import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * VBU owner/hand attachable facade: entry points, ticking, clearing, lifecycle and delegation.
@@ -34,10 +38,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class AttachableRuntimeManager {
     private static final long RUNTIME_TTL_TICKS = 20L * 30L;
+    private static final long DEBUG_ATTEMPT_TTL_TICKS = 20L * 30L;
     private final AttachableRuntimeRegistry<AttachableRuntimeInstance> runtimes = new AttachableRuntimeRegistry<>();
     private final DetachedAttachableRenderer detached = new DetachedAttachableRenderer();
-    private final Map<AttachableRuntimeRegistry.RuntimeKey, DebugAttempt> debugAttempts = new ConcurrentHashMap<>();
+    private final AttachableDebugAttemptStore debugAttempts = new AttachableDebugAttemptStore();
     private final AttachableClientTickCounter tickCounter = new AttachableClientTickCounter();
+    private volatile Set<ResourceLocation> candidateItemIdentifiers = Set.of();
 
     public AttachableRenderResult renderThirdPerson(PlayerRenderState state, AttachableItemSnapshot item,
                                                     AttachableQueryContext.LogicalHand hand, HumanoidArm physicalArm,
@@ -67,6 +73,7 @@ public final class AttachableRuntimeManager {
         final AttachableClientTickCounter.Snapshot clock = tickCounter.advance(minecraft.level);
         if (clock.levelChanged()) {
             runtimes.clear();
+            debugAttempts.clear();
         }
         if (minecraft.level == null) {
             clear();
@@ -84,6 +91,7 @@ public final class AttachableRuntimeManager {
             }
         }
         runtimes.evictOlderThan(tick - RUNTIME_TTL_TICKS);
+        debugAttempts.evictOlderThan(tick - DEBUG_ATTEMPT_TTL_TICKS);
     }
 
     /**
@@ -129,9 +137,37 @@ public final class AttachableRuntimeManager {
     }
 
     public List<DebugAttempt> debugAttempts() {
-        return debugAttempts.values().stream()
-                .sorted(java.util.Comparator.comparing(attempt -> attempt.runtimeKey().toString()))
-                .toList();
+        return debugAttempts.snapshot();
+    }
+
+    /** Builds the immutable hot-path index once per pack generation. */
+    public void onPackManagerChanged(PackManager packs) {
+        if (packs == null || packs.getAttachableDefinitions() == null) {
+            candidateItemIdentifiers = Set.of();
+            return;
+        }
+        final Set<ResourceLocation> next = new LinkedHashSet<>();
+        for (String rawIdentifier : packs.getAttachableDefinitions().getItemCandidates().keySet()) {
+            try {
+                next.add(ResourceLocation.parse(rawIdentifier));
+            } catch (RuntimeException exception) {
+                AttachableDebugLog.warnOnce("candidate-item:" + rawIdentifier,
+                        "[Attachable] Ignoring invalid item identifier '" + rawIdentifier + "'", exception);
+            }
+        }
+        candidateItemIdentifiers = Set.copyOf(next);
+    }
+
+    /** Captures immutable item state only when the current generation indexes that item. */
+    public AttachableItemSnapshot snapshotIfCandidate(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return AttachableItemSnapshot.EMPTY;
+        }
+        final ResourceLocation identifier = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (!candidateItemIdentifiers.contains(identifier)) {
+            return AttachableItemSnapshot.EMPTY;
+        }
+        return AttachableItemSnapshot.of(identifier, stack);
     }
 
     public boolean renderDetached(AttachableItemSnapshot item, ItemDisplayContext displayContext,
@@ -150,19 +186,20 @@ public final class AttachableRuntimeManager {
         }
         final ViaBedrockUtility.PackGeneration generation = ViaBedrockUtility.getInstance().getPackGeneration();
         final AttachableRuntimeRegistry.RuntimeKey key = new AttachableRuntimeRegistry.RuntimeKey(owner.uuid(), hand);
-        final PackManager packs = generation.manager();
-        if (packs == null || packs.getAttachableDefinitions() == null) {
-            recordAttempt(key, generation.generation(), item, view, AttemptStage.PACKS_UNAVAILABLE,
-                    0, "", List.of(), "", "PackManager or attachable index is unavailable");
-            return AttachableRenderResult.NOT_APPLICABLE;
-        }
-
         final Minecraft minecraft = Minecraft.getInstance();
         final AttachableClientTickCounter.Snapshot clock = tickCounter.synchronize(minecraft.level);
         if (clock.levelChanged()) {
             runtimes.clear();
+            debugAttempts.clear();
         }
         final long tick = clock.tick();
+        final PackManager packs = generation.manager();
+        if (packs == null || packs.getAttachableDefinitions() == null) {
+            recordAttempt(key, tick, generation.generation(), item, view, AttemptStage.PACKS_UNAVAILABLE,
+                    0, "", List.of(), "", "PackManager or attachable index is unavailable");
+            return AttachableRenderResult.NOT_APPLICABLE;
+        }
+
         final Entity ownerEntity = minecraft.level == null || owner.uuid() == null
                 ? null : minecraft.level.getPlayerByUUID(owner.uuid());
         final String itemIdentifier = item.itemIdentifier().toString();
@@ -171,7 +208,7 @@ public final class AttachableRuntimeManager {
                 AttachableCandidateMatcher.match(packs, owner, ownerEntity, item, hand, physicalArm, view,
                         tick, partialTick);
         if (candidate == null) {
-            recordAttempt(key, generation.generation(), item, view,
+            recordAttempt(key, tick, generation.generation(), item, view,
                     candidateCount == 0 ? AttemptStage.NO_CANDIDATES : AttemptStage.CONDITION_REJECTED,
                     candidateCount, "", List.of(), "",
                     candidateCount == 0 ? "No attachable is indexed for the Java item identifier"
@@ -181,7 +218,7 @@ public final class AttachableRuntimeManager {
 
         final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(playerModel);
         if (metadata == null) {
-            recordAttempt(key, generation.generation(), item, view, AttemptStage.METADATA_MISSING,
+            recordAttempt(key, tick, generation.generation(), item, view, AttemptStage.METADATA_MISSING,
                     candidateCount, candidate.definition().identifier(), List.of(), "",
                     "PlayerModel has no Bedrock metadata; attachable rendering is suppressed");
             AttachableDebugLog.warnOnce(candidate.definition().identifier() + ":metadata",
@@ -199,13 +236,13 @@ public final class AttachableRuntimeManager {
         final AttachableHostContext host = new AttachableHostContext(metadata);
         try {
             final boolean rendered = runtime.render(host, poses, buffers, packedLight, partialTick, hostMeshRenderer);
-            recordAttempt(key, generation.generation(), item, view,
+            recordAttempt(key, tick, generation.generation(), item, view,
                     rendered ? AttemptStage.RENDERED : AttemptStage.RUNTIME_REJECTED,
                     candidateCount, candidate.definition().identifier(), runtime.lastRenderPasses,
                     runtime.lastBinding, rendered ? "" : runtime.lastFailure);
             return rendered ? AttachableRenderResult.RENDERED : AttachableRenderResult.SUPPRESSED;
         } catch (Throwable throwable) {
-            recordAttempt(key, generation.generation(), item, view, AttemptStage.RUNTIME_EXCEPTION,
+            recordAttempt(key, tick, generation.generation(), item, view, AttemptStage.RUNTIME_EXCEPTION,
                     candidateCount, candidate.definition().identifier(), runtime.lastRenderPasses,
                     runtime.lastBinding, throwable.toString());
             AttachableDebugLog.warnOnce(candidate.definition().identifier() + ":runtime",
@@ -214,13 +251,13 @@ public final class AttachableRuntimeManager {
         }
     }
 
-    private void recordAttempt(AttachableRuntimeRegistry.RuntimeKey key, long generation,
+    private void recordAttempt(AttachableRuntimeRegistry.RuntimeKey key, long tick, long generation,
                                AttachableItemSnapshot item, AttachableQueryContext.ViewContext view,
                                AttemptStage stage, int candidates, String attachableIdentifier,
                                List<String> renderPasses, String bindingBone, String detail) {
         final DebugAttempt attempt = new DebugAttempt(key, generation, item.itemIdentifier().toString(), view,
                 stage, candidates, attachableIdentifier, renderPasses, bindingBone, detail);
-        final DebugAttempt previous = debugAttempts.put(key, attempt);
+        final DebugAttempt previous = debugAttempts.record(attempt, tick);
         if (!attempt.equals(previous)) {
             ViaBedrockUtilityNeoForge.LOGGER.debug("[Attachable] Attempt {}", attempt);
         }

@@ -16,6 +16,7 @@ import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 import org.oryxel.viabedrockutility.attachable.AttachableItemSnapshot;
 import org.oryxel.viabedrockutility.attachable.AttachableOwnerSnapshot;
+import org.oryxel.viabedrockutility.ViaBedrockUtility;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,9 +52,10 @@ public class CustomPlayerRenderer extends PlayerRenderer {
     @Override
     public void extractRenderState(AbstractClientPlayer player, PlayerRenderState state, float partialTick) {
         super.extractRenderState(player, state, partialTick);
+        final var attachables = ViaBedrockUtility.getInstance().getAttachableRuntimeManager();
         ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setHandSnapshots(
-                AttachableItemSnapshot.of(player.getMainHandItem()),
-                AttachableItemSnapshot.of(player.getOffhandItem()));
+                attachables.snapshotIfCandidate(player.getMainHandItem()),
+                attachables.snapshotIfCandidate(player.getOffhandItem()));
         ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setOwnerSnapshot(
                 new AttachableOwnerSnapshot(player.getUUID(), "minecraft:player",
                         player.getAttackAnim(partialTick), state.xRot,
@@ -78,8 +80,17 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         if (minecraft.level == null) return;
         final AttachableOwnerSnapshot owner = ((ICustomPlayerRendererHolder) state)
                 .viaBedrockUtility$getOwnerSnapshot();
+        final long tick = minecraft.level.getGameTime();
+        if (owner.uuid() == null || !ViaBedrockUtility.getInstance().getPlayerPoseDemand()
+                .isRequested(owner.uuid(), tick)) {
+            this.thirdPersonPose = null;
+            return;
+        }
         final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(this.model);
-        if (owner.uuid() == null || metadata == null) return;
+        if (metadata == null) {
+            this.thirdPersonPose = null;
+            return;
+        }
 
         // Entity rendering is camera-relative. Restoring the camera translation turns the exact
         // renderer-entry PoseStack (including scale, swimming/sleeping and mod transforms) into world space.
@@ -88,7 +99,7 @@ public class CustomPlayerRenderer extends PlayerRenderer {
                 .translation((float) cameraPosition.x, (float) cameraPosition.y, (float) cameraPosition.z)
                 .mul(poseStack.last().pose());
         this.thirdPersonPose = BedrockPlayerWorldPose.capture(
-                owner.uuid(), minecraft.level.getGameTime(), worldPresentation, metadata);
+                owner.uuid(), tick, worldPresentation, metadata);
     }
 
     public BedrockPlayerWorldPose thirdPersonPose(UUID ownerUuid, long currentTick) {

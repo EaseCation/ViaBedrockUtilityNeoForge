@@ -12,6 +12,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
+import org.oryxel.viabedrockutility.renderer.BedrockPlayerPoseDemand;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -30,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * identifier, an explicit bound/world placement and optional emitter variables.</p>
  */
 public final class BedrockParticleRuntime {
+    public static final String LIFECYCLE_OWNER = "viabedrockutility";
     private static final int MAX_PENDING_BOUND_EFFECTS = 1024;
     private final Set<String> warned = ConcurrentHashMap.newKeySet();
     private final BedrockPoseProvider poseProvider;
@@ -37,6 +39,10 @@ public final class BedrockParticleRuntime {
 
     public BedrockParticleRuntime() {
         this(new MinecraftBedrockPoseProvider());
+    }
+
+    public BedrockParticleRuntime(BedrockPlayerPoseDemand poseDemand) {
+        this(new MinecraftBedrockPoseProvider(poseDemand));
     }
 
     BedrockParticleRuntime(BedrockPoseProvider poseProvider) {
@@ -124,7 +130,8 @@ public final class BedrockParticleRuntime {
             }
             return ParticleManager.INSTANCE.spawnEmitter(new ParticleSpawnRequest(
                     identifier, anchor, variables == null ? Map.of() : variables,
-                    request.source(), 256, request.preEffectExpression(), variableSource
+                    request.source(), 256, request.preEffectExpression(), variableSource,
+                    LIFECYCLE_OWNER
             )) != null ? ParticleSpawnResult.SPAWNED : ParticleSpawnResult.FAILED;
         } catch (RuntimeException exception) {
             warnOnce("failed:" + identifier,

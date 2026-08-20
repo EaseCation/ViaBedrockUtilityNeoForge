@@ -3,6 +3,7 @@ package org.oryxel.viabedrockutility.pack.processor;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class TextureProcessorTest {
     @Test
@@ -13,5 +14,14 @@ class TextureProcessorTest {
         assertEquals("easecation:textures/particle/trail",
                 TextureProcessor.normalizeTextureIdentifier(
                         "easecation:textures/particle/trail.jpg").toString());
+    }
+
+    @Test
+    void textureRegistrationDoesNotDecodeBeforeFirstUse() {
+        final LazyBedrockTexture texture = new LazyBedrockTexture(
+                () -> "test", new byte[]{1, 2, 3}, ignored -> {});
+
+        assertFalse(texture.isLoaded());
+        texture.close();
     }
 }

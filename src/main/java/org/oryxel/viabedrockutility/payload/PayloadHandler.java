@@ -61,6 +61,39 @@ public class PayloadHandler {
     private final java.util.Queue<BasePayload> pendingPayloads = new java.util.concurrent.ConcurrentLinkedQueue<>();
     private static final int MAX_PENDING = 1024;
 
+    /** Switches every pack-backed consumer to the newly published generation. */
+    public void onPackManagerChanged(PackManager manager) {
+        this.packManager = manager;
+        for (Map.Entry<UUID, EntityRenderer<?, ?>> entry : cachedPlayerRenderers.entrySet()) {
+            if (entry.getValue() instanceof CustomPlayerRenderer renderer) {
+                final CachedPlayerSkin skin = cachedPlayerSkins.get(entry.getKey());
+                applyAnimationOverrides(entry.getKey(), renderer,
+                        skin == null ? null : skin.getResourcePatch(), manager);
+            }
+        }
+    }
+
+    /** Clears all state whose identity belongs to the retired network connection. */
+    public void resetConnectionState() {
+        cachedCustomEntities.values().forEach(ticker ->
+                ticker.getRenderer().invalidateFrozenMeshes("connection_reset"));
+        cachedCustomEntities.clear();
+        cachedPlayerRenderers.clear();
+        cachedPlayerCapes.clear();
+        cachedPlayerSkins.clear();
+        cachedSkinInfo.clear();
+        pendingAnimations.clear();
+        pendingPayloads.clear();
+        packManager = null;
+    }
+
+    public void removeCustomEntity(UUID uuid) {
+        final CustomEntityTicker ticker = cachedCustomEntities.remove(uuid);
+        if (ticker != null) {
+            ticker.getRenderer().invalidateFrozenMeshes("entity_removed");
+        }
+    }
+
     public void handle(final BasePayload payload) {
         if (this.packManager != ViaBedrockUtility.getInstance().getPackManager()) {
             this.packManager = ViaBedrockUtility.getInstance().getPackManager();
@@ -338,40 +371,12 @@ public class PayloadHandler {
         }
 
         final EntityRendererProvider.Context entityContext = EntityRendererContextUtil.build(client);
-        this.cachedPlayerRenderers.put(payload.getPlayerUuid(), new CustomPlayerRenderer(entityContext, model, slim, identifier));
+        final CustomPlayerRenderer customRenderer = new CustomPlayerRenderer(entityContext, model, slim, identifier);
+        this.cachedPlayerRenderers.put(payload.getPlayerUuid(), customRenderer);
         this.cachedPlayerSkins.put(payload.getPlayerUuid(), new CachedPlayerSkin(identifier, slim, info.getGeometryRaw(), info.getResourcePatch()));
         ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] CustomPlayerRenderer created for {}", payload.getPlayerUuid());
 
-        // Parse animation overrides from skinResourcePatch.animations
-        if (this.packManager != null) {
-            try {
-                final JsonObject patch = JsonParser.parseString(info.getResourcePatch()).getAsJsonObject();
-                if (patch.has("animations")) {
-                    final JsonObject anims = patch.getAsJsonObject("animations");
-                    final PlayerAnimationManager animManager = new PlayerAnimationManager();
-                    for (final var animEntry : anims.entrySet()) {
-                        final String animIdentifier = animEntry.getValue().getAsString();
-                        final AnimationDefinitions.AnimationData animData =
-                                this.packManager.getAnimationDefinitions().getAnimations().get(animIdentifier);
-                        if (animData != null) {
-                            animManager.addAnimation(animEntry.getKey(), animData);
-                        } else {
-                            ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] Animation '{}' ({}) not found in PackManager for {}",
-                                    animEntry.getKey(), animIdentifier, payload.getPlayerUuid());
-                        }
-                    }
-                    if (!animManager.isEmpty()) {
-                        ((IBedrockAnimatedModel) (Object) model).viaBedrockUtility$setAnimationManager(animManager);
-                        ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Loaded {} animation override(s) for {}: {}",
-                                animManager.getRegisteredAnimationNames().size(), payload.getPlayerUuid(),
-                                animManager.getRegisteredAnimationNames());
-                    }
-                }
-            } catch (final Exception e) {
-                ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] Failed to parse animation overrides for {}: {}",
-                        payload.getPlayerUuid(), e.getMessage());
-            }
-        }
+        applyAnimationOverrides(payload.getPlayerUuid(), customRenderer, info.getResourcePatch(), this.packManager);
 
         if (client.getConnection() == null) {
             return;
@@ -605,6 +610,45 @@ public class PayloadHandler {
             if (renderer instanceof CustomPlayerRenderer customRenderer) {
                 customRenderer.tickOverlays();
             }
+        }
+    }
+
+    private static void applyAnimationOverrides(UUID playerUuid, CustomPlayerRenderer renderer,
+                                                String resourcePatch, PackManager manager) {
+        final IBedrockAnimatedModel animatedModel = (IBedrockAnimatedModel) (Object) renderer.getPlayerModel();
+        animatedModel.viaBedrockUtility$setAnimationManager(null);
+        if (manager == null || resourcePatch == null || resourcePatch.isBlank()) {
+            return;
+        }
+        try {
+            final JsonObject patch = JsonParser.parseString(resourcePatch).getAsJsonObject();
+            if (!patch.has("animations")) {
+                return;
+            }
+            final JsonObject anims = patch.getAsJsonObject("animations");
+            final PlayerAnimationManager animManager = new PlayerAnimationManager();
+            for (final var animEntry : anims.entrySet()) {
+                final String animIdentifier = animEntry.getValue().getAsString();
+                final AnimationDefinitions.AnimationData animData =
+                        manager.getAnimationDefinitions().getAnimations().get(animIdentifier);
+                if (animData != null) {
+                    animManager.addAnimation(animEntry.getKey(), animData);
+                } else {
+                    ViaBedrockUtilityNeoForge.LOGGER.warn(
+                            "[Skin] Animation '{}' ({}) not found in PackManager for {}",
+                            animEntry.getKey(), animIdentifier, playerUuid);
+                }
+            }
+            if (!animManager.isEmpty()) {
+                animatedModel.viaBedrockUtility$setAnimationManager(animManager);
+                ViaBedrockUtilityNeoForge.LOGGER.debug(
+                        "[Skin] Loaded {} animation override(s) for {}: {}",
+                        animManager.getRegisteredAnimationNames().size(), playerUuid,
+                        animManager.getRegisteredAnimationNames());
+            }
+        } catch (final Exception e) {
+            ViaBedrockUtilityNeoForge.LOGGER.warn(
+                    "[Skin] Failed to parse animation overrides for {}: {}", playerUuid, e.getMessage());
         }
     }
 

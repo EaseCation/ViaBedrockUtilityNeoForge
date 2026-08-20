@@ -30,10 +30,11 @@ public class ServerResourcePackLoaderMixin {
 
         ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack] Intercepting server resource packs, {} pack(s) received", packs.size());
         final List<Path> packPaths = packs.stream().map(PackReloadConfig.IdAndPath::path).toList();
-        loadBedrockPacks(packPaths);
+        final long connectionEpoch = ViaBedrockUtility.getInstance().getConnectionEpoch();
+        loadBedrockPacks(packPaths, connectionEpoch);
     }
 
-    private void loadBedrockPacks(List<Path> packs) {
+    private void loadBedrockPacks(List<Path> packs, long connectionEpoch) {
         final List<Content> contents = new ArrayList<>();
         packs.forEach(pack -> {
             try {
@@ -50,6 +51,13 @@ public class ServerResourcePackLoaderMixin {
         });
 
         ViaBedrockUtilityNeoForge.LOGGER.info("[ResourcePack] Loaded {} bedrock pack(s) total, initializing PackManager", contents.size());
+        final PackManager nextManager = new PackManager(contents);
+        if (!ViaBedrockUtility.getInstance().isCurrentConnectionEpoch(connectionEpoch)) {
+            ViaBedrockUtilityNeoForge.LOGGER.debug(
+                    "[ResourcePack] Connection changed while preparing packs; discarding generation {}",
+                    connectionEpoch);
+            return;
+        }
 
         // Load vanilla.mcpack textures as base layer (e.g. textures/particle/particles.png)
         // Without this, particle textures from vanilla.mcpack won't be in TextureManager,
@@ -73,7 +81,9 @@ public class ServerResourcePackLoaderMixin {
         // the client reload thread; render code can therefore observe only the complete old or
         // complete new generation, never a new PackManager with stale particle definitions.
         loadParticleDefinitions(contents);
-        ViaBedrockUtility.getInstance().setPackManager(new PackManager(contents));
+        if (!ViaBedrockUtility.getInstance().publishPackManager(nextManager, connectionEpoch)) {
+            return;
+        }
 
         // Replay any payloads (notably the initial skin overrides) that arrived before PackManager was ready.
         // Deferred to the client thread so it runs after PackManager is set and safely touches render objects.

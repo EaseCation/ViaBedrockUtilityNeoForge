@@ -7,6 +7,7 @@ import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import org.oryxel.viabedrockutility.attachable.AttachableItemSnapshot;
+import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.mixin.interfaces.IAttachableItemRenderState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,6 +21,7 @@ public abstract class ItemModelResolverMixin {
                                        ItemDisplayContext displayContext, Level level,
                                        LivingEntity livingEntity, int seed, CallbackInfo ci) {
         ((IAttachableItemRenderState) state).viaBedrockUtility$setAttachableSnapshot(
-                AttachableItemSnapshot.of(stack), displayContext);
+                ViaBedrockUtility.getInstance().getAttachableRuntimeManager().snapshotIfCandidate(stack),
+                displayContext);
     }
 }

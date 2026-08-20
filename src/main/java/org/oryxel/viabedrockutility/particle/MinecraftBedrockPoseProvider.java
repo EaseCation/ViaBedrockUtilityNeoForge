@@ -12,6 +12,7 @@ import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.attachable.AttachableHostContext;
 import org.oryxel.viabedrockutility.attachable.BedrockTransformConvention;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
+import org.oryxel.viabedrockutility.renderer.BedrockPlayerPoseDemand;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerWorldPose;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
 
@@ -23,6 +24,15 @@ import java.util.concurrent.ConcurrentHashMap;
 final class MinecraftBedrockPoseProvider implements BedrockPoseProvider {
     private final Map<BedrockParticlePlacement.BoundEffect, BedrockPoseSnapshot> samples =
             new ConcurrentHashMap<>();
+    private final BedrockPlayerPoseDemand poseDemand;
+
+    MinecraftBedrockPoseProvider() {
+        this(ViaBedrockUtility.getInstance().getPlayerPoseDemand());
+    }
+
+    MinecraftBedrockPoseProvider(BedrockPlayerPoseDemand poseDemand) {
+        this.poseDemand = java.util.Objects.requireNonNull(poseDemand, "poseDemand");
+    }
 
     @Override
     public BedrockPoseSnapshot resolve(BedrockParticlePlacement.BoundEffect placement) {
@@ -63,9 +73,9 @@ final class MinecraftBedrockPoseProvider implements BedrockPoseProvider {
         samples.clear();
     }
 
-    private static BedrockPoseSnapshot resolveUncached(Entity entity,
-                                                         BedrockParticlePlacement.BoundEffect placement,
-                                                         long tick) {
+    private BedrockPoseSnapshot resolveUncached(Entity entity,
+                                                 BedrockParticlePlacement.BoundEffect placement,
+                                                 long tick) {
         if (placement.targetKind() == BedrockParticlePlacement.TargetKind.ENTITY) {
             return entityAnchor(entity, placement, false, tick);
         }
@@ -76,6 +86,9 @@ final class MinecraftBedrockPoseProvider implements BedrockPoseProvider {
         if (cached instanceof CustomPlayerRenderer customRenderer) {
             final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(customRenderer.getPlayerModel());
             if (metadata == null) return BedrockPoseSnapshot.unresolved(tick);
+            if (placement.viewContext() != BedrockParticlePlacement.ViewContext.FIRST_PERSON) {
+                poseDemand.request(placement.ownerUuid(), tick);
+            }
             final BedrockPoseSnapshot modelPose = placement.targetKind() == BedrockParticlePlacement.TargetKind.BONE
                     ? boneAnchor(entity, customRenderer, metadata, placement, tick)
                     : locatorAnchor(entity, customRenderer, metadata, placement, tick);

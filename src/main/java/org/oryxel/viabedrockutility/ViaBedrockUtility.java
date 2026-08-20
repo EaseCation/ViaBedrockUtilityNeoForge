@@ -26,6 +26,9 @@ import org.oryxel.viabedrockutility.attachable.AttachableRuntimeManager;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.particle.BedrockParticleRuntime;
 import org.oryxel.viabedrockutility.particle.BedrockParticleRequest;
+import org.oryxel.viabedrockutility.pack.processor.TextureProcessor;
+import org.oryxel.viabedrockutility.renderer.BedrockPlayerPoseDemand;
+import org.oryxel.viabedrockutility.renderer.FrozenEntityMeshCache;
 import org.oryxel.viabedrockutility.sound.BedrockJavaSoundPlayer;
 
 import java.util.Map;
@@ -51,8 +54,11 @@ public class ViaBedrockUtility {
     @Setter(AccessLevel.NONE)
     private volatile PackGeneration packGeneration = new PackGeneration(0L, null);
     private final AtomicLong packGenerationCounter = new AtomicLong();
+    private final AtomicLong connectionEpochCounter = new AtomicLong();
+    private volatile long connectionEpoch;
     private final AttachableRuntimeManager attachableRuntimeManager = new AttachableRuntimeManager();
-    private final BedrockParticleRuntime particleRuntime = new BedrockParticleRuntime();
+    private final BedrockPlayerPoseDemand playerPoseDemand = new BedrockPlayerPoseDemand();
+    private final BedrockParticleRuntime particleRuntime = new BedrockParticleRuntime(this.playerPoseDemand);
     private volatile boolean viaBedrockPresent;
     private final PlayerStateTracker playerStateTracker = new PlayerStateTracker();
 
@@ -87,6 +93,8 @@ public class ViaBedrockUtility {
     public void onClientTick(ClientTickEvent.Post event) {
         this.attachableRuntimeManager.tick();
         this.particleRuntime.tick();
+        final var level = Minecraft.getInstance().level;
+        this.playerPoseDemand.prune(level == null ? Long.MIN_VALUE : level.getGameTime());
         // Tick animation overlays on all cached player renderers
         if (this.payloadHandler != null) {
             this.payloadHandler.tickAnimationOverlays();
@@ -117,15 +125,63 @@ public class ViaBedrockUtility {
     }
 
     /** Publishes manager+generation atomically, then invalidates every mutable attachable instance. */
-    public void setPackManager(PackManager manager) {
+    public synchronized void setPackManager(PackManager manager) {
         final long generation = this.packGenerationCounter.incrementAndGet();
         this.packGeneration = new PackGeneration(generation, manager);
+        if (this.payloadHandler != null) {
+            this.payloadHandler.onPackManagerChanged(manager);
+        }
+        this.attachableRuntimeManager.onPackManagerChanged(manager);
         this.attachableRuntimeManager.clear();
+        this.playerPoseDemand.clear();
         this.particleRuntime.clearDiagnostics();
         BedrockJavaSoundPlayer.clearDiagnostics();
-        net.easecation.beparticle.ParticleManager.INSTANCE.clearEmitters();
+        FrozenEntityMeshCache.global().invalidateAll("pack_generation_changed");
+        net.easecation.beparticle.ParticleManager.INSTANCE
+                .clearEmitters(BedrockParticleRuntime.LIFECYCLE_OWNER);
         net.easecation.beparticle.molang.ParticleMoLang.INSTANCE.clearCache();
         net.easecation.beparticle.render.BedrockParticleManager.INSTANCE.clear();
+    }
+
+    /** Publishes only if the resource reload still belongs to the active connection. */
+    public synchronized boolean publishPackManager(PackManager manager, long expectedConnectionEpoch) {
+        if (expectedConnectionEpoch != this.connectionEpoch) {
+            ViaBedrockUtilityNeoForge.LOGGER.debug(
+                    "[ResourcePack] Discarding retired connection generation {} (current={})",
+                    expectedConnectionEpoch, this.connectionEpoch);
+            return false;
+        }
+        this.setPackManager(manager);
+        return true;
+    }
+
+    public boolean isCurrentConnectionEpoch(long expectedConnectionEpoch) {
+        return expectedConnectionEpoch == this.connectionEpoch;
+    }
+
+    /** Starts a clean connection scope before any new resource-pack payload can be accepted. */
+    public long beginConnection() {
+        return resetConnectionResources();
+    }
+
+    /** Retires the current scope so late resource work cannot publish into a later connection. */
+    public void endConnection() {
+        resetConnectionResources();
+    }
+
+    private synchronized long resetConnectionResources() {
+        final long nextEpoch = this.connectionEpochCounter.incrementAndGet();
+        this.connectionEpoch = nextEpoch;
+        this.viaBedrockPresent = false;
+        this.playerStateTracker.reset();
+        this.setPackManager(null);
+        if (this.payloadHandler != null) {
+            this.payloadHandler.resetConnectionState();
+        }
+        TextureProcessor.clear();
+        net.easecation.beparticle.ParticleManager.INSTANCE
+                .loadDefinitions("viabedrockutility", Map.of());
+        return nextEpoch;
     }
 
     /**

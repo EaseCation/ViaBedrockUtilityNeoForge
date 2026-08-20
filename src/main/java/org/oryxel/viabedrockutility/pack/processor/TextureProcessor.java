@@ -1,26 +1,26 @@
 package org.oryxel.viabedrockutility.pack.processor;
 
-import com.mojang.blaze3d.platform.NativeImage;
 import net.easecation.bedrockmotion.pack.content.Content;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 
-import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class TextureProcessor {
-    private static final Set<ResourceLocation> REGISTERED_TEXTURES = ConcurrentHashMap.newKeySet();
+    private static final Map<ResourceLocation, LazyBedrockTexture> REGISTERED_TEXTURES =
+            new ConcurrentHashMap<>();
 
     public static void process(final List<Content> packs) {
         final Minecraft client = Minecraft.getInstance();
-        REGISTERED_TEXTURES.clear();
+        final Map<ResourceLocation, LazyBedrockTexture> nextGeneration = new LinkedHashMap<>();
 
         int registered = 0;
+        int preloaded = 0;
         int metadata = 0;
         int failed = 0;
 
@@ -36,13 +36,25 @@ public class TextureProcessor {
                     continue;
                 }
 
+                LazyBedrockTexture texture = null;
                 try {
                     final ResourceLocation identifier = normalizeTextureIdentifier(path);
-                    final NativeImage image1 = NativeImage.read(image.getPngBytes());
-                    client.getTextureManager().register(identifier, new DynamicTexture(() -> identifier.toString() + image1.hashCode(), image1));
-                    REGISTERED_TEXTURES.add(identifier);
+                    final LazyBedrockTexture previous = REGISTERED_TEXTURES.get(identifier);
+                    texture = new LazyBedrockTexture(
+                            () -> identifier.toString(), image.getPngBytes(), failure ->
+                            ViaBedrockUtilityNeoForge.LOGGER.warn(
+                                    "[ResourcePack:Texture] Unable to decode texture {}", path, failure));
+                    if (previous != null && previous.isLoaded()) {
+                        texture.preload();
+                        preloaded++;
+                    }
+                    client.getTextureManager().register(identifier, texture);
+                    nextGeneration.put(identifier, texture);
                     registered++;
-                } catch (final IOException | RuntimeException e) {
+                } catch (final RuntimeException e) {
+                    if (texture != null) {
+                        texture.close();
+                    }
                     // RuntimeException covers ResourceLocationException for paths with characters
                     // outside [a-z0-9/._-]; skip the single bad texture instead of aborting the whole
                     // registration pass (which runs on the render thread and would crash the client).
@@ -58,9 +70,16 @@ public class TextureProcessor {
         // Bedrock connection to time out. Emit a single summary line instead. Use debug for
         // per-texture detail if you ever need to re-enable it.
         ViaBedrockUtilityNeoForge.LOGGER.info(
-                "[ResourcePack:Texture] Registered {} textures ({} metadata sidecars handled by ResourceManager, {} failed)",
-                registered, metadata, failed
+                "[ResourcePack:Texture] Registered {} lazy textures ({} active texture(s) refreshed, "
+                        + "{} metadata sidecars handled by ResourceManager, {} failed)",
+                registered, preloaded, metadata, failed
         );
+
+        REGISTERED_TEXTURES.keySet().stream()
+                .filter(identifier -> !nextGeneration.containsKey(identifier))
+                .forEach(client.getTextureManager()::release);
+        REGISTERED_TEXTURES.clear();
+        REGISTERED_TEXTURES.putAll(nextGeneration);
     }
 
     /** Returns the exact resource location used for a Bedrock texture path. */
@@ -68,6 +87,7 @@ public class TextureProcessor {
         if (rawPath == null || rawPath.isBlank()) {
             throw new IllegalArgumentException("Texture path is blank");
         }
+
         final String normalized = rawPath.trim().toLowerCase(Locale.ROOT)
                 .replace(".png", "").replace(".jpg", "");
         return normalized.indexOf(':') >= 0
@@ -78,9 +98,16 @@ public class TextureProcessor {
     /** Used by the particle loader to diagnose an unresolved Bedrock texture before rendering. */
     public static boolean isRegisteredTexture(final String rawPath) {
         try {
-            return REGISTERED_TEXTURES.contains(normalizeTextureIdentifier(rawPath));
+            return REGISTERED_TEXTURES.containsKey(normalizeTextureIdentifier(rawPath));
         } catch (RuntimeException ignored) {
             return false;
         }
+    }
+
+    /** Releases every dynamic texture owned by the retired server-pack generation. */
+    public static void clear() {
+        final Minecraft client = Minecraft.getInstance();
+        REGISTERED_TEXTURES.keySet().forEach(client.getTextureManager()::release);
+        REGISTERED_TEXTURES.clear();
     }
 }
