@@ -32,6 +32,8 @@
     "render.dispatcher.EntityRenderDispatcherMixin",
     "render.feature.CapeFeatureRendererMixin",
     "render.item.ContextDimensionMixin",
+    "render.item.ItemModelResolverMixin",
+    "render.item.ItemStackRenderStateMixin",
     "sound.SoundSystemMixin",
     "world.ClientWorldMixin"
   ]

@@ -16,6 +16,11 @@ import net.minecraft.world.entity.HumanoidArm;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
+import org.oryxel.viabedrockutility.ViaBedrockUtility;
+import org.oryxel.viabedrockutility.attachable.AttachableItemSnapshot;
+import org.oryxel.viabedrockutility.attachable.AttachableQueryContext;
+import org.oryxel.viabedrockutility.attachable.AttachableRenderResult;
+import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,18 +40,36 @@ public class BedrockPlayerItemInHandLayer extends PlayerItemInHandLayer<PlayerRe
     @Override
     protected void renderArmWithItem(PlayerRenderState state, ItemStackRenderState item, HumanoidArm arm,
                                      PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
-        if (item.isEmpty()) {
-            return;
-        }
-
-        InteractionHand hand = arm == state.mainArm ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
-        if (state.isUsingItem && state.useItemHand == hand && state.attackTime < 1.0E-5F && !state.heldOnHead.isEmpty()) {
-            renderItemHeldToEye(state, arm, poseStack, bufferSource, packedLight);
+        final InteractionHand hand = arm == state.mainArm ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
+        final ICustomPlayerRendererHolder renderState = (ICustomPlayerRendererHolder) state;
+        final AttachableItemSnapshot snapshot = hand == InteractionHand.MAIN_HAND
+                ? renderState.viaBedrockUtility$getMainHandSnapshot()
+                : renderState.viaBedrockUtility$getOffHandSnapshot();
+        // A pure Bedrock attachable has no Java baked model: only bail when neither the vanilla
+        // item model nor an attachable snapshot exists.
+        if (item.isEmpty() && (snapshot == null || snapshot.isEmpty())) {
             return;
         }
 
         PlayerModel model = this.getParentModel();
-        BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(model);
+        final AttachableQueryContext.LogicalHand logicalHand = hand == InteractionHand.MAIN_HAND
+                ? AttachableQueryContext.LogicalHand.MAIN_HAND
+                : AttachableQueryContext.LogicalHand.OFF_HAND;
+        final AttachableRenderResult attachableResult =
+                ViaBedrockUtility.getInstance().getAttachableRuntimeManager().renderThirdPerson(
+                        state, snapshot, logicalHand, arm, model, poseStack, bufferSource, packedLight);
+        if (attachableResult != AttachableRenderResult.NOT_APPLICABLE) {
+            return;
+        }
+
+        // heldOnHead keeps its original reachability for non-attachable vanilla item models.
+        if (!item.isEmpty() && state.isUsingItem && state.useItemHand == hand
+                && state.attackTime < 1.0E-5F && !state.heldOnHead.isEmpty()) {
+            renderItemHeldToEye(state, arm, poseStack, bufferSource, packedLight);
+            return;
+        }
+
+        final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(model);
         if (metadata == null) {
             warnMissingMetadata();
             super.renderArmWithItem(state, item, arm, poseStack, bufferSource, packedLight);

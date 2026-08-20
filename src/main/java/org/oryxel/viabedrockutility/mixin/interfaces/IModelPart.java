@@ -16,9 +16,12 @@ public interface IModelPart {
     void viaBedrockUtility$setCubeGroup();
     boolean viaBedrockUtility$isCubeGroup();
     void viaBedrockUtility$setNeededOffset(boolean needed);
+    boolean viaBedrockUtility$isNeededOffset();
+    /** Stores an already converted Java-space offset; Bedrock->Java Y negation happens at the adapter boundary. */
     void viaBedrockUtility$setOffset(Vector3f vec3);
     void viaBedrockUtility$setPivot(Vector3f vec3);
     void viaBedrockUtility$setAngles(Vector3f vec3);
+    /** Adds an already converted Java-space offset; Bedrock->Java Y negation happens at the adapter boundary. */
     void viaBedrockUtility$addOffset(Vector3f vec3);
     void viaBedrockUtility$addAngles(Vector3f vec3);
     Vector3f viaBedrockUtility$getRotation();

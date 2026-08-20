@@ -454,6 +454,11 @@ public abstract class ModelPartMixin implements IModelPart {
     }
 
     @Override
+    public boolean viaBedrockUtility$isNeededOffset() {
+        return this.neededOffset;
+    }
+
+    @Override
     public boolean viaBedrockUtility$isVBUModel() {
         return this.isVBUModel;
     }
@@ -485,14 +490,18 @@ public abstract class ModelPartMixin implements IModelPart {
         this.pivot = vec3;
     }
 
+    /**
+     * Stores the offset as-is: the Bedrock->Java Y negation now happens once at the adapter
+     * boundary (ModelPartBoneTarget.addOffset), so this mixin only ever sees Java-space values.
+     */
     @Override
     public void viaBedrockUtility$setOffset(Vector3f vec3) {
-        this.offset.set(vec3.x, -vec3.y, vec3.z);
+        this.offset.set(vec3);
     }
 
     @Override
     public void viaBedrockUtility$addOffset(Vector3f vec3) {
-        this.offset.add(vec3.x, -vec3.y, vec3.z);
+        this.offset.add(vec3);
     }
 
     @Override

@@ -17,6 +17,7 @@ import org.oryxel.viabedrockutility.mixin.interfaces.ICuboid;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
 import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
+import org.oryxel.viabedrockutility.attachable.BedrockTransformConvention;
 
 import java.util.*;
 
@@ -77,7 +78,12 @@ public final class GeometryUtil {
                     }
                 }
 
-                final ModelPart.Cube cuboid = new ModelPart.Cube(0, 0, pos.getX(), -(pos.getY() - 24.016F + sizeY), pos.getZ(), sizeX, sizeY, sizeZ, inflate, inflate, inflate, cube.isMirror(), uvWidth, uvHeight, set);
+                final Vector3f javaPos = BedrockTransformConvention.toJavaModel(
+                        new Vector3f(pos.getX(), pos.getY(), pos.getZ()));
+                final ModelPart.Cube cuboid = new ModelPart.Cube(0, 0, javaPos.x,
+                        javaPos.y - sizeY,
+                        javaPos.z, sizeX, sizeY, sizeZ, inflate, inflate, inflate,
+                        cube.isMirror(), uvWidth, uvHeight, set);
                 correctUv(cuboid, set, uvMap, uvWidth, uvHeight, cube.getInflate(), cube.isMirror());
                 markAsVbuBox(cuboid, inflate, cube.isMirror());
                 appendCuboid(cuboidGroups, CuboidTransform.from(cube), cuboid);
@@ -118,20 +124,17 @@ public final class GeometryUtil {
             // its cubes are positioned in that same inverted-Y space. No setPos is used.
             partExtension.viaBedrockUtility$setPivot(toJavaPivot(bone.getPivot()));
 
-            String parent = bone.getParent();
+            final String semanticParent = bone.getParent();
             String name = bone.getName();
-            if (player) {
-                switch (name.toLowerCase(Locale.ROOT)) { // Also do this with the overlays? Those are final, though.
-                    case "head", "rightarm", "body", "leftarm", "leftleg", "rightleg" -> parent = "root";
-                }
-            }
+            String renderParent = presentationParent(player, name, semanticParent);
 
             String adjustedName = adjustFormatting(player, name);
-            String adjustedParent = adjustFormatting(player, parent);
+            String adjustedSemanticParent = adjustFormatting(player, semanticParent);
+            String adjustedRenderParent = adjustFormatting(player, renderParent);
             if (playerMetadata != null) {
-                playerMetadata.addBone(bone, adjustedName, adjustedParent, part);
+                playerMetadata.addBone(bone, adjustedName, adjustedSemanticParent, adjustedRenderParent, part);
             }
-            stringToPart.put(adjustedName, new PartInfo(adjustedParent, part, children));
+            stringToPart.put(adjustedName, new PartInfo(adjustedRenderParent, part, children));
         }
 
         PartInfo root = stringToPart.get("root");
@@ -234,8 +237,18 @@ public final class GeometryUtil {
         };
     }
 
+    static String presentationParent(boolean player, String boneName, String semanticParent) {
+        if (!player || boneName == null) {
+            return semanticParent;
+        }
+        return switch (boneName.toLowerCase(Locale.ROOT)) {
+            case "head", "rightarm", "body", "leftarm", "leftleg", "rightleg" -> "root";
+            default -> semanticParent;
+        };
+    }
+
     private static Vector3f toJavaPivot(Position3V pivot) {
-        return new Vector3f(pivot.getX(), -pivot.getY() + 24.016F, pivot.getZ());
+        return BedrockTransformConvention.toJavaModel(new Vector3f(pivot.getX(), pivot.getY(), pivot.getZ()));
     }
 
     private static void appendCuboid(List<CuboidGroup> groups, CuboidTransform transform, ModelPart.Cube cuboid) {
@@ -429,8 +442,11 @@ public final class GeometryUtil {
                 float py = pmPositions[posIdx][1];
                 float pz = pmPositions[posIdx][2];
 
-                // Coordinate transform: Bedrock -> Java model space (Y inverted + 24.016 offset)
-                py = -py + 24.016F;
+                // Coordinate transform: Bedrock -> Java model space (Y inverted + presentation origin)
+                final Vector3f javaPos = BedrockTransformConvention.toJavaModel(new Vector3f(px, py, pz));
+                px = javaPos.x;
+                py = javaPos.y;
+                pz = javaPos.z;
 
                 // UV transform
                 float u = pmUvs[uvIdx][0];
@@ -500,7 +516,10 @@ public final class GeometryUtil {
     }
 
     private static Direction normalToDirection(float nx, float ny, float nz) {
-        ny = -ny; // Y axis is inverted (Bedrock -> Java) for all bones
+        final Vector3f java = BedrockTransformConvention.toJavaNormal(new Vector3f(nx, ny, nz));
+        nx = java.x;
+        ny = java.y;
+        nz = java.z;
         float absX = Math.abs(nx), absY = Math.abs(ny), absZ = Math.abs(nz);
         if (absY >= absX && absY >= absZ) {
             return ny > 0 ? Direction.UP : Direction.DOWN;
@@ -536,11 +555,11 @@ public final class GeometryUtil {
             if (this == IDENTITY) {
                 return new Vector3f();
             }
-            return new Vector3f(
+            return BedrockTransformConvention.toJavaModel(new Vector3f(
                     Float.intBitsToFloat(this.pivotX),
-                    -Float.intBitsToFloat(this.pivotY) + 24.016F,
+                    Float.intBitsToFloat(this.pivotY),
                     Float.intBitsToFloat(this.pivotZ)
-            );
+            ));
         }
 
         Vector3f rotation() {

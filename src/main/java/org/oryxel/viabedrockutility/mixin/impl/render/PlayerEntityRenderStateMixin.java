@@ -3,6 +3,8 @@ package org.oryxel.viabedrockutility.mixin.impl.render;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
+import org.oryxel.viabedrockutility.attachable.AttachableItemSnapshot;
+import org.oryxel.viabedrockutility.attachable.AttachableOwnerSnapshot;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
@@ -10,6 +12,12 @@ import org.spongepowered.asm.mixin.Unique;
 public abstract class PlayerEntityRenderStateMixin implements ICustomPlayerRendererHolder {
     @Unique
     private EntityRenderer<?, ?> customPlayerRenderer;
+    @Unique
+    private AttachableItemSnapshot viabedrockutility$mainHand = AttachableItemSnapshot.EMPTY;
+    @Unique
+    private AttachableItemSnapshot viabedrockutility$offHand = AttachableItemSnapshot.EMPTY;
+    @Unique
+    private AttachableOwnerSnapshot viabedrockutility$owner = AttachableOwnerSnapshot.EMPTY;
 
     @Override
     public EntityRenderer<?, ?> viaBedrockUtility$getCustomPlayerRenderer() {
@@ -19,5 +27,31 @@ public abstract class PlayerEntityRenderStateMixin implements ICustomPlayerRende
     @Override
     public void viaBedrockUtility$setCustomPlayerRenderer(EntityRenderer<?, ?> renderer) {
         this.customPlayerRenderer = renderer;
+    }
+
+    @Override
+    public AttachableItemSnapshot viaBedrockUtility$getMainHandSnapshot() {
+        return viabedrockutility$mainHand;
+    }
+
+    @Override
+    public AttachableItemSnapshot viaBedrockUtility$getOffHandSnapshot() {
+        return viabedrockutility$offHand;
+    }
+
+    @Override
+    public void viaBedrockUtility$setHandSnapshots(AttachableItemSnapshot mainHand, AttachableItemSnapshot offHand) {
+        viabedrockutility$mainHand = mainHand;
+        viabedrockutility$offHand = offHand;
+    }
+
+    @Override
+    public AttachableOwnerSnapshot viaBedrockUtility$getOwnerSnapshot() {
+        return viabedrockutility$owner;
+    }
+
+    @Override
+    public void viaBedrockUtility$setOwnerSnapshot(AttachableOwnerSnapshot owner) {
+        viabedrockutility$owner = owner;
     }
 }

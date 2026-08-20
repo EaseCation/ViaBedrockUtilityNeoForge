@@ -69,6 +69,10 @@ public class ServerResourcePackLoaderMixin {
         textureContents.addAll(contents);
         TextureProcessor.process(textureContents);
 
+        // Publish particle definitions before the PackManager generation. Both operations run on
+        // the client reload thread; render code can therefore observe only the complete old or
+        // complete new generation, never a new PackManager with stale particle definitions.
+        loadParticleDefinitions(contents);
         ViaBedrockUtility.getInstance().setPackManager(new PackManager(contents));
 
         // Replay any payloads (notably the initial skin overrides) that arrived before PackManager was ready.
@@ -78,8 +82,6 @@ public class ServerResourcePackLoaderMixin {
             net.minecraft.client.Minecraft.getInstance().execute(handler::flushPendingPayloads);
         }
 
-        // Load particle definitions into BEParticle
-        loadParticleDefinitions(contents);
     }
 
     private void loadParticleDefinitions(List<Content> contents) {
@@ -96,6 +98,15 @@ public class ServerResourcePackLoaderMixin {
                     final com.google.gson.JsonObject desc = effect.getAsJsonObject("description");
                     if (desc == null) continue;
                     final String identifier = desc.get("identifier").getAsString();
+                    final com.google.gson.JsonObject renderParameters = desc.getAsJsonObject("basic_render_parameters");
+                    if (renderParameters != null && renderParameters.has("texture")) {
+                        final String texture = renderParameters.get("texture").getAsString();
+                        if (!TextureProcessor.isRegisteredTexture(texture)) {
+                            ViaBedrockUtilityNeoForge.LOGGER.warn(
+                                    "[Particle] Definition '{}' references missing VBU texture '{}' (source={})",
+                                    identifier, texture, path);
+                        }
+                    }
                     defs.put(identifier, json);
                 } catch (Exception e) {
                     ViaBedrockUtilityNeoForge.LOGGER.warn("[Particle] Failed to load particle definition: {}", path, e);
@@ -103,33 +114,11 @@ public class ServerResourcePackLoaderMixin {
             }
         }
         if (defs.isEmpty()) {
-            ViaBedrockUtilityNeoForge.LOGGER.info("[Particle] No particle definitions found, keeping existing definitions");
-            return;
+            ViaBedrockUtilityNeoForge.LOGGER.info("[Particle] No particle definitions found; clearing the VBU mcpack generation");
         }
         // 按来源替换：只替换本 source（mcpack 层）的定义，不再 clear 全表
         // → 与 GeyserUtilsBridge 的散文件 bedrock_pack 层共存，互不抹除。
         final net.easecation.beparticle.ParticleManager manager = net.easecation.beparticle.ParticleManager.INSTANCE;
-        try {
-            // Newer BEParticle builds can atomically replace all definitions owned by one source. The
-            // published 1.0.0 API only exposes loadDefinition, so discover the richer optional method
-            // without making it a hard compile/runtime requirement.
-            final java.lang.reflect.Method replaceMethod = java.util.Arrays.stream(manager.getClass().getMethods())
-                    .filter(method -> method.getName().equals("loadDefinitions") && method.getParameterCount() == 2)
-                    .filter(method -> method.getParameterTypes()[0].isAssignableFrom(String.class))
-                    .filter(method -> method.getParameterTypes()[1].isAssignableFrom(defs.getClass()))
-                    .findFirst()
-                    .orElse(null);
-            if (replaceMethod != null) {
-                replaceMethod.invoke(manager, "viabedrockutility", defs);
-                return;
-            }
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            ViaBedrockUtilityNeoForge.LOGGER.warn(
-                    "[Particle] Source-aware definition replacement failed; loading definitions individually", e);
-        }
-
-        for (Map.Entry<String, String> definition : defs.entrySet()) {
-            manager.loadDefinition(definition.getKey(), definition.getValue());
-        }
+        manager.loadDefinitions("viabedrockutility", defs);
     }
 }

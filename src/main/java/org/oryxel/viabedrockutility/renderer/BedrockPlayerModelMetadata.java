@@ -7,19 +7,24 @@ import org.cube.converter.model.element.Locator;
 import org.cube.converter.model.element.Parent;
 import org.cube.converter.util.element.Position3V;
 import org.joml.Vector3f;
+import org.oryxel.viabedrockutility.attachable.BedrockTransformConvention;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.function.Function;
 
 public final class BedrockPlayerModelMetadata {
     private static final Map<PlayerModel, BedrockPlayerModelMetadata> BY_MODEL = Collections.synchronizedMap(new WeakHashMap<>());
 
-    private final Map<String, Bone> bones = new HashMap<>();
+    private final Map<String, Bone> bones = new LinkedHashMap<>();
     private final boolean slim;
 
     public BedrockPlayerModelMetadata(boolean slim) {
@@ -35,6 +40,11 @@ public final class BedrockPlayerModelMetadata {
     }
 
     public void addBone(Parent source, String modelName, String modelParent, ModelPart part) {
+        addBone(source, modelName, modelParent, modelParent, part);
+    }
+
+    public void addBone(Parent source, String modelName, String semanticParent,
+                        String presentationParent, ModelPart part) {
         String key = normalize(modelName);
         Map<String, LocatorInfo> locators = new HashMap<>();
         for (Map.Entry<String, Locator> entry : source.getLocators().entrySet()) {
@@ -50,7 +60,8 @@ public final class BedrockPlayerModelMetadata {
         bones.put(key, new Bone(
                 source.getName(),
                 key,
-                normalize(modelParent),
+                normalize(semanticParent),
+                normalize(presentationParent),
                 toJavaModel(source.getPivot()),
                 new Vector3f(source.getRotation().getX(), source.getRotation().getY(), source.getRotation().getZ()),
                 bounds(source),
@@ -75,6 +86,20 @@ public final class BedrockPlayerModelMetadata {
 
     public LocatorInfo locator(Bone bone, String name) {
         return bone == null ? null : bone.locators().get(normalize(name));
+    }
+
+    public LocatorMatch findLocator(String name) {
+        final String locatorKey = normalize(name);
+        for (Bone bone : bones.values()) {
+            final LocatorMatch match = locatorOn(bone, locatorKey);
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    /** Ordered immutable view used when publishing a complete player pose snapshot. */
+    public List<Bone> bones() {
+        return List.copyOf(bones.values());
     }
 
     public boolean slim() {
@@ -111,15 +136,24 @@ public final class BedrockPlayerModelMetadata {
     }
 
     public List<Bone> chainTo(Bone bone) {
+        return chainTo(bone, Bone::parentKey);
+    }
+
+    public List<Bone> presentationChainTo(Bone bone) {
+        return chainTo(bone, Bone::presentationParentKey);
+    }
+
+    private List<Bone> chainTo(Bone bone, Function<Bone, String> parentKey) {
         if (bone == null) {
             return List.of();
         }
         List<Bone> reversed = new ArrayList<>();
+        Set<String> visited = new HashSet<>();
         Bone current = bone;
-        int guard = 0;
-        while (current != null && guard++ < 128) {
+        while (current != null && visited.add(current.key())) {
             reversed.add(current);
-            current = current.parentKey().isBlank() ? null : bones.get(current.parentKey());
+            final String parent = parentKey.apply(current);
+            current = parent.isBlank() ? null : bones.get(parent);
         }
         Collections.reverse(reversed);
         return reversed;
@@ -163,7 +197,8 @@ public final class BedrockPlayerModelMetadata {
     }
 
     public static Vector3f toJavaModel(Position3V position) {
-        return new Vector3f(position.getX(), -position.getY() + 24.016F, position.getZ());
+        return new Vector3f(position.getX(),
+                -position.getY() + BedrockTransformConvention.PLAYER_PRESENTATION_ORIGIN_Y, position.getZ());
     }
 
     private static Bounds bounds(Parent source) {
@@ -189,8 +224,9 @@ public final class BedrockPlayerModelMetadata {
         return new Bounds(minX, minY, minZ, maxX, maxY, maxZ);
     }
 
-    public record Bone(String originalName, String key, String parentKey, Vector3f pivot, Vector3f rotation,
-                       Bounds bounds, Map<String, LocatorInfo> locators, ModelPart part) {
+    public record Bone(String originalName, String key, String parentKey, String presentationParentKey,
+                       Vector3f pivot, Vector3f rotation, Bounds bounds,
+                       Map<String, LocatorInfo> locators, ModelPart part) {
     }
 
     public record Bounds(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {

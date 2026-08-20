@@ -60,7 +60,9 @@ neoForge {
 }
 
 dependencies {
-    implementation('com.github.EaseCation:BedrockMotion:1.0.0') {
+    // api (not implementation): AttachableQueryProvider exposes BedrockMotion's transitive mocha
+    // Value in its method signature, so downstream mods compiling against the query API need it.
+    api('com.github.EaseCation:BedrockMotion:1.0.0') {
         exclude group: 'org.apache.commons', module: 'commons-lang3'
         exclude group: 'com.google.code.gson', module: 'gson'
         exclude group: 'com.github.EaseCation', module: 'CubeConverter'
@@ -78,7 +80,8 @@ dependencies {
     implementation 'net.easecation.beparticle:beparticle:1.0.0'
     implementation 'com.github.EaseCation:CubeConverter:1.3'
     jarJar 'com.github.EaseCation:CubeConverter:1.3'
-    jarJar 'team.unnamed:mocha:3.0.1'
+    // BEParticle is a required runtime mod and owns the shared Mocha/Javassist JarJar modules.
+    // Bundling Mocha again here creates a second class identity in NeoForge's unit-test module layer.
 
     // Sodium (optional at runtime): compileOnly lets the isolated SodiumVertexPushBackend compile against
     // VertexBufferWriter + EntityVertex. SodiumPushBackend loads that adapter reflectively and fails closed
@@ -119,6 +122,14 @@ sourceSets.main.java {
     srcDir(enumSourceDir)
 }
 
+// The production jar task includes generated JarJar resources directly, while ModDev's tested mod
+// only sees source-set outputs. Mirror them into test resources so unit tests load the same embedded
+// BedrockMotion/CubeConverter modules without changing the production resource layout.
+sourceSets.test.resources.srcDir(layout.buildDirectory.dir('generated/jarJar'))
+tasks.named('processTestResources').configure {
+    dependsOn tasks.named('jarJar')
+}
+
 tasks.withType(ProcessResources).configureEach {
     var replaceProperties = [
             minecraft_version      : minecraft_version,
@@ -147,7 +158,19 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 test {
+    dependsOn tasks.named('jarJar')
     useJUnitPlatform()
+    // ModDev supplies these libraries through the tested-mod/module layer. Keeping their project
+    // artifacts on the Gradle worker classpath as well gives Mocha's Value/Scope interfaces two
+    // class identities. Filter only the worker classpath; testRuntimeClasspath remains untouched so
+    // prepareNeoForgeTestFiles still discovers the required Bedrock runtime mods.
+    classpath = classpath.filter { file ->
+        def path = file.absolutePath.toLowerCase(Locale.ROOT)
+        !path.contains('bedrockmotion') &&
+                !path.contains('cubeconverter') &&
+                !path.contains('mocha-3.0.1') &&
+                !path.contains('javassist-3.30.2')
+    }
     systemProperty 'vbu.testSodium', sodiumTestEnabled.toString()
     // Legacy parser utilities are executable main classes in src/test, not JUnit tests. Their default-package
     // classes are also intentionally outside the tested mod's named module.

@@ -10,8 +10,9 @@ import java.util.Map;
 
 /**
  * Adapter: wraps MC ModelPart (with IModelPart Mixin) as IBoneTarget.
- * Coordinate transformations (e.g., Y-negation for offset) are handled
- * by the Mixin implementation, so the engine stays in Bedrock coordinate space.
+ * The Bedrock→Java conversion for animation offsets (Y negation) happens here, at the adapter
+ * boundary, so the engine stays in Bedrock coordinate space and IModelPart stores already
+ * converted Java-space values.
  */
 public class ModelPartBoneTarget implements IBoneTarget {
     private final ModelPart part;
@@ -62,8 +63,9 @@ public class ModelPartBoneTarget implements IBoneTarget {
 
     @Override
     public void addOffset(Vector3f offset) {
-        // Delegates to Mixin which negates Y for MC coordinate system
-        mixin.viaBedrockUtility$addOffset(offset);
+        // Bedrock -> Java conversion at the adapter boundary: negate Y once here; the mixin
+        // stores the already converted Java-space value unchanged.
+        mixin.viaBedrockUtility$addOffset(new Vector3f(offset.x, -offset.y, offset.z));
     }
 
     @Override

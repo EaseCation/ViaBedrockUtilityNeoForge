@@ -5,6 +5,8 @@ import lombok.Setter;
 import net.easecation.bedrockmotion.controller.AnimationController;
 import net.easecation.bedrockmotion.controller.AnimationControllerInstance;
 import net.easecation.bedrockmotion.model.AnimationEventListener;
+import net.easecation.bedrockmotion.model.AnimationParticleEvent;
+import net.easecation.bedrockmotion.model.AnimationSoundEvent;
 import net.easecation.bedrockmotion.mocha.MoLangEngine;
 import net.easecation.bedrockmotion.pack.PackManager;
 import net.easecation.bedrockmotion.pack.definitions.EntityDefinitions;
@@ -35,6 +37,7 @@ import team.unnamed.mocha.parser.ast.Expression;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler.*;
 
@@ -57,6 +60,8 @@ public class CustomEntityTicker implements AnimationEventListener {
 
     // particle_effects alias map from entity definition (short_name → full identifier)
     private final Map<String, String> particleEffects;
+    private final Map<String, String> soundEffects;
+    private final Set<String> warnedUnsupportedLocators = ConcurrentHashMap.newKeySet();
 
     private final Set<String> availableModels = new HashSet<>();
     private final List<RenderControllerEvaluator.EvaluatedModel> models = new ArrayList<>();
@@ -66,6 +71,7 @@ public class CustomEntityTicker implements AnimationEventListener {
 
     private Integer variant, markVariant, skinId;
     private boolean renderQueriesInitialized;
+    private boolean warnedNoModels;
 
     @Setter @Getter
     private Float scale;
@@ -115,6 +121,8 @@ public class CustomEntityTicker implements AnimationEventListener {
         // Load particle_effects alias map from entity definition
         final Map<String, String> pe = entityDefinition.entityData().getParticleEffects();
         this.particleEffects = pe != null ? pe : Map.of();
+        final Map<String, String> se = entityDefinition.entityData().getSoundEffects();
+        this.soundEffects = se != null ? se : Map.of();
 
         final MutableObjectBinding variableBinding = new MutableObjectBinding();
         // Bedrock engine provides gliding_speed_value based on entity movement attribute.
@@ -191,20 +199,46 @@ public class CustomEntityTicker implements AnimationEventListener {
     }
 
     @Override
-    public void onParticleEvent(String effectShortName, String locator) {
-        final String identifier = this.particleEffects.get(effectShortName);
+    public void onParticleEvent(AnimationParticleEvent event) {
+        final String identifier = this.particleEffects.get(event.effect());
         if (identifier == null) {
-            ViaBedrockUtilityNeoForge.LOGGER.debug("[Particle] Unknown particle effect alias: {}", effectShortName);
+            ViaBedrockUtilityNeoForge.LOGGER.debug("[Particle] Unknown particle effect alias: {}", event.effect());
+            return;
+        }
+        if (event.locator() != null && !event.locator().isBlank()) {
+            warnUnsupportedLocator(event.locator());
             return;
         }
         // Skip if position not yet initialized (renderer hasn't run)
         if (entityPosition == null) return;
-        // TODO: resolve locator to bone world position; for now use entity position
-        net.easecation.beparticle.ParticleManager.INSTANCE.spawnEmitter(
-                identifier,
-                new org.joml.Vector3f(entityPosition),
-                null
-        );
+        // Keep entity animation events on VBU's common particle boundary. A future locator-aware
+        // pose provider can replace entityPosition without coupling BedrockMotion to BEParticle.
+        ViaBedrockUtility.getInstance().spawnParticle(
+                org.oryxel.viabedrockutility.particle.BedrockParticleRequest.builder(identifier)
+                        .position(entityPosition.x, entityPosition.y, entityPosition.z)
+                        .preEffectExpression(event.preEffectExpression())
+                        .source("entity-animation:" + entityDefinition.entityData().getIdentifier())
+                        .build());
+    }
+
+    @Override
+    public void onSoundEvent(AnimationSoundEvent event) {
+        final String identifier = this.soundEffects.get(event.effect());
+        if (identifier == null || entityPosition == null) return;
+        if (event.locator() != null && !event.locator().isBlank()) {
+            warnUnsupportedLocator(event.locator());
+            return;
+        }
+        ViaBedrockUtility.getInstance().playParticleSound(identifier,
+                entityPosition.x, entityPosition.y, entityPosition.z, event.locator(), Map.of());
+    }
+
+    private void warnUnsupportedLocator(String locator) {
+        if (warnedUnsupportedLocators.add(locator)) {
+            ViaBedrockUtilityNeoForge.LOGGER.warn(
+                    "[Particle] Entity '{}' locator '{}' has no pose provider; dropping animation event",
+                    entityDefinition.entityData().getIdentifier(), locator);
+        }
     }
 
     // --- End AnimationEventListener ---
@@ -454,6 +488,13 @@ public class CustomEntityTicker implements AnimationEventListener {
             this.models.addAll(newModels);
             return true;
         } else {
+            if (newModels.isEmpty() && this.models.isEmpty() && !this.warnedNoModels) {
+                // Otherwise the entity silently renders nothing with no diagnostic at all.
+                this.warnedNoModels = true;
+                ViaBedrockUtilityNeoForge.LOGGER.warn(
+                        "[Entity] Render controller evaluated no models for '{}'; the entity will not render",
+                        this.entityDefinition.identifier());
+            }
             return false;
         }
     }

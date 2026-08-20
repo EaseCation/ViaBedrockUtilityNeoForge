@@ -19,6 +19,7 @@ public class MinecraftClientMixin {
         FrozenEntityMeshCache.global().invalidateAll("disconnect");
         ViaBedrockUtility.getInstance().setViaBedrockPresent(false);
         ViaBedrockUtility.getInstance().resetPlayerState();
+        ViaBedrockUtility.getInstance().getAttachableRuntimeManager().clear();
         if (ViaBedrockUtility.getInstance().getPayloadHandler() == null) {
             return;
         }

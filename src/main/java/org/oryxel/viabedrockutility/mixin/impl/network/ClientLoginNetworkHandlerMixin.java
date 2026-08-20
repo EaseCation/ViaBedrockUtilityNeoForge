@@ -37,6 +37,7 @@ public class ClientLoginNetworkHandlerMixin {
         ViaBedrockUtilityNeoForge.LOGGER.info("[Handshake] Login success, sending confirm channel registration to ViaBedrock...");
         this.connection.send(new ServerboundCustomPayloadPacket(new MinecraftRegisterPayload(Set.of(
                 ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "confirm"),
+                ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "particle_runtime_v2"),
                 ResourceLocation.fromNamespaceAndPath(CameraPayload.CONFIRM_CHANNEL_ID, CameraPayload.CONFIRM_CHANNEL_PATH),
                 PlayerStatePayload.TYPE.id()
         ))));

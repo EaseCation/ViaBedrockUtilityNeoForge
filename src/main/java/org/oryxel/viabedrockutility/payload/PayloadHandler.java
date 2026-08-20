@@ -29,6 +29,7 @@ import org.oryxel.viabedrockutility.payload.impl.skin.SkinAnimationDataPayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.SkinAnimationInfoPayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.SkinDataPayload;
 import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticlePayload;
+import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticleV2Payload;
 import org.oryxel.viabedrockutility.animation.PlayerAnimationManager;
 import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
@@ -90,6 +91,8 @@ public class PayloadHandler {
             this.handle(animData);
         } else if (payload instanceof SpawnParticlePayload particlePayload) {
             this.handle(particlePayload);
+        } else if (payload instanceof SpawnParticleV2Payload particlePayload) {
+            this.handle(particlePayload);
         } else if (payload instanceof AnimatePayload animatePayload) {
             this.handle(animatePayload);
         }
@@ -125,18 +128,33 @@ public class PayloadHandler {
     public void handle(final AnimatePayload payload) {}
 
     public void handle(final SpawnParticlePayload payload) {
-        ViaBedrockUtilityNeoForge.LOGGER.info("[Particle:L4] Handling SpawnParticlePayload: {} at ({}, {}, {}), molang={}", payload.getIdentifier(), payload.getX(), payload.getY(), payload.getZ(), payload.getMolangVarsJson());
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Particle:L4] Handling SpawnParticlePayload: {} at ({}, {}, {}), molang={}", payload.getIdentifier(), payload.getX(), payload.getY(), payload.getZ(), payload.getMolangVarsJson());
         Map<String, Float> molangVars = null;
         final String json = payload.getMolangVarsJson();
         if (json != null && !json.isEmpty()) {
             molangVars = parseMolangVarsJson(json);
         }
-        final var emitter = net.easecation.beparticle.ParticleManager.INSTANCE.spawnEmitter(
-                payload.getIdentifier(),
-                new org.joml.Vector3f(payload.getX(), payload.getY(), payload.getZ()),
-                molangVars
-        );
-        ViaBedrockUtilityNeoForge.LOGGER.info("[Particle:L4] spawnEmitter result: {} (definitions loaded: {})", emitter != null ? "SUCCESS" : "NULL (definition not found)", net.easecation.beparticle.ParticleManager.INSTANCE.getDefinitionCount());
+        final var emitter = ViaBedrockUtility.getInstance().spawnParticle(
+                org.oryxel.viabedrockutility.particle.BedrockParticleRequest.builder(payload.getIdentifier())
+                        .position(payload.getX(), payload.getY(), payload.getZ())
+                        .variables(molangVars).source("viabedrock-legacy").build()) ? Boolean.TRUE : null;
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Particle:L4] spawnEmitter result: {} (definitions loaded: {})", emitter != null ? "SUCCESS" : "NULL (definition not found)", net.easecation.beparticle.ParticleManager.INSTANCE.getDefinitionCount());
+    }
+
+    public void handle(final SpawnParticleV2Payload payload) {
+        Map<String, Float> vars = payload.getMolangVarsJson() == null || payload.getMolangVarsJson().isEmpty()
+                ? null : parseMolangVarsJson(payload.getMolangVarsJson());
+        boolean spawned;
+        if (payload.getAnchorKind() == SpawnParticleV2Payload.ENTITY_ANCHOR) {
+            spawned = ViaBedrockUtility.getInstance().getParticleRuntime().spawnEntity(
+                    payload.getIdentifier(), payload.getOwnerUuid(), payload.getX(), payload.getY(), payload.getZ(), vars);
+        } else {
+            spawned = ViaBedrockUtility.getInstance().spawnParticle(
+                    org.oryxel.viabedrockutility.particle.BedrockParticleRequest.builder(payload.getIdentifier())
+                            .position(payload.getX(), payload.getY(), payload.getZ()).variables(vars)
+                            .source("viabedrock-v2-world").build());
+        }
+        ViaBedrockUtilityNeoForge.LOGGER.debug("[Particle:L4] V2 spawn {} result={}", payload.getIdentifier(), spawned);
     }
 
     /**
@@ -588,6 +606,10 @@ public class PayloadHandler {
                 customRenderer.tickOverlays();
             }
         }
+    }
+
+    public EntityRenderer<?, ?> cachedPlayerRenderer(UUID playerUuid) {
+        return cachedPlayerRenderers.get(playerUuid);
     }
 
     @Getter

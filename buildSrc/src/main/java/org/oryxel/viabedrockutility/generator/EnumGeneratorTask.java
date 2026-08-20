@@ -23,6 +23,7 @@ import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
 import org.jsoup.Jsoup;
+import org.jsoup.HttpStatusException;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -45,6 +46,7 @@ public abstract class EnumGeneratorTask extends DefaultTask {
     // revision that still contains it so enum generation remains reproducible instead of following
     // a mutable URL that now returns 404.
     private static final String ENUMS_URL = "https://raw.githubusercontent.com/Mojang/bedrock-protocol-docs/b88f3eed28d59b86e7ad00dba4f0e8640d2e90b8/html/enums.html";
+    private static final String ENUMS_API_URL = "https://api.github.com/repos/Mojang/bedrock-protocol-docs/contents/html/enums.html?ref=b88f3eed28d59b86e7ad00dba4f0e8640d2e90b8";
     private static final String ENUMS_PACKAGE = "org.oryxel.viabedrockutility.enums.bedrock";
     private static final List<String> IGNORED_FIELDS = Arrays.asList("count", "_count", "total", "all", "numenchantments", "numtagtypes", "abilitycount", "nummodes", "input_num", "9800", "total_operations", "total_operands");
     private static final Map<String, String> VALUE_REPLACEMENTS = new HashMap<>();
@@ -68,7 +70,18 @@ public abstract class EnumGeneratorTask extends DefaultTask {
         outputDir.mkdirs();
 
         final Map<String, List<EnumField>> enums = new HashMap<>();
-        final Document doc = Jsoup.parse(new URL(ENUMS_URL), 60_000);
+        Document doc;
+        try {
+            doc = Jsoup.parse(new URL(ENUMS_URL), 60_000);
+        } catch (HttpStatusException exception) {
+            // raw.githubusercontent.com may independently rate-limit an otherwise healthy GitHub
+            // connection. The Contents API serves the exact same pinned blob as raw HTML.
+            doc = Jsoup.connect(ENUMS_API_URL)
+                    .header("Accept", "application/vnd.github.raw+json")
+                    .ignoreContentType(true)
+                    .timeout(60_000)
+                    .get();
+        }
         for (Element element : doc.selectXpath("/html/body/table/tbody/tr")) {
             final Elements tableElements = element.select("td");
             if (tableElements.isEmpty()) continue;

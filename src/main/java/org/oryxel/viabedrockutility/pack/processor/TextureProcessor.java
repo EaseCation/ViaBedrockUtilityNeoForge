@@ -10,10 +10,15 @@ import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TextureProcessor {
+    private static final Set<ResourceLocation> REGISTERED_TEXTURES = ConcurrentHashMap.newKeySet();
+
     public static void process(final List<Content> packs) {
         final Minecraft client = Minecraft.getInstance();
+        REGISTERED_TEXTURES.clear();
 
         int registered = 0;
         int metadata = 0;
@@ -32,9 +37,10 @@ public class TextureProcessor {
                 }
 
                 try {
-                    final ResourceLocation identifier = ResourceLocation.withDefaultNamespace(path.toLowerCase(Locale.ROOT).replace(".png", "").replace(".jpg", ""));
+                    final ResourceLocation identifier = normalizeTextureIdentifier(path);
                     final NativeImage image1 = NativeImage.read(image.getPngBytes());
                     client.getTextureManager().register(identifier, new DynamicTexture(() -> identifier.toString() + image1.hashCode(), image1));
+                    REGISTERED_TEXTURES.add(identifier);
                     registered++;
                 } catch (final IOException | RuntimeException e) {
                     // RuntimeException covers ResourceLocationException for paths with characters
@@ -55,5 +61,26 @@ public class TextureProcessor {
                 "[ResourcePack:Texture] Registered {} textures ({} metadata sidecars handled by ResourceManager, {} failed)",
                 registered, metadata, failed
         );
+    }
+
+    /** Returns the exact resource location used for a Bedrock texture path. */
+    public static ResourceLocation normalizeTextureIdentifier(final String rawPath) {
+        if (rawPath == null || rawPath.isBlank()) {
+            throw new IllegalArgumentException("Texture path is blank");
+        }
+        final String normalized = rawPath.trim().toLowerCase(Locale.ROOT)
+                .replace(".png", "").replace(".jpg", "");
+        return normalized.indexOf(':') >= 0
+                ? ResourceLocation.parse(normalized)
+                : ResourceLocation.withDefaultNamespace(normalized);
+    }
+
+    /** Used by the particle loader to diagnose an unresolved Bedrock texture before rendering. */
+    public static boolean isRegisteredTexture(final String rawPath) {
+        try {
+            return REGISTERED_TEXTURES.contains(normalizeTextureIdentifier(rawPath));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 }

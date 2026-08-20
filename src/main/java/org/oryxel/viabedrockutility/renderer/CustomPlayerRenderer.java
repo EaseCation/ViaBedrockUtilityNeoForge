@@ -5,19 +5,27 @@ import net.minecraft.client.renderer.entity.layers.PlayerItemInHandLayer;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
+import com.mojang.blaze3d.vertex.PoseStack;
+import org.joml.Matrix4f;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import org.oryxel.viabedrockutility.animation.PlayerAnimationManager;
 import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
+import org.oryxel.viabedrockutility.attachable.AttachableItemSnapshot;
+import org.oryxel.viabedrockutility.attachable.AttachableOwnerSnapshot;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 public class CustomPlayerRenderer extends PlayerRenderer {
     private final ResourceLocation texture;
     private final List<AnimatedSkinOverlay> overlays = new ArrayList<>();
+    private volatile BedrockPlayerWorldPose thirdPersonPose;
 
     public CustomPlayerRenderer(final EntityRendererProvider.Context ctx, final PlayerModel model, final boolean slim, ResourceLocation texture) {
         super(ctx, slim);
@@ -28,6 +36,7 @@ public class CustomPlayerRenderer extends PlayerRenderer {
 
         this.texture = texture;
         this.layers.removeIf(layer -> layer instanceof PlayerItemInHandLayer<?, ?>);
+        this.addLayer(new BedrockPlayerPoseCaptureLayer(this));
         this.addLayer(new BedrockPlayerItemInHandLayer(this));
         this.addLayer(new AnimatedOverlayFeatureRenderer(this));
     }
@@ -40,8 +49,51 @@ public class CustomPlayerRenderer extends PlayerRenderer {
     }
 
     @Override
+    public void extractRenderState(AbstractClientPlayer player, PlayerRenderState state, float partialTick) {
+        super.extractRenderState(player, state, partialTick);
+        ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setHandSnapshots(
+                AttachableItemSnapshot.of(player.getMainHandItem()),
+                AttachableItemSnapshot.of(player.getOffhandItem()));
+        ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setOwnerSnapshot(
+                new AttachableOwnerSnapshot(player.getUUID(), "minecraft:player",
+                        player.getAttackAnim(partialTick), state.xRot,
+                        state.yRot));
+    }
+
+    @Override
     public ResourceLocation getTextureLocation(PlayerRenderState PlayerRenderState) {
         return this.texture;
+    }
+
+    public ResourceLocation getPlayerTexture() {
+        return this.texture;
+    }
+
+    public PlayerModel getPlayerModel() {
+        return this.model;
+    }
+
+    void captureThirdPersonPose(PlayerRenderState state, PoseStack poseStack) {
+        final Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null) return;
+        final AttachableOwnerSnapshot owner = ((ICustomPlayerRendererHolder) state)
+                .viaBedrockUtility$getOwnerSnapshot();
+        final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(this.model);
+        if (owner.uuid() == null || metadata == null) return;
+
+        // Entity rendering is camera-relative. Restoring the camera translation turns the exact
+        // renderer-entry PoseStack (including scale, swimming/sleeping and mod transforms) into world space.
+        final var cameraPosition = minecraft.gameRenderer.getMainCamera().getPosition();
+        final Matrix4f worldPresentation = new Matrix4f()
+                .translation((float) cameraPosition.x, (float) cameraPosition.y, (float) cameraPosition.z)
+                .mul(poseStack.last().pose());
+        this.thirdPersonPose = BedrockPlayerWorldPose.capture(
+                owner.uuid(), minecraft.level.getGameTime(), worldPresentation, metadata);
+    }
+
+    public BedrockPlayerWorldPose thirdPersonPose(UUID ownerUuid, long currentTick) {
+        final BedrockPlayerWorldPose pose = this.thirdPersonPose;
+        return pose != null && pose.isFresh(ownerUuid, currentTick) ? pose : null;
     }
 
     public List<AnimatedSkinOverlay> getOverlays() {

@@ -16,6 +16,7 @@ import org.oryxel.viabedrockutility.renderer.FrozenEntityMeshCache;
 import org.oryxel.viabedrockutility.renderer.FrozenMeshDrawQueue;
 import org.oryxel.viabedrockutility.renderer.PoseMeshRebuildBudget;
 import org.oryxel.viabedrockutility.renderer.VbuRenderMetrics;
+import org.oryxel.viabedrockutility.attachable.FirstPersonAttachableRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +41,7 @@ public class ViaBedrockUtilityNeoForge {
 				}));
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::onClientTick);
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::registerClientCommands);
+		NeoForge.EVENT_BUS.addListener(FirstPersonAttachableRenderer::onRenderHand);
 		// Reset the per-frame animation budget before entities render (AfterOpaqueBlocks fires before
 		// the entity pass). Caps full-rate MoLang animation count in dense scenes. See AnimationBudget.
 		NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent.AfterOpaqueBlocks event) -> {
