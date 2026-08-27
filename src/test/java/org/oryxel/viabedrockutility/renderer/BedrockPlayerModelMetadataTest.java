@@ -56,6 +56,12 @@ class BedrockPlayerModelMetadataTest {
         assertGolden(fixture, "left_item_host_matrix_column_major",
                 host.firstPersonAttachmentMatrix(metadata.bone("leftitem")));
 
+        final var rightOrigin = host.firstPersonAttachmentMatrix(rightItem)
+                .transformPosition(new org.joml.Vector3f());
+        assertEquals(0.7147286F, rightOrigin.x, EPSILON);
+        assertEquals(-0.6598784F, rightOrigin.y, EPSILON);
+        assertEquals(-1.0139878F, rightOrigin.z, EPSILON);
+
         final var head = metadata.bone("head");
         final var headMatrix = host.firstPersonAttachmentMatrix(head);
         final var headOrigin = headMatrix.transformPosition(new org.joml.Vector3f());
@@ -67,6 +73,26 @@ class BedrockPlayerModelMetadataTest {
         assertTrue(muzzle.x > headOrigin.x, "negative Bedrock bind X is screen-right in first person");
         assertTrue(muzzle.y < headOrigin.y, "negative Bedrock bind Y is screen-down in first person");
         assertTrue(muzzle.z < headOrigin.z, "positive Bedrock bind Z is forward in first person");
+    }
+
+    @Test
+    void firstPersonItemOffsetFollowsActiveGeometryPivots() {
+        final BedrockPlayerModelMetadata metadata = new BedrockPlayerModelMetadata(false);
+        add(metadata, "root", "", "", new Position3V(0, 0, 0));
+        add(metadata, "rightArm", "right_arm", "root", "root",
+                new Position3V(-5, 20, 0));
+        add(metadata, "rightItem", "rightitem", "right_arm", "right_arm",
+                new Position3V(-6, 12, 3));
+
+        final var item = metadata.bone("rightitem");
+        final var local = org.oryxel.viabedrockutility.attachable.BedrockFirstPersonView.STANDARD
+                .localMatrix(metadata, item)
+                .transformPosition(new org.joml.Vector3f());
+
+        // Bedrock source formula: [0, 20 - 12 - 7, -3] = [0, 1, -3].
+        assertEquals(0.0F, local.x, EPSILON);
+        assertEquals(-1.0F / 16.0F, local.y, EPSILON);
+        assertEquals(-3.0F / 16.0F, local.z, EPSILON);
     }
 
     private static void add(BedrockPlayerModelMetadata metadata, String name,
@@ -86,6 +112,16 @@ class BedrockPlayerModelMetadataTest {
             case "leftitem" -> new Position3V(6, 15, 1);
             default -> new Position3V(0, 0, 0);
         };
+        add(metadata, sourceName, modelName, semanticParent, presentationParent, pivot);
+    }
+
+    private static void add(BedrockPlayerModelMetadata metadata, String name,
+                            String semanticParent, String presentationParent, Position3V pivot) {
+        add(metadata, name, name, semanticParent, presentationParent, pivot);
+    }
+
+    private static void add(BedrockPlayerModelMetadata metadata, String sourceName, String modelName,
+                            String semanticParent, String presentationParent, Position3V pivot) {
         final Parent source = new Parent(sourceName, pivot, new Position3V(0, 0, 0));
         source.setParent(semanticParent);
         metadata.addBone(source, modelName, semanticParent, presentationParent,

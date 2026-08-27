@@ -17,9 +17,9 @@ import org.joml.Vector3f;
  * and {@link #blockbenchRotationToJavaModel(Vector3f)} — Blockbench editor space bridges.</li>
  * <li>{@link #bedrockBindingOffset(Vector3f, BindingOffsetFrame)} — Bedrock bone/locator binding
  * offsets to the local axes declared by an anchor.</li>
- * <li>{@link #deformation(Vector3f, Vector3f, Vector3f, Vector3f)}, {@link #hostDeformation(Matrix4f, Matrix4f)}
- * and {@link #hostAttachment(Matrix4f, Matrix4f, Vector3f)} — bone-space composition on already
- * converted values.</li>
+ * <li>{@link #deformation(Vector3f, Vector3f, Vector3f, Vector3f)}, {@link #hostDeformation(Matrix4f, Matrix4f)},
+ * {@link #hostAttachment(Matrix4f, Matrix4f, Vector3f)} and
+ * {@link #geometryInstallation(Matrix4f)} — bone-space composition on already converted values.</li>
  * </ul>
  * Animation offsets cross the Bedrock→Java boundary exactly once, in
  * {@code ModelPartBoneTarget.addOffset} (Y negation); {@code IModelPart} offset/pivot setters store
@@ -147,6 +147,18 @@ public final class BedrockTransformConvention {
                 .translate(javaAnchorPixels.x / PIXELS_PER_BLOCK,
                         javaAnchorPixels.y / PIXELS_PER_BLOCK,
                         javaAnchorPixels.z / PIXELS_PER_BLOCK);
+    }
+
+    /** Keeps model installation explicit from the physical anchor used by locators and effects. */
+    public static Matrix4f geometryInstallation(Matrix4f physicalAnchor) {
+        return geometryInstallation(physicalAnchor, 1.0F, 1.0F, 1.0F);
+    }
+
+    /** Applies the attachable root scale without changing the established attachment anchor. */
+    public static Matrix4f geometryInstallation(Matrix4f physicalAnchor,
+                                                float scaleX, float scaleY, float scaleZ) {
+        return new Matrix4f(physicalAnchor)
+                .scale(scaleX, scaleY, scaleZ);
     }
 
 }

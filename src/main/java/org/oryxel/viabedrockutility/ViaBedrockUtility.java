@@ -248,13 +248,16 @@ public class ViaBedrockUtility {
                     }
                     for (AttachableDebugLog.DebugInfo snapshot : snapshots) {
                         final String line = snapshot.runtimeKey() + " -> " + snapshot.identity()
+                                + ", lastSeenTick=" + snapshot.lastSeenTick()
                                 + ", binding=" + snapshot.bindingBone()
                                 + ", hostProfile=" + snapshot.hostProfile()
                                 + ", semanticChain=" + snapshot.semanticChain()
                                 + ", presentationChain=" + snapshot.presentationChain()
                                 + ", controllers=" + snapshot.controllerStates()
                                 + ", passes=" + snapshot.renderPasses()
-                                + ", host=" + Arrays.toString(snapshot.hostMatrix());
+                                + ", physicalAnchor=" + Arrays.toString(snapshot.physicalAnchorMatrix())
+                                + ", geometryInstallation="
+                                + Arrays.toString(snapshot.geometryInstallationMatrix());
                         context.getSource().sendSuccess(() -> Component.literal(line), false);
                         ViaBedrockUtilityNeoForge.LOGGER.info("[AttachableDebug] {}", line);
                     }

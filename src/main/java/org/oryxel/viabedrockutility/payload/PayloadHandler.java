@@ -4,12 +4,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.model.PlayerModel;
-import net.minecraft.client.model.geom.builders.LayerDefinition;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.resources.PlayerSkin;
@@ -36,6 +34,7 @@ import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import org.oryxel.viabedrockutility.renderer.AnimatedSkinOverlay;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
 import org.oryxel.viabedrockutility.util.EntityRendererContextUtil;
+import org.oryxel.viabedrockutility.util.BundledPlayerModelFactory;
 import org.oryxel.viabedrockutility.util.GeometryUtil;
 
 import org.oryxel.viabedrockutility.util.ImageUtil;
@@ -365,9 +364,17 @@ public class PayloadHandler {
         }
 
         if (model == null) {
-            // This is likely a classic skin with hardcoded identifier! TODO: 128x128
-            model = new PlayerModel(LayerDefinition.create(PlayerModel.createMesh(CubeDeformation.NONE, slim), 64, 64).bakeRoot(), slim);
-            ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Using default player model (slim={}) for {}", slim, payload.getPlayerUuid());
+            try {
+                model = BundledPlayerModelFactory.create(slim);
+                ViaBedrockUtilityNeoForge.LOGGER.debug(
+                        "[Skin] Using bundled Bedrock player geometry (slim={}) for {}",
+                        slim, payload.getPlayerUuid());
+            } catch (RuntimeException exception) {
+                ViaBedrockUtilityNeoForge.LOGGER.error(
+                        "[Skin] Failed to build bundled Bedrock player geometry for {}",
+                        payload.getPlayerUuid(), exception);
+                return;
+            }
         }
 
         final EntityRendererProvider.Context entityContext = EntityRendererContextUtil.build(client);

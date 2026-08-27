@@ -83,7 +83,7 @@ public final class AttachableHostContext {
     private Matrix4f firstPersonWorldMatrix(BedrockPlayerModelMetadata.Bone bone) {
         final Matrix4f matrix = BedrockFirstPersonView.STANDARD.cameraMatrix();
         for (BedrockPlayerModelMetadata.Bone entry : metadata.chainTo(bone)) {
-            matrix.mul(BedrockFirstPersonView.STANDARD.localMatrix(entry));
+            matrix.mul(BedrockFirstPersonView.STANDARD.localMatrix(metadata, entry));
         }
         return matrix;
     }

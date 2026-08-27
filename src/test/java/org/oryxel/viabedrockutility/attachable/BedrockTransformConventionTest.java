@@ -60,6 +60,27 @@ class BedrockTransformConventionTest {
     }
 
     @Test
+    void geometryInstallationPreservesThePhysicalAnchor() {
+        Matrix4f physicalAnchor = new Matrix4f()
+                .translation(0.75F, -0.25F, 1.5F)
+                .rotateZYX(0.2F, -0.4F, 0.1F);
+        Matrix4f installation = BedrockTransformConvention.geometryInstallation(physicalAnchor);
+
+        assertMatrixEquals(physicalAnchor, installation);
+    }
+
+    @Test
+    void geometryInstallationOnlyAddsRootScale() {
+        Matrix4f physicalAnchor = new Matrix4f()
+                .translation(-0.5F, 0.75F, -1.25F)
+                .rotateZYX(-0.15F, 0.3F, -0.25F);
+        Matrix4f installation = BedrockTransformConvention.geometryInstallation(
+                physicalAnchor, 0.6F, 0.8F, 1.2F);
+
+        assertMatrixEquals(new Matrix4f(physicalAnchor).scale(0.6F, 0.8F, 1.2F), installation);
+    }
+
+    @Test
     void blockbenchPreviewVectorsUseTheirOwnCoordinateBridge() {
         Vector3f position = BedrockTransformConvention.blockbenchVectorToJavaModel(
                 new Vector3f(-13.5F, -10.0F, 12.0F));

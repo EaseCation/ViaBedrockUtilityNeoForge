@@ -7,9 +7,9 @@ import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
 import java.util.Locale;
 
 /**
- * Versioned first-person host profile from Blockbench's Bedrock multi-file attachable preview.
- * The profile only supplies camera and per-bone pose overrides; hierarchy and bind pivots always
- * come from the active VBU player geometry.
+ * Versioned first-person host profile. The camera and arm pose match Bedrock's multi-file preview,
+ * while item bones use the runtime player animation formula. Hierarchy and pivots always come from
+ * the active VBU player geometry.
  */
 public final class BedrockFirstPersonView {
     public static final String PROFILE_NAME = "bedrock_multifile_binding";
@@ -50,8 +50,9 @@ public final class BedrockFirstPersonView {
     }
 
     /** Returns the semantic local deformation for one bone in the synthetic first-person host pose. */
-    public Matrix4f localMatrix(BedrockPlayerModelMetadata.Bone bone) {
-        final BonePose override = overrideFor(bone.key());
+    public Matrix4f localMatrix(BedrockPlayerModelMetadata metadata,
+                                BedrockPlayerModelMetadata.Bone bone) {
+        final BonePose override = overrideFor(metadata, bone);
         final Vector3f offset = override == null
                 ? new Vector3f()
                 : BedrockTransformConvention.blockbenchVectorToJavaModel(override.position().vector());
@@ -62,14 +63,32 @@ public final class BedrockFirstPersonView {
                 bone.pivot(), offset, rotation, new Vector3f(1.0F));
     }
 
-    private BonePose overrideFor(String boneName) {
-        return switch (boneName.replace("_", "").toLowerCase(Locale.ROOT)) {
+    private BonePose overrideFor(BedrockPlayerModelMetadata metadata,
+                                 BedrockPlayerModelMetadata.Bone bone) {
+        return switch (bone.key().replace("_", "").toLowerCase(Locale.ROOT)) {
             case "rightarm" -> rightArmPose;
             case "leftarm" -> rightArmPose.mirroredX();
-            case "rightitem" -> rightItemPose;
-            case "leftitem" -> rightItemPose.mirroredX();
+            case "rightitem", "leftitem" -> runtimeItemPose(metadata, bone);
             default -> null;
         };
+    }
+
+    /**
+     * Bedrock first_person.empty_hand evaluates
+     * {@code [0, pivot(arm,y) - pivot(item,y) - 7, -pivot(item,z)]} in source geometry space.
+     * Metadata pivots already have Y reflected around the player presentation origin, so the source
+     * Y delta is {@code item.y - arm.y}; the origin cancels out.
+     */
+    private BonePose runtimeItemPose(BedrockPlayerModelMetadata metadata,
+                                     BedrockPlayerModelMetadata.Bone itemBone) {
+        final BedrockPlayerModelMetadata.Bone armBone = metadata.bone(itemBone.parentKey());
+        if (armBone == null) {
+            return itemBone.key().startsWith("left") ? rightItemPose.mirroredX() : rightItemPose;
+        }
+        return new BonePose(new Vec3(
+                0.0F,
+                itemBone.pivot().y - armBone.pivot().y - 7.0F,
+                -itemBone.pivot().z), null);
     }
 
     public record Vec3(float x, float y, float z) {

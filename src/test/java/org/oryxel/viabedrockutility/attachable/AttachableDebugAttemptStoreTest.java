@@ -18,20 +18,21 @@ class AttachableDebugAttemptStoreTest {
                 UUID.randomUUID(), AttachableQueryContext.LogicalHand.MAIN_HAND);
         final var retiredKey = new AttachableRuntimeRegistry.RuntimeKey(
                 UUID.randomUUID(), AttachableQueryContext.LogicalHand.OFF_HAND);
-        final DebugAttempt live = attempt(liveKey);
-        final DebugAttempt retired = attempt(retiredKey);
+        final DebugAttempt live = attempt(liveKey, 10L);
+        final DebugAttempt refreshedLive = attempt(liveKey, 25L);
+        final DebugAttempt retired = attempt(retiredKey, 10L);
 
         assertNull(store.record(live, 10L));
         assertNull(store.record(retired, 10L));
-        assertEquals(live, store.record(live, 25L));
+        assertEquals(live, store.record(refreshedLive, 25L));
 
         store.evictOlderThan(20L);
 
-        assertEquals(List.of(live), store.snapshot());
+        assertEquals(List.of(refreshedLive), store.snapshot());
     }
 
-    private static DebugAttempt attempt(AttachableRuntimeRegistry.RuntimeKey key) {
-        return new DebugAttempt(key, 1L, "minecraft:stick",
+    private static DebugAttempt attempt(AttachableRuntimeRegistry.RuntimeKey key, long tick) {
+        return new DebugAttempt(key, 1L, tick, "minecraft:stick",
                 AttachableQueryContext.ViewContext.THIRD_PERSON, AttemptStage.NO_CANDIDATES,
                 0, "", List.of(), "", "test");
     }

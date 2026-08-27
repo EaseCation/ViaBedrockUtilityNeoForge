@@ -129,10 +129,14 @@ public final class AttachableRuntimeManager {
     public List<DebugInfo> debugSnapshot() {
         return runtimes.snapshot().entrySet().stream().map(entry -> {
             final AttachableRuntimeInstance runtime = entry.getValue().runtime();
-            return new DebugInfo(entry.getKey(), entry.getValue().identity(), runtime.lastBinding,
+            return new DebugInfo(entry.getKey(), entry.getValue().identity(), entry.getValue().lastSeenTick(),
+                    runtime.lastBinding,
                     runtime.lastHostProfile, runtime.lastSemanticChain, runtime.lastPresentationChain,
                     runtime.lastControllerStates, runtime.lastRenderPasses,
-                    runtime.lastHostMatrix == null ? null : runtime.lastHostMatrix.get(new float[16]));
+                    runtime.lastPhysicalAnchorMatrix == null
+                            ? null : runtime.lastPhysicalAnchorMatrix.get(new float[16]),
+                    runtime.lastGeometryInstallationMatrix == null
+                            ? null : runtime.lastGeometryInstallationMatrix.get(new float[16]));
         }).toList();
     }
 
@@ -255,7 +259,8 @@ public final class AttachableRuntimeManager {
                                AttachableItemSnapshot item, AttachableQueryContext.ViewContext view,
                                AttemptStage stage, int candidates, String attachableIdentifier,
                                List<String> renderPasses, String bindingBone, String detail) {
-        final DebugAttempt attempt = new DebugAttempt(key, generation, item.itemIdentifier().toString(), view,
+        final DebugAttempt attempt = new DebugAttempt(key, generation, tick,
+                item.itemIdentifier().toString(), view,
                 stage, candidates, attachableIdentifier, renderPasses, bindingBone, detail);
         final DebugAttempt previous = debugAttempts.record(attempt, tick);
         if (!attempt.equals(previous)) {
