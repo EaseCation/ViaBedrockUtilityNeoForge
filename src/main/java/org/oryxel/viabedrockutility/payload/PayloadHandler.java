@@ -62,6 +62,15 @@ public class PayloadHandler {
     /** Switches every pack-backed consumer to the newly published generation. */
     public void onPackManagerChanged(PackManager manager) {
         this.packManager = manager;
+        resetPlayerAnimationRuntimes();
+    }
+
+    /** Rebuilds controller and one-shot state after an ordinary client resource reload. */
+    public void resetPlayerAnimationRuntimes() {
+        final PackManager manager = this.packManager;
+        if (manager == null) {
+            return;
+        }
         for (Map.Entry<UUID, EntityRenderer<?, ?>> entry : cachedPlayerRenderers.entrySet()) {
             if (entry.getValue() instanceof CustomPlayerRenderer renderer) {
                 final CachedPlayerSkin skin = cachedPlayerSkins.get(entry.getKey());

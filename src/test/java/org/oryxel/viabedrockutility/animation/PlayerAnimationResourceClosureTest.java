@@ -29,6 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerAnimationResourceClosureTest {
+    private static final Object PLAYER_INSTANCE = new Object();
+    private static final Object LEVEL_INSTANCE = new Object();
+
     @Test
     void deliveredVanillaAndGunPacksFormACompletePlayerRuntime() throws Exception {
         final Path packsRoot = Path.of(System.getProperty("vbu.workspaceRoot"),
@@ -191,6 +194,7 @@ class PlayerAnimationResourceClosureTest {
                                               HumanoidArm mainArm) {
         return new PlayerAnimationState(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                new PlayerAnimationOwner(PLAYER_INSTANCE, LEVEL_INSTANCE),
                 view, tick, 0.0F,
                 mainArm, InteractionHand.MAIN_HAND,
                 mainHandIdentifier, "", Set.of(),

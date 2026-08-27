@@ -30,14 +30,17 @@ public class ViaBedrockUtilityNeoForge {
 		LodConfig.load();
 		ViaBedrockUtility.getInstance().init();
 		modEventBus.addListener(ViaBedrockUtility.getInstance()::registerPayloads);
-		// Clear the deferred name-tag PreparedText cache on client resource reload: cached glyphs hold
-		// BakedGlyph references into the font atlas, which the reload rebuilds. See DeferredNameTag.clearCache.
+		// Retire client objects that retain resources or mutable animation state across reload generations.
 		modEventBus.addListener((AddClientReloadListenersEvent event) -> event.addListener(
-				ResourceLocation.fromNamespaceAndPath(MOD_ID, "name_tag_cache"),
+				ResourceLocation.fromNamespaceAndPath(MOD_ID, "runtime_caches"),
 				(ResourceManagerReloadListener) resourceManager -> {
 					DeferredNameTag.clearCache();
 					FrozenMeshDrawQueue.clear();
 					FrozenEntityMeshCache.global().invalidateAll("resource_reload");
+					final var payloadHandler = ViaBedrockUtility.getInstance().getPayloadHandler();
+					if (payloadHandler != null) {
+						payloadHandler.resetPlayerAnimationRuntimes();
+					}
 				}));
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::onClientTick);
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::registerClientCommands);

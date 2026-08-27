@@ -14,6 +14,7 @@ import org.joml.Matrix4f;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import net.easecation.bedrockmotion.pack.PackManager;
 import org.oryxel.viabedrockutility.animation.PlayerAnimationRuntime;
+import org.oryxel.viabedrockutility.animation.PlayerAnimationRuntimeSlot;
 import org.oryxel.viabedrockutility.animation.PlayerAnimationState;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 import org.oryxel.viabedrockutility.attachable.AttachableItemSnapshot;
@@ -30,7 +31,10 @@ public class CustomPlayerRenderer extends PlayerRenderer {
     private final ResourceLocation texture;
     private final List<AnimatedSkinOverlay> overlays = new ArrayList<>();
     private volatile BedrockPlayerWorldPose thirdPersonPose;
-    private PlayerAnimationRuntime playerAnimationRuntime;
+    private final PlayerAnimationRuntimeSlot<PlayerAnimationRuntime> playerAnimationRuntime =
+            new PlayerAnimationRuntimeSlot<>();
+    private PackManager playerAnimationPacks;
+    private Map<String, String> playerAnimationOverrides = Map.of();
 
     public CustomPlayerRenderer(final EntityRendererProvider.Context ctx, final PlayerModel model, final boolean slim, ResourceLocation texture) {
         super(ctx, slim);
@@ -134,21 +138,28 @@ public class CustomPlayerRenderer extends PlayerRenderer {
     }
 
     public void playAnimationOnce(final String name, final AnimationDefinitions.AnimationData data) {
-        if (this.playerAnimationRuntime != null) {
-            this.playerAnimationRuntime.playOnce(name, data);
+        final PlayerAnimationRuntime runtime = this.playerAnimationRuntime.current();
+        if (runtime != null) {
+            runtime.playOnce(name, data);
         }
     }
 
     public void setPlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides) {
-        this.playerAnimationRuntime = new PlayerAnimationRuntime(packs, animationOverrides);
+        this.playerAnimationPacks = packs;
+        this.playerAnimationOverrides = Map.copyOf(animationOverrides);
+        this.playerAnimationRuntime.replace(new PlayerAnimationRuntime(packs, this.playerAnimationOverrides));
     }
 
-    public PlayerAnimationRuntime playerAnimationRuntime() {
-        return playerAnimationRuntime;
+    public PlayerAnimationRuntime playerAnimationRuntime(PlayerAnimationState state) {
+        if (playerAnimationPacks == null || state == null) {
+            return null;
+        }
+        return playerAnimationRuntime.bind(state.owner(),
+                () -> new PlayerAnimationRuntime(playerAnimationPacks, playerAnimationOverrides));
     }
 
     public boolean sampleFirstPerson(PlayerAnimationState state) {
-        return playerAnimationRuntime != null
-                && playerAnimationRuntime.sampleFirstPerson(this.model, state);
+        final PlayerAnimationRuntime runtime = playerAnimationRuntime(state);
+        return runtime != null && runtime.sampleFirstPerson(this.model, state);
     }
 }

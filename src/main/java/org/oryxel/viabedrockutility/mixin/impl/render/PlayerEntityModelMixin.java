@@ -101,6 +101,9 @@ public abstract class PlayerEntityModelMixin {
     viaBedrockUtility$runtime(PlayerRenderState state) {
         final var renderer = ((ICustomPlayerRendererHolder) state)
                 .viaBedrockUtility$getCustomPlayerRenderer();
-        return renderer instanceof CustomPlayerRenderer custom ? custom.playerAnimationRuntime() : null;
+        final var snapshot = ((ICustomPlayerRendererHolder) state)
+                .viaBedrockUtility$getPlayerAnimationState();
+        return renderer instanceof CustomPlayerRenderer custom
+                ? custom.playerAnimationRuntime(snapshot) : null;
     }
 }

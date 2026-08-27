@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 /** Immutable Minecraft-side input sampled once for one player animation evaluation. */
 public record PlayerAnimationState(
         UUID playerUuid,
+        PlayerAnimationOwner owner,
         View view,
         long tick,
         float partialTick,
@@ -115,7 +116,8 @@ public record PlayerAnimationState(
                 .distanceTo(player.getPosition(partialTick));
 
         return new PlayerAnimationState(
-                player.getUUID(), view, player.tickCount, partialTick, player.getMainArm(),
+                player.getUUID(), new PlayerAnimationOwner(player, player.level()),
+                view, player.tickCount, partialTick, player.getMainArm(),
                 player.isUsingItem() ? player.getUsedItemHand() : InteractionHand.MAIN_HAND,
                 identifier(mainHand), identifier(offHand), tags(mainHand),
                 player.tickCount + partialTick, walkPosition, walkSpeed, attackTime,
