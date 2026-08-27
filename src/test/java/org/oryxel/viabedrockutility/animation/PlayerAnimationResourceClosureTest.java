@@ -1,9 +1,13 @@
 package org.oryxel.viabedrockutility.animation;
 
-import net.easecation.bedrockmotion.pack.PackManager;
-import net.easecation.bedrockmotion.pack.content.Content;
+import com.google.gson.JsonParser;
+import net.easecation.bedrockmotion.animation.Animation;
+import net.easecation.bedrockmotion.animation.vanilla.AnimateBuilder;
 import net.easecation.bedrockmotion.model.IBoneModel;
 import net.easecation.bedrockmotion.model.IBoneTarget;
+import net.easecation.bedrockmotion.pack.PackManager;
+import net.easecation.bedrockmotion.pack.content.Content;
+import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
 import org.joml.Vector3f;
@@ -18,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -28,11 +33,17 @@ class PlayerAnimationResourceClosureTest {
     void deliveredVanillaAndGunPacksFormACompletePlayerRuntime() throws Exception {
         final Path packsRoot = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "bedrock-loader-packs");
+        final Path codeFunPacks = Path.of(System.getProperty("vbu.workspaceRoot"),
+                "ec-deploy-assets", "resource-packs", "CodeFunCore");
         final Path vanilla = packsRoot.resolve("vanilla.zip");
         final Path gun = packsRoot.resolve("ec_gun_r.zip");
         final String configuredStack = System.getProperty("vbu.playerPackStack", "");
         final List<Path> stack = configuredStack.isBlank()
-                ? List.of(vanilla, gun)
+                ? List.of(vanilla,
+                        codeFunPacks.resolve("ec_hub.zip"),
+                        codeFunPacks.resolve("rl_defense.zip"),
+                        codeFunPacks.resolve("rl_defense_ec_entity.zip"),
+                        gun)
                 : Arrays.stream(configuredStack.split(java.util.regex.Pattern.quote(File.pathSeparator)))
                 .map(Path::of)
                 .toList();
@@ -69,15 +80,66 @@ class PlayerAnimationResourceClosureTest {
         assertTrue(runtime.sampleThirdPerson(model, state(2L, "")));
         assertEquals(0.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(0.0F, model.rotationX("leftarm"), 1.0e-3F);
+
+        assertTrue(runtime.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 3L, "", 0.0F, 1.0F, 0.0F)));
+        assertEquals(-57.3F, model.rotationX("rightarm"), 1.0e-3F);
+        assertEquals(57.3F, model.rotationX("leftarm"), 1.0e-3F);
+
+        final PlayerAnimationRuntime zombie = new PlayerAnimationRuntime(packs, Map.of(
+                "riding.arms", "animation.player.riding.arms.zombie",
+                "move.arms", "animation.player.move.arms.zombie",
+                "holding", "animation.player.holding.zombie"));
+        assertTrue(zombie.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 4L, "", 0.0F, 1.0F, 0.0F)));
+        assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
+        assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
+
+        assertTrue(runtime.sampleFirstPerson(model,
+                state(PlayerAnimationState.View.FIRST_PERSON, 5L, "", 0.0F, 0.0F, 0.0F)));
+        final float restingFirstPersonArm = model.rotationX("rightarm");
+        assertTrue(runtime.sampleFirstPerson(model,
+                state(PlayerAnimationState.View.FIRST_PERSON, 6L, "", 0.0F, 0.0F, 0.5F)));
+        assertTrue(Math.abs(model.rotationX("rightarm") - restingFirstPersonArm) > 1.0F);
+
+        final AtomicLong now = new AtomicLong();
+        final PlayerAnimationRuntime oneShotRuntime = new PlayerAnimationRuntime(
+                packs, Map.of(), now::get);
+        final PlayerAnimationRuntime baselineRuntime = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel baseline = new TestBoneModel();
+        final Animation oneShot = Animation.parse(JsonParser.parseString("""
+                {"animations":{"animation.test.once":{"loop":false,"animation_length":0.1,
+                  "bones":{"rightarm":{"rotation":[20,0,0]}}}}}
+                """).getAsJsonObject()).getFirst();
+        oneShotRuntime.playOnce("animation.test.once",
+                new AnimationDefinitions.AnimationData(oneShot, AnimateBuilder.build(oneShot)));
+        assertTrue(oneShotRuntime.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 7L, "", 0.0F, 0.0F, 0.0F)));
+        assertTrue(baselineRuntime.sampleThirdPerson(baseline,
+                state(PlayerAnimationState.View.THIRD_PERSON, 7L, "", 0.0F, 0.0F, 0.0F)));
+        assertEquals(20.0F, model.rotationX("rightarm"), 1.0e-3F);
+        now.set(101L);
+        assertTrue(oneShotRuntime.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 8L, "", 0.0F, 0.0F, 0.0F)));
+        assertTrue(baselineRuntime.sampleThirdPerson(baseline,
+                state(PlayerAnimationState.View.THIRD_PERSON, 8L, "", 0.0F, 0.0F, 0.0F)));
+        assertEquals(baseline.rotationX("rightarm"), model.rotationX("rightarm"), 1.0e-3F);
     }
 
     private static PlayerAnimationState state(long tick, String mainHandIdentifier) {
+        return state(PlayerAnimationState.View.THIRD_PERSON, tick,
+                mainHandIdentifier, 0.0F, 0.0F, 0.0F);
+    }
+
+    private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
+                                              String mainHandIdentifier, float walkPosition,
+                                              float walkSpeed, float attackTime) {
         return new PlayerAnimationState(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
-                PlayerAnimationState.View.THIRD_PERSON, tick, 0.0F,
+                view, tick, 0.0F,
                 HumanoidArm.RIGHT, InteractionHand.MAIN_HAND,
                 mainHandIdentifier, "", Set.of(),
-                tick, 0.0F, 0.0F, 0.0F,
+                tick, walkPosition, walkSpeed, attackTime,
                 0.0F, 0.0F, 0.0F, 0.0F, 1.0F,
                 true, true, false, false, false, false, false,
                 false, false, false, false, false, false, false, false,

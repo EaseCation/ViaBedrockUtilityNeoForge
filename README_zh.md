@@ -63,7 +63,7 @@ ViaBedrock 在代理端完成 Bedrock → Java 协议转换，同时将 Java 版
 | `PayloadHandler` | 管理皮肤数据的分块接收和组装 |
 | `CustomPlayerRenderer` | 自定义玩家渲染器，支持自定义纹理和动画覆盖 |
 | `AnimatedSkinOverlay` | 动态皮肤覆盖，支持 LINEAR（逐帧）和 BLINKING（自动眨眼）两种播放模式 |
-| `PlayerAnimationManager` | 管理玩家的 Bedrock 动画覆盖，处理与原版动画的轴向清除 |
+| `PlayerAnimationRuntime` | 执行合并后的基岩玩家脚本和根控制器，并应用逐玩家动画别名覆盖 |
 | `PlayerSkinBuilder` | 跨版本兼容的 SkinTextures 构建器 |
 
 **皮肤数据流**：

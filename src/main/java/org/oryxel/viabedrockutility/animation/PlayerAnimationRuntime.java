@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.LongSupplier;
 
 /** Owns the independent first/third-person Bedrock player-host runtimes for one renderer. */
 public final class PlayerAnimationRuntime {
@@ -37,10 +38,17 @@ public final class PlayerAnimationRuntime {
     private final Map<String, AnimationDefinitions.AnimationData> onceAnimations = new LinkedHashMap<>();
     private final Map<String, Long> onceStartMillis = new LinkedHashMap<>();
     private final Vector3f animationScratch = new Vector3f();
+    private final LongSupplier nowMillis;
     private McBoneModel cachedModel;
 
     public PlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides) {
+        this(packs, animationOverrides, System::currentTimeMillis);
+    }
+
+    PlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides,
+                           LongSupplier nowMillis) {
         Objects.requireNonNull(packs, "packs");
+        this.nowMillis = Objects.requireNonNull(nowMillis, "nowMillis");
         final var definition = packs.getEntityDefinitions().getEntities().get("minecraft:player");
         if (definition == null) {
             throw new IllegalArgumentException("PackManager is missing minecraft:player");
@@ -61,6 +69,10 @@ public final class PlayerAnimationRuntime {
         return sample(model, state, thirdPerson);
     }
 
+    boolean sampleFirstPerson(IBoneModel model, PlayerAnimationState state) {
+        return sample(model, state, firstPerson);
+    }
+
     boolean sampleThirdPerson(IBoneModel model, PlayerAnimationState state) {
         return sample(model, state, thirdPerson);
     }
@@ -70,7 +82,7 @@ public final class PlayerAnimationRuntime {
             return;
         }
         onceAnimations.put(identifier, animation);
-        onceStartMillis.put(identifier, System.currentTimeMillis());
+        onceStartMillis.put(identifier, nowMillis.getAsLong());
     }
 
     private boolean sample(PlayerModel model, PlayerAnimationState state, ViewInstance view) {
@@ -103,7 +115,7 @@ public final class PlayerAnimationRuntime {
     }
 
     private void applyOneShots(IBoneModel model, Scope scope) {
-        final long now = System.currentTimeMillis();
+        final long now = nowMillis.getAsLong();
         final Iterator<Map.Entry<String, AnimationDefinitions.AnimationData>> iterator =
                 onceAnimations.entrySet().iterator();
         while (iterator.hasNext()) {
