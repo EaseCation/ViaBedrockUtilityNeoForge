@@ -68,7 +68,13 @@ public final class AttachableHostContext {
 
     /** Prefixes a direct ModelPart render without mutating the host model's current pose. */
     public Matrix4f firstPersonArmRenderPrefix(BedrockPlayerModelMetadata.Bone armBone) {
-        final Matrix4f target = firstPersonWorldMatrix(armBone);
+        return firstPersonArmRenderPrefix(armBone, 0.0F);
+    }
+
+    /** Prefixes a direct empty-hand arm render with Bedrock's first-person attack layer. */
+    public Matrix4f firstPersonArmRenderPrefix(BedrockPlayerModelMetadata.Bone armBone,
+                                               float attackTime) {
+        final Matrix4f target = firstPersonWorldMatrix(armBone, attackTime);
         return target.mul(localMatrix(armBone, true).invert());
     }
 
@@ -81,9 +87,13 @@ public final class AttachableHostContext {
     }
 
     private Matrix4f firstPersonWorldMatrix(BedrockPlayerModelMetadata.Bone bone) {
+        return firstPersonWorldMatrix(bone, 0.0F);
+    }
+
+    private Matrix4f firstPersonWorldMatrix(BedrockPlayerModelMetadata.Bone bone, float attackTime) {
         final Matrix4f matrix = BedrockFirstPersonView.STANDARD.cameraMatrix();
         for (BedrockPlayerModelMetadata.Bone entry : metadata.chainTo(bone)) {
-            matrix.mul(BedrockFirstPersonView.STANDARD.localMatrix(metadata, entry));
+            matrix.mul(BedrockFirstPersonView.STANDARD.localMatrix(metadata, entry, attackTime));
         }
         return matrix;
     }

@@ -8,6 +8,7 @@ import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.registries.BuiltInRegistries;
 import com.mojang.blaze3d.vertex.PoseStack;
 import org.joml.Matrix4f;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
@@ -56,10 +57,16 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setHandSnapshots(
                 attachables.snapshotIfCandidate(player.getMainHandItem()),
                 attachables.snapshotIfCandidate(player.getOffhandItem()));
+        ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setHandItemIdentifiers(
+                itemIdentifier(player.getMainHandItem()), itemIdentifier(player.getOffhandItem()));
         ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setOwnerSnapshot(
                 new AttachableOwnerSnapshot(player.getUUID(), "minecraft:player",
                         player.getAttackAnim(partialTick), state.xRot,
                         state.yRot));
+    }
+
+    private static ResourceLocation itemIdentifier(net.minecraft.world.item.ItemStack stack) {
+        return stack == null || stack.isEmpty() ? null : BuiltInRegistries.ITEM.getKey(stack.getItem());
     }
 
     @Override

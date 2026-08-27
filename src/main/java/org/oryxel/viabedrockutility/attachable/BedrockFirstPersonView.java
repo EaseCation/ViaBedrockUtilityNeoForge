@@ -52,6 +52,12 @@ public final class BedrockFirstPersonView {
     /** Returns the semantic local deformation for one bone in the synthetic first-person host pose. */
     public Matrix4f localMatrix(BedrockPlayerModelMetadata metadata,
                                 BedrockPlayerModelMetadata.Bone bone) {
+        return localMatrix(metadata, bone, 0.0F);
+    }
+
+    /** Returns the first-person host pose with Bedrock's empty-hand attack layer applied. */
+    public Matrix4f localMatrix(BedrockPlayerModelMetadata metadata,
+                                BedrockPlayerModelMetadata.Bone bone, float attackTime) {
         final BonePose override = overrideFor(metadata, bone);
         final Vector3f offset = override == null
                 ? new Vector3f()
@@ -59,8 +65,47 @@ public final class BedrockFirstPersonView {
         final Vector3f rotation = override == null || override.rotation() == null
                 ? new Vector3f(bone.rotation())
                 : BedrockTransformConvention.blockbenchRotationToJavaModel(override.rotation().vector());
+        final String normalized = bone.key().replace("_", "").toLowerCase(Locale.ROOT);
+        if (normalized.equals("rightarm") || normalized.equals("leftarm")) {
+            AttackPose attack = attackPose(attackTime);
+            if (normalized.equals("leftarm")) {
+                attack = attack.mirroredX();
+            }
+            offset.add(BedrockTransformConvention.bedrockBindingOffsetToJavaModel(
+                    attack.position().vector()));
+            rotation.add(BedrockTransformConvention.bedrockAnimationRotationToJavaModel(
+                    attack.rotation().vector()));
+        }
         return BedrockTransformConvention.deformation(
                 bone.pivot(), offset, rotation, new Vector3f(1.0F));
+    }
+
+    /** Samples animation.player.first_person.attack_rotation in Bedrock source coordinates. */
+    static AttackPose attackPose(float attackTime) {
+        final float time = Math.max(0.0F, Math.min(1.0F, attackTime));
+        if (time == 0.0F || time == 1.0F) {
+            return AttackPose.ZERO;
+        }
+
+        final double rotationFactor = sinDegrees((1.0D - time) * 180.0D);
+        final double positionPhase = sinDegrees(rotationFactor * time * 112.0D);
+        final float x = (float) (Math.max(-7.0D, Math.min(999.0D,
+                -15.5D * positionPhase)) * positionPhase);
+        final float y = (float) (sinDegrees(rotationFactor * (1.0D - time)
+                * (1.0D - time) * 200.0D) * 7.5D - rotationFactor * time * 15.0D);
+        final float z = (float) (sinDegrees(rotationFactor * time * 120.0D) * 1.75D);
+
+        final double rotationPhase = sinDegrees(rotationFactor * (1.0D - time)
+                * (1.0D - time) * 280.0D);
+        return new AttackPose(
+                new Vec3(x, y, z),
+                new Vec3((float) (-60.0D * rotationPhase),
+                        (float) (40.0D * rotationPhase),
+                        (float) (20.0D * rotationPhase)));
+    }
+
+    private static double sinDegrees(double degrees) {
+        return Math.sin(Math.toRadians(degrees));
     }
 
     private BonePose overrideFor(BedrockPlayerModelMetadata metadata,
@@ -111,6 +156,17 @@ public final class BedrockFirstPersonView {
             return new BonePose(
                     new Vec3(-position.x(), position.y(), position.z()),
                     rotation == null ? null : new Vec3(rotation.x(), -rotation.y(), -rotation.z()));
+        }
+    }
+
+    record AttackPose(Vec3 position, Vec3 rotation) {
+        private static final AttackPose ZERO = new AttackPose(
+                new Vec3(0.0F, 0.0F, 0.0F), new Vec3(0.0F, 0.0F, 0.0F));
+
+        private AttackPose mirroredX() {
+            return new AttackPose(
+                    new Vec3(-position.x(), position.y(), position.z()),
+                    new Vec3(rotation.x(), -rotation.y(), -rotation.z()));
         }
     }
 }

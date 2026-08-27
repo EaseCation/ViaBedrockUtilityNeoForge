@@ -114,6 +114,14 @@ public final class BedrockTransformConvention {
         return new Vector3f(-blockbenchDegrees.x, -blockbenchDegrees.y, blockbenchDegrees.z);
     }
 
+    /**
+     * Bedrock animation Euler deltas use the same axes as VBU's Java ModelPart animation adapter.
+     * Unlike Blockbench preview rotations, they have not crossed an editor-space reflection.
+     */
+    public static Vector3f bedrockAnimationRotationToJavaModel(Vector3f bedrockDegrees) {
+        return new Vector3f(bedrockDegrees);
+    }
+
     private static Vector3f reflectedHostVector(Vector3f vector) {
         return new Vector3f(-vector.x, -vector.y, vector.z);
     }

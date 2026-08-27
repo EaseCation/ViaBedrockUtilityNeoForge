@@ -1,10 +1,12 @@
 package org.oryxel.viabedrockutility.mixin.impl.render;
 
 import net.minecraft.client.model.PlayerModel;
+import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import org.oryxel.viabedrockutility.animation.PlayerAnimationManager;
 import org.oryxel.viabedrockutility.config.LodConfig;
 import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
+import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
 import org.oryxel.viabedrockutility.renderer.AnimationBudget;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -24,6 +26,27 @@ public abstract class PlayerEntityModelMixin implements IBedrockAnimatedModel {
     // animate on the same frame%interval==0 tick, producing a periodic spike.
     @Unique
     private int setupAnimFrameCounter = System.identityHashCode(this);
+
+    @Inject(method = "<init>", at = @At("TAIL"))
+    private void viaBedrockUtility$nameVanillaPlayerBones(ModelPart root, boolean slim, CallbackInfo ci) {
+        final PlayerModel model = (PlayerModel) (Object) this;
+        viaBedrockUtility$nameVanillaBone(model.head, "head");
+        viaBedrockUtility$nameVanillaBone(model.body, "body");
+        viaBedrockUtility$nameVanillaBone(model.rightArm, "rightarm");
+        viaBedrockUtility$nameVanillaBone(model.leftArm, "leftarm");
+        viaBedrockUtility$nameVanillaBone(model.rightLeg, "rightleg");
+        viaBedrockUtility$nameVanillaBone(model.leftLeg, "leftleg");
+    }
+
+    @Unique
+    private static void viaBedrockUtility$nameVanillaBone(ModelPart part, String name) {
+        final IModelPart extension = (IModelPart) (Object) part;
+        if (extension.viaBedrockUtility$getName() == null
+                || extension.viaBedrockUtility$getName().isEmpty()) {
+            extension.viaBedrockUtility$setName(name);
+            extension.viaBedrockUtility$setVBUModel();
+        }
+    }
 
     @Override
     public PlayerAnimationManager viaBedrockUtility$getAnimationManager() {

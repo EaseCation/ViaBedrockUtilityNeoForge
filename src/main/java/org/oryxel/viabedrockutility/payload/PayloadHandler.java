@@ -39,6 +39,7 @@ import org.oryxel.viabedrockutility.util.GeometryUtil;
 
 import org.oryxel.viabedrockutility.util.ImageUtil;
 import org.oryxel.viabedrockutility.util.PlayerSkinBuilder;
+import org.oryxel.viabedrockutility.util.PlayerSkinTextureCompat;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -277,7 +278,16 @@ public class PayloadHandler {
             return;
         }
 
-        final NativeImage skinImage = ImageUtil.toNativeImage(info.getData(), info.getWidth(), info.getHeight());
+        final byte[] skinData = info.getData();
+        final PlayerSkinTextureCompat.RepairResult skinRepair =
+                PlayerSkinTextureCompat.repairMissingLeftLimbs(skinData, info.getWidth(), info.getHeight());
+        if (skinRepair.repairedAny()) {
+            ViaBedrockUtilityNeoForge.LOGGER.debug(
+                    "[Skin] Mirrored missing legacy limbs for {} (leftArm={}, leftLeg={})",
+                    payload.getPlayerUuid(), skinRepair.leftArm(), skinRepair.leftLeg());
+        }
+
+        final NativeImage skinImage = ImageUtil.toNativeImage(skinData, info.getWidth(), info.getHeight());
         if (skinImage == null) {
             ViaBedrockUtilityNeoForge.LOGGER.error("[Skin] toNativeImage returned null for {}", payload.getPlayerUuid());
             return;

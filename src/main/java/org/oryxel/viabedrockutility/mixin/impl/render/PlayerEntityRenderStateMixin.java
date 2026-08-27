@@ -2,6 +2,7 @@ package org.oryxel.viabedrockutility.mixin.impl.render;
 
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
+import net.minecraft.resources.ResourceLocation;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 import org.oryxel.viabedrockutility.attachable.AttachableItemSnapshot;
 import org.oryxel.viabedrockutility.attachable.AttachableOwnerSnapshot;
@@ -16,6 +17,10 @@ public abstract class PlayerEntityRenderStateMixin implements ICustomPlayerRende
     private AttachableItemSnapshot viabedrockutility$mainHand = AttachableItemSnapshot.EMPTY;
     @Unique
     private AttachableItemSnapshot viabedrockutility$offHand = AttachableItemSnapshot.EMPTY;
+    @Unique
+    private ResourceLocation viabedrockutility$mainHandItemIdentifier;
+    @Unique
+    private ResourceLocation viabedrockutility$offHandItemIdentifier;
     @Unique
     private AttachableOwnerSnapshot viabedrockutility$owner = AttachableOwnerSnapshot.EMPTY;
 
@@ -43,6 +48,22 @@ public abstract class PlayerEntityRenderStateMixin implements ICustomPlayerRende
     public void viaBedrockUtility$setHandSnapshots(AttachableItemSnapshot mainHand, AttachableItemSnapshot offHand) {
         viabedrockutility$mainHand = mainHand;
         viabedrockutility$offHand = offHand;
+    }
+
+    @Override
+    public ResourceLocation viaBedrockUtility$getMainHandItemIdentifier() {
+        return viabedrockutility$mainHandItemIdentifier;
+    }
+
+    @Override
+    public ResourceLocation viaBedrockUtility$getOffHandItemIdentifier() {
+        return viabedrockutility$offHandItemIdentifier;
+    }
+
+    @Override
+    public void viaBedrockUtility$setHandItemIdentifiers(ResourceLocation mainHand, ResourceLocation offHand) {
+        viabedrockutility$mainHandItemIdentifier = mainHand;
+        viabedrockutility$offHandItemIdentifier = offHand;
     }
 
     @Override

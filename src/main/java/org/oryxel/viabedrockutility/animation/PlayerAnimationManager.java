@@ -7,12 +7,16 @@ import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.HumanoidArm;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
+import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
 import team.unnamed.mocha.runtime.Scope;
 import team.unnamed.mocha.runtime.value.MutableObjectBinding;
+import team.unnamed.mocha.runtime.value.Function;
 import team.unnamed.mocha.runtime.value.Value;
 
 import java.util.*;
@@ -33,10 +37,30 @@ public class PlayerAnimationManager {
     // every frame. LayeredScope layers only 'query'/'q' over the shared read-only BASE_SCOPE.
     private final LayeredScope reusableFrameScope = new LayeredScope(CustomEntityPayloadHandler.BASE_SCOPE);
     private final MutableObjectBinding reusableQuery = new MutableObjectBinding();
+    private final MutableObjectBinding reusableVariables = new MutableObjectBinding();
+    private String mainHandItemIdentifier = "";
+    private String offHandItemIdentifier = "";
+    private final Function<Object> isItemNameAny = (execution, arguments) -> {
+        if (arguments.length() == 0) {
+            return Value.of(false);
+        }
+        final String slot = arguments.next().eval().getAsString();
+        final String expected = isOffHandSlot(slot) ? offHandItemIdentifier : mainHandItemIdentifier;
+        for (int i = 1; i < arguments.length(); i++) {
+            if (!expected.isEmpty() && expected.equalsIgnoreCase(arguments.next().eval().getAsString())) {
+                return Value.of(true);
+            }
+        }
+        return Value.of(false);
+    };
 
     // Scratch set reused across frames to collect lowercased bone names driven by currently-playing
     // one-shot animations. Replaces a per-frame new HashSet<>() allocation.
     private final Set<String> scratchOnceBonesLC = new HashSet<>();
+
+    // Looping skin slots are not all active at once. In particular, riding layers are additive and
+    // must not affect a standing player. Reuse one set for the bones driven by active slots this frame.
+    private final Set<String> scratchActiveBonesLC = new HashSet<>();
 
     // One-shot animations triggered at runtime (server AnimateEntityPacket on a player / humanoid NPC).
     // Each keeps its own start time, plays once and is pruned when it reaches its animation_length, and
@@ -125,7 +149,7 @@ public class PlayerAnimationManager {
         // a full reset the transforms accumulate frame-over-frame and the pose drifts.
         boneModel.resetAllBones();
 
-        // Clear vanilla setupAnim's rotation on every bone a Bedrock animation drives. A Bedrock player
+        // Clear vanilla setupAnim's rotation on every bone an active Bedrock animation drives. A Bedrock player
         // is posed entirely by Bedrock animations (humanoid_base_pose sets the neutral, locomotion layers
         // on top); there is no vanilla setupAnim in Bedrock. Since our VBU rotation is applied ADDITIVELY
         // on top of vanilla xRot/yRot/zRot at render (ModelPartMixin.translateAndRotate), leaving vanilla's
@@ -135,7 +159,7 @@ public class PlayerAnimationManager {
         final long now = System.currentTimeMillis();
 
         // Prune finished one-shot animations and collect the bones still-active ones drive this frame, so
-        // their vanilla rotation is cleared only while playing (transient — not added to affectedBones).
+        // their vanilla rotation is cleared only while playing.
         scratchOnceBonesLC.clear();
         if (!onceAnimations.isEmpty()) {
             final Iterator<Map.Entry<String, AnimationDefinitions.AnimationData>> it = onceAnimations.entrySet().iterator();
@@ -157,12 +181,20 @@ public class PlayerAnimationManager {
             }
         }
 
-        clearVanillaRotation(model, scratchOnceBonesLC);
+        scratchActiveBonesLC.clear();
+        for (Map.Entry<String, AnimationDefinitions.AnimationData> entry : animations.entrySet()) {
+            if (isAnimationActive(entry.getKey(), state)) {
+                collectAffectedBones(entry.getValue(), scratchActiveBonesLC);
+            }
+        }
+        clearVanillaRotation(model, scratchActiveBonesLC, scratchOnceBonesLC);
 
         final Scope scope = buildScope(state);
         final long elapsed = now - startTimeMS;
         for (Map.Entry<String, AnimationDefinitions.AnimationData> entry : animations.entrySet()) {
-            AnimationHelper.animate(scope, boneModel, entry.getValue().compiled(), elapsed, 1.0f, tempVec, null);
+            if (isAnimationActive(entry.getKey(), state)) {
+                AnimationHelper.animate(scope, boneModel, entry.getValue().compiled(), elapsed, 1.0f, tempVec, null);
+            }
         }
         // One-shot animations applied on top so the temporary action overrides the looping pose.
         for (Map.Entry<String, AnimationDefinitions.AnimationData> entry : onceAnimations.entrySet()) {
@@ -172,20 +204,20 @@ public class PlayerAnimationManager {
     }
 
     /**
-     * Zero vanilla setupAnim's xRot/yRot/zRot on the bones driven by registered Bedrock animations
-     * (persistent looping ones in {@code affectedBones}, plus any transient one-shot bones for this frame).
+     * Zero vanilla setupAnim's xRot/yRot/zRot on bones driven by active looping or one-shot animations.
      * Both sets hold lowercased bone names; the part name is lowercased once per part and looked up via
      * HashSet.contains (O(1)) instead of an O(n) equalsIgnoreCase scan per bone per frame.
      */
     @SuppressWarnings("unchecked")
-    private void clearVanillaRotation(Model model, Set<String> transientBonesLC) {
-        if (affectedBones.isEmpty() && (transientBonesLC == null || transientBonesLC.isEmpty())) {
+    private void clearVanillaRotation(Model model, Set<String> activeBonesLC, Set<String> transientBonesLC) {
+        if ((activeBonesLC == null || activeBonesLC.isEmpty())
+                && (transientBonesLC == null || transientBonesLC.isEmpty())) {
             return;
         }
         for (ModelPart part : (List<ModelPart>) model.allParts()) {
             final String name = ((IModelPart) (Object) part).viaBedrockUtility$getName();
             final String nameLC = name == null ? null : name.toLowerCase(Locale.ROOT);
-            if (matchesAny(affectedBones, nameLC) || matchesAny(transientBonesLC, nameLC)) {
+            if (matchesAny(activeBonesLC, nameLC) || matchesAny(transientBonesLC, nameLC)) {
                 part.xRot = 0.0F;
                 part.yRot = 0.0F;
                 part.zRot = 0.0F;
@@ -197,6 +229,21 @@ public class PlayerAnimationManager {
         return nameLC != null && bonesLC != null && !bonesLC.isEmpty() && bonesLC.contains(nameLC);
     }
 
+    static boolean isAnimationActive(String shortName, PlayerRenderState state) {
+        final String normalized = shortName.toLowerCase(Locale.ROOT);
+        return !(normalized.equals("riding") || normalized.startsWith("riding.")) || state.isPassenger;
+    }
+
+    private static void collectAffectedBones(AnimationDefinitions.AnimationData animation, Set<String> target) {
+        final Map<String, List<AnimateTransformation>> bones = animation.compiled().boneAnimations();
+        if (bones == null) {
+            return;
+        }
+        for (String bone : bones.keySet()) {
+            target.add(bone.toLowerCase(Locale.ROOT));
+        }
+    }
+
     private Scope buildScope(PlayerRenderState state) {
         // Reuse a LayeredScope layered over the shared read-only BASE_SCOPE instead of deep-copying
         // BASE_SCOPE every frame (mirrors CustomEntityRenderer.buildFrameScope). Only 'query'/'q' are
@@ -206,6 +253,7 @@ public class PlayerAnimationManager {
         // Reuse the query binding across frames. Every key below is re-set each frame (fixed set), so
         // we rely on set()'s overwrite semantics — no clear() is needed (MutableObjectBinding has none).
         final MutableObjectBinding query = reusableQuery;
+        final MutableObjectBinding variables = reusableVariables;
 
         // Mirror CustomEntityRenderer.buildFrameScope so query-gated animation expressions evaluate
         // correctly. With only a handful of variables bound, terms that should resolve to ~0 when the
@@ -214,7 +262,18 @@ public class PlayerAnimationManager {
         // the fixed distorted pose. PlayerRenderState exposes fewer fields than the custom-entity
         // state, so values not available here are best-effort/zero.
         final float groundSpeed = state.walkAnimationSpeed;
-        final float headYaw = state.yRot - state.bodyRot; // head yaw relative to body
+        // LivingEntityRenderer already stores wrapDegrees(headYaw - bodyYaw) in state.yRot.
+        // Subtracting bodyRot again leaks absolute world/body orientation into Bedrock's relative
+        // target yaw, which makes the gun arms rotate when the third-person camera/player turns.
+        final float headYaw = bedrockTargetYaw(state.yRot);
+        final ICustomPlayerRendererHolder customState = state instanceof ICustomPlayerRendererHolder holder
+                ? holder : null;
+        final ResourceLocation mainHand = customState == null
+                ? null : customState.viaBedrockUtility$getMainHandItemIdentifier();
+        final ResourceLocation offHand = customState == null
+                ? null : customState.viaBedrockUtility$getOffHandItemIdentifier();
+        mainHandItemIdentifier = mainHand == null ? "" : mainHand.toString();
+        offHandItemIdentifier = offHand == null ? "" : offHand.toString();
 
         query.set("life_time", Value.of(state.ageInTicks / 20.0f));
         query.set("modified_distance_moved", Value.of(state.walkAnimationPos));
@@ -224,6 +283,13 @@ public class PlayerAnimationManager {
         query.set("ground_speed", Value.of(groundSpeed));
         query.set("vertical_speed", Value.of(0.0));
         query.set("distance_from_camera", Value.of(Math.sqrt(state.distanceToCameraSq)));
+        // Player geometry is expressed in Java model units (one Bedrock pixel is 1/16 block).
+        // ZE's shared gun animation deliberately uses this value to select its Java-compatible pose.
+        query.set("model_scale", Value.of(0.0625D));
+        query.set("is_riding", Value.of(state.isPassenger));
+        query.set("is_sneaking", Value.of(state.isCrouching));
+        query.set("is_sleeping", Value.of(state.bedOrientation != null));
+        query.set("is_item_name_any", isItemNameAny);
 
         // Rotation queries
         query.set("body_y_rotation", Value.of(state.bodyRot));
@@ -237,9 +303,54 @@ public class PlayerAnimationManager {
         query.setFunction("position_delta", (double arg) -> 0.0);
         query.setFunction("rotation_to_camera", (double arg) -> 0.0);
 
+        final boolean mainHandHolding = !mainHandItemIdentifier.isEmpty();
+        final boolean offHandHolding = !offHandItemIdentifier.isEmpty();
+        final boolean rightHolding = state.mainArm == HumanoidArm.RIGHT
+                ? mainHandHolding : offHandHolding;
+        final boolean leftHolding = state.mainArm == HumanoidArm.LEFT
+                ? mainHandHolding : offHandHolding;
+        variables.set("gliding_speed_value", Value.of(1.0D));
+        variables.set("tcos0", Value.of(computeTcos0(state.walkAnimationPos, groundSpeed)));
+        variables.set("attack_time", Value.of(state.attackTime));
+        variables.set("attack_body_rot_y", Value.of(computeAttackBodyYaw(state.attackTime)));
+        variables.set("is_holding_right", Value.of(rightHolding));
+        variables.set("is_holding_left", Value.of(leftHolding));
+        variables.set("player_x_rotation", Value.of(state.xRot));
+
         reusableFrameScope.set("query", query);
         reusableFrameScope.set("q", query);
+        reusableFrameScope.set("variable", variables);
+        reusableFrameScope.set("v", variables);
 
         return reusableFrameScope;
+    }
+
+    static double computeTcos0(float modifiedDistanceMoved, float normalizedMoveSpeed) {
+        return Math.cos(Math.toRadians(modifiedDistanceMoved * 38.17D))
+                * normalizedMoveSpeed * 57.3D;
+    }
+
+    static double computeAttackBodyYaw(float attackTime) {
+        return Math.sin(Math.toRadians(360.0D * Math.sqrt(Math.max(attackTime, 0.0F)))) * 5.0D;
+    }
+
+    static float bedrockTargetYaw(float javaRelativeHeadYaw) {
+        return javaRelativeHeadYaw;
+    }
+
+    static boolean matchesItemNameAny(String slot, String mainHandIdentifier, String offHandIdentifier,
+                                      Collection<String> candidates) {
+        final String expected = isOffHandSlot(slot) ? offHandIdentifier : mainHandIdentifier;
+        return expected != null && !expected.isEmpty() && candidates != null
+                && candidates.stream().anyMatch(expected::equalsIgnoreCase);
+    }
+
+    private static boolean isOffHandSlot(String slot) {
+        if (slot == null) {
+            return false;
+        }
+        final String normalized = slot.toLowerCase(Locale.ROOT)
+                .replace("_", "").replace(".", "").replace("-", "");
+        return normalized.contains("offhand");
     }
 }

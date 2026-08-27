@@ -68,6 +68,15 @@ public final class FirstPersonAttachableRenderer {
                     customRenderer.getPlayerModel(), event.getPoseStack(), event.getMultiBufferSource(),
                     event.getPackedLight(), event.getPartialTick(), () -> renderArm(event, customRenderer, arm));
             if (result == AttachableRenderResult.NOT_APPLICABLE) {
+                // Bedrock's empty-hand first-person arm is a separate camera-space pose. It must not
+                // inherit either Java's ItemInHandRenderer transform or the third-person zombie pose.
+                // Only the main-hand empty event renders an arm in vanilla; preserving that rule avoids
+                // introducing a second empty off-hand arm. Attachable items retain priority above.
+                if (logicalHand == AttachableQueryContext.LogicalHand.MAIN_HAND
+                        && event.getItemStack().isEmpty() && !player.isInvisible()
+                        && renderBedrockArm(event, customRenderer, arm, event.getSwingProgress())) {
+                    event.setCanceled(true);
+                }
                 return;
             }
             event.setCanceled(true);
@@ -77,10 +86,7 @@ public final class FirstPersonAttachableRenderer {
     }
 
     private static void renderArm(RenderHandEvent event, CustomPlayerRenderer renderer, HumanoidArm arm) {
-        final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(renderer.getPlayerModel());
-        if (metadata != null && FirstPersonBedrockArmRenderer.render(
-                new AttachableHostContext(metadata), arm, renderer.getPlayerTexture(),
-                event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight())) {
+        if (renderBedrockArm(event, renderer, arm)) {
             return;
         }
 
@@ -99,5 +105,20 @@ public final class FirstPersonAttachableRenderer {
                     event.getPackedLight(), renderer.getPlayerTexture(), true,
                     Minecraft.getInstance().player);
         }
+    }
+
+    private static boolean renderBedrockArm(RenderHandEvent event, CustomPlayerRenderer renderer, HumanoidArm arm) {
+        return renderBedrockArm(event, renderer, arm, 0.0F);
+    }
+
+    private static boolean renderBedrockArm(RenderHandEvent event, CustomPlayerRenderer renderer,
+                                            HumanoidArm arm, float attackTime) {
+        final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(renderer.getPlayerModel());
+        if (metadata != null && FirstPersonBedrockArmRenderer.render(
+                new AttachableHostContext(metadata), arm, renderer.getPlayerTexture(),
+                event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight(), attackTime)) {
+            return true;
+        }
+        return false;
     }
 }
