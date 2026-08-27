@@ -90,24 +90,10 @@ public final class FirstPersonAttachableRenderer {
     }
 
     private static void renderArm(RenderHandEvent event, CustomPlayerRenderer renderer, HumanoidArm arm) {
-        if (renderBedrockArm(event, renderer, arm)) {
-            return;
-        }
-
-        // A malformed custom host should still retain a hand when the attachable takes over the event.
-        if (DIAGNOSED.add("arm-fallback:" + arm)) {
+        if (!renderBedrockArm(event, renderer, arm) && DIAGNOSED.add("arm-missing:" + arm)) {
             ViaBedrockUtilityNeoForge.LOGGER.warn(
-                    "[Attachable] Missing VBU {} arm metadata; using the inherited first-person arm fallback",
+                    "[Attachable] Missing VBU {} arm metadata; suppressing the incomplete Bedrock host arm",
                     arm.name().toLowerCase(java.util.Locale.ROOT));
-        }
-        if (arm == HumanoidArm.RIGHT) {
-            renderer.renderRightHand(event.getPoseStack(), event.getMultiBufferSource(),
-                    event.getPackedLight(), renderer.getPlayerTexture(), true,
-                    Minecraft.getInstance().player);
-        } else {
-            renderer.renderLeftHand(event.getPoseStack(), event.getMultiBufferSource(),
-                    event.getPackedLight(), renderer.getPlayerTexture(), true,
-                    Minecraft.getInstance().player);
         }
     }
 
