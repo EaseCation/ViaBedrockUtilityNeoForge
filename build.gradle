@@ -73,6 +73,11 @@ dependencies {
         exclude group: 'com.google.code.gson', module: 'gson'
         exclude group: 'com.github.EaseCation', module: 'CubeConverter'
     }
+    // ModDev 1.21.8 does not place non-mod project dependencies on the game classloader.
+    // Add only the two class-only artifacts; BEParticle owns the shared Mocha/Javassist runtime.
+    additionalRuntimeClasspath('com.github.EaseCation:BedrockMotion:1.0.0') {
+        transitive = false
+    }
     implementation 'nakern.be_camera:bedrockcameralib:1.2.0'
     // bedrockcameralib exposes Kotlin 2.1 Function types in its public API but its POM does not declare
     // kotlin-stdlib. Keep it on both the compile classpath and the standalone mod's JarJar runtime.
@@ -81,6 +86,9 @@ dependencies {
     implementation 'net.easecation.beparticle:beparticle:1.0.0'
     implementation 'com.github.EaseCation:CubeConverter:1.3'
     jarJar 'com.github.EaseCation:CubeConverter:1.3'
+    additionalRuntimeClasspath('com.github.EaseCation:CubeConverter:1.3') {
+        transitive = false
+    }
     // BEParticle is a required runtime mod and owns the shared Mocha/Javassist JarJar modules.
     // Bundling Mocha again here creates a second class identity in NeoForge's unit-test module layer.
 
