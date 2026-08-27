@@ -194,6 +194,7 @@ public final class PlayerAnimationRuntime {
             query.set("life_time", Value.of(value.ageInTicks() / 20.0F));
             query.set("frame_alpha", Value.of(value.partialTick()));
             query.set("modified_distance_moved", Value.of(value.walkPosition()));
+            query.set("walk_distance", Value.of(value.walkPosition()));
             query.set("modified_move_speed", Value.of(value.walkSpeed()));
             query.set("ground_speed", Value.of(value.walkSpeed()));
             query.set("vertical_speed", Value.of(value.deltaY()));
@@ -230,6 +231,12 @@ public final class PlayerAnimationRuntime {
             variables.set("is_paperdoll", NumberValue.zero());
             variables.set("map_face_icon", NumberValue.zero());
             variables.set("is_using_vr", NumberValue.zero());
+            variables.set("is_vertical_splitscreen", NumberValue.zero());
+            variables.set("is_horizontal_splitscreen", NumberValue.zero());
+            final Value shortArmOffset = Value.of(value.slim() ? 0.5D : 0.0D);
+            variables.set("short_arm_offset_right", shortArmOffset);
+            variables.set("short_arm_offset_left", shortArmOffset);
+            variables.set("player_arm_height", Value.of(value.armHeight()));
             variables.set("attack_time", Value.of(value.attackTime()));
             variables.set("player_x_rotation", Value.of(value.pitch()));
             variables.set("gliding_speed_value", Value.of(1.0D));

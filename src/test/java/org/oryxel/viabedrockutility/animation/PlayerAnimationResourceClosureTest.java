@@ -102,6 +102,35 @@ class PlayerAnimationResourceClosureTest {
                 state(PlayerAnimationState.View.FIRST_PERSON, 6L, "", 0.0F, 0.0F, 0.5F)));
         assertTrue(Math.abs(model.rotationX("rightarm") - restingFirstPersonArm) > 1.0F);
 
+        assertTrue(runtime.sampleFirstPerson(model,
+                state(PlayerAnimationState.View.FIRST_PERSON, 7L, "", 0.0F, 0.0F, 0.0F,
+                        1.0F, false, false, 0.0D)));
+        final float equippedArmY = model.offsetY("rightarm");
+        assertTrue(runtime.sampleFirstPerson(model,
+                state(PlayerAnimationState.View.FIRST_PERSON, 8L, "", 0.0F, 0.0F, 0.0F,
+                        0.0F, false, false, 0.0D)));
+        assertEquals(10.0F, Math.abs(model.offsetY("rightarm") - equippedArmY), 1.0e-3F);
+
+        assertTrue(runtime.sampleFirstPerson(model,
+                state(PlayerAnimationState.View.FIRST_PERSON, 9L, "", 0.0F, 0.0F, 0.0F,
+                        1.0F, false, true, 0.0D)));
+        final float wideArmY = model.offsetY("rightarm");
+        assertTrue(runtime.sampleFirstPerson(model,
+                state(PlayerAnimationState.View.FIRST_PERSON, 10L, "", 0.0F, 0.0F, 0.0F,
+                        1.0F, true, true, 0.0D)));
+        assertEquals(0.5F, Math.abs(model.offsetY("rightarm") - wideArmY), 1.0e-3F);
+
+        final PlayerAnimationRuntime walkingRuntime = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel walkingModel = new TestBoneModel();
+        assertTrue(walkingRuntime.sampleFirstPerson(walkingModel,
+                state(PlayerAnimationState.View.FIRST_PERSON, 1L, "", 0.0F, 0.0F, 0.0F,
+                        1.0F, false, true, 0.1D)));
+        final float zeroPhaseArmX = walkingModel.offsetX("rightarm");
+        assertTrue(walkingRuntime.sampleFirstPerson(walkingModel,
+                state(PlayerAnimationState.View.FIRST_PERSON, 2L, "", 0.5F, 0.0F, 0.0F,
+                        1.0F, false, true, 0.1D)));
+        assertTrue(Math.abs(walkingModel.offsetX("rightarm") - zeroPhaseArmX) > 1.0e-3F);
+
         final AtomicLong now = new AtomicLong();
         final PlayerAnimationRuntime oneShotRuntime = new PlayerAnimationRuntime(
                 packs, Map.of(), now::get);
@@ -134,16 +163,24 @@ class PlayerAnimationResourceClosureTest {
     private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
                                               String mainHandIdentifier, float walkPosition,
                                               float walkSpeed, float attackTime) {
+        return state(view, tick, mainHandIdentifier, walkPosition, walkSpeed, attackTime,
+                1.0F, false, false, 0.0D);
+    }
+
+    private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
+                                              String mainHandIdentifier, float walkPosition,
+                                              float walkSpeed, float attackTime, float armHeight,
+                                              boolean slim, boolean bobAnimation, double deltaX) {
         return new PlayerAnimationState(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 view, tick, 0.0F,
                 HumanoidArm.RIGHT, InteractionHand.MAIN_HAND,
                 mainHandIdentifier, "", Set.of(),
                 tick, walkPosition, walkSpeed, attackTime,
-                0.0F, 0.0F, 0.0F, 0.0F, 1.0F,
+                0.0F, 0.0F, 0.0F, 0.0F, 1.0F, armHeight, slim,
                 true, true, false, false, false, false, false,
-                false, false, false, false, false, false, false, false,
-                0, 0, 0, 0.0F, 0.0F, 0.0D, 0.0D, 0.0D);
+                false, false, false, false, false, false, false, bobAnimation,
+                0, 0, 0, 0.0F, 0.0F, deltaX, 0.0D, 0.0D);
     }
 
     private static Content content(Path path) {
@@ -166,6 +203,14 @@ class PlayerAnimationResourceClosureTest {
 
         private float rotationX(String name) {
             return bones.get(name).getRotation().x;
+        }
+
+        private float offsetX(String name) {
+            return bones.get(name).getOffset().x;
+        }
+
+        private float offsetY(String name) {
+            return bones.get(name).getOffset().y;
         }
 
         @Override

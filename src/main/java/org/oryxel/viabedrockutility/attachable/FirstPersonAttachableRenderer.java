@@ -54,7 +54,8 @@ public final class FirstPersonAttachableRenderer {
         final AttachableOwnerSnapshot owner = new AttachableOwnerSnapshot(
                 player.getUUID(), "minecraft:player", player.getAttackAnim(partialTick),
                 player.getXRot(partialTick), Mth.wrapDegrees(player.getYRot(partialTick) - bodyYaw));
-        if (!customRenderer.sampleFirstPerson(PlayerAnimationState.firstPerson(player, partialTick))) {
+        if (!customRenderer.sampleFirstPerson(PlayerAnimationState.firstPerson(
+                player, partialTick, event.getSwingProgress(), event.getEquipProgress()))) {
             return;
         }
 

@@ -3,6 +3,7 @@ package org.oryxel.viabedrockutility.animation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
+import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -41,6 +42,8 @@ public record PlayerAnimationState(
         float bodyYaw,
         float swimAmount,
         float distanceFromCamera,
+        float armHeight,
+        boolean slim,
         boolean alive,
         boolean onGround,
         boolean riding,
@@ -68,17 +71,22 @@ public record PlayerAnimationState(
     public static PlayerAnimationState thirdPerson(AbstractClientPlayer player,
                                                    PlayerRenderState renderState,
                                                    float partialTick) {
-        return capture(player, renderState, View.THIRD_PERSON, partialTick);
+        return capture(player, renderState, View.THIRD_PERSON, partialTick,
+                renderState.attackTime, 1.0F);
     }
 
-    public static PlayerAnimationState firstPerson(AbstractClientPlayer player, float partialTick) {
-        return capture(player, null, View.FIRST_PERSON, partialTick);
+    public static PlayerAnimationState firstPerson(AbstractClientPlayer player, float partialTick,
+                                                   float attackTime, float equipProgress) {
+        return capture(player, null, View.FIRST_PERSON, partialTick,
+                attackTime, 1.0F - equipProgress);
     }
 
     private static PlayerAnimationState capture(AbstractClientPlayer player,
                                                 PlayerRenderState renderState,
                                                 View view,
-                                                float partialTick) {
+                                                float partialTick,
+                                                float attackTime,
+                                                float armHeight) {
         final ItemStack mainHand = player.getMainHandItem();
         final ItemStack offHand = player.getOffhandItem();
         final boolean usingMainHand = player.isUsingItem()
@@ -101,8 +109,6 @@ public record PlayerAnimationState(
                 ? player.walkAnimation.position(partialTick) : renderState.walkAnimationPos;
         final float walkSpeed = renderState == null
                 ? player.walkAnimation.speed(partialTick) : renderState.walkAnimationSpeed;
-        final float attackTime = renderState == null
-                ? player.getAttackAnim(partialTick) : renderState.attackTime;
         final float swimAmount = renderState == null
                 ? player.getSwimAmount(partialTick) : renderState.swimAmount;
         final double distance = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition()
@@ -113,7 +119,8 @@ public record PlayerAnimationState(
                 player.isUsingItem() ? player.getUsedItemHand() : InteractionHand.MAIN_HAND,
                 identifier(mainHand), identifier(offHand), tags(mainHand),
                 player.tickCount + partialTick, walkPosition, walkSpeed, attackTime,
-                pitch, headYaw, bodyYaw, swimAmount, (float) distance,
+                pitch, headYaw, bodyYaw, swimAmount, (float) distance, armHeight,
+                player.getSkin().model() == PlayerSkin.Model.SLIM,
                 player.isAlive(), player.onGround(), player.isPassenger(), player.isCrouching(),
                 player.isSleeping(), player.isVisuallySwimming(), player.isFallFlying(),
                 player.isBaby(), player.isSpectator(), player.isUsingItem(), player.isBlocking(),
