@@ -12,8 +12,9 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import com.mojang.blaze3d.vertex.PoseStack;
 import org.joml.Matrix4f;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
-import org.oryxel.viabedrockutility.animation.PlayerAnimationManager;
-import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
+import net.easecation.bedrockmotion.pack.PackManager;
+import org.oryxel.viabedrockutility.animation.PlayerAnimationRuntime;
+import org.oryxel.viabedrockutility.animation.PlayerAnimationState;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 import org.oryxel.viabedrockutility.attachable.AttachableItemSnapshot;
 import org.oryxel.viabedrockutility.attachable.AttachableOwnerSnapshot;
@@ -23,11 +24,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 
 public class CustomPlayerRenderer extends PlayerRenderer {
     private final ResourceLocation texture;
     private final List<AnimatedSkinOverlay> overlays = new ArrayList<>();
     private volatile BedrockPlayerWorldPose thirdPersonPose;
+    private PlayerAnimationRuntime playerAnimationRuntime;
 
     public CustomPlayerRenderer(final EntityRendererProvider.Context ctx, final PlayerModel model, final boolean slim, ResourceLocation texture) {
         super(ctx, slim);
@@ -63,6 +66,8 @@ public class CustomPlayerRenderer extends PlayerRenderer {
                 new AttachableOwnerSnapshot(player.getUUID(), "minecraft:player",
                         player.getAttackAnim(partialTick), state.xRot,
                         state.yRot));
+        ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setPlayerAnimationState(
+                PlayerAnimationState.thirdPerson(player, state, partialTick));
     }
 
     private static ResourceLocation itemIdentifier(net.minecraft.world.item.ItemStack stack) {
@@ -128,18 +133,22 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         }
     }
 
-    /**
-     * Play a one-shot named animation on this player/NPC (server-triggered via AnimateEntityPacket).
-     * The PlayerAnimationManager lives on this renderer's model (the same instance setupAnim drives); if the
-     * player has no skin looping-animation override yet, one is created lazily so the one-shot still plays.
-     */
     public void playAnimationOnce(final String name, final AnimationDefinitions.AnimationData data) {
-        final IBedrockAnimatedModel animModel = (IBedrockAnimatedModel) (Object) this.model;
-        PlayerAnimationManager manager = animModel.viaBedrockUtility$getAnimationManager();
-        if (manager == null) {
-            manager = new PlayerAnimationManager();
-            animModel.viaBedrockUtility$setAnimationManager(manager);
+        if (this.playerAnimationRuntime != null) {
+            this.playerAnimationRuntime.playOnce(name, data);
         }
-        manager.playOnce(name, data);
+    }
+
+    public void setPlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides) {
+        this.playerAnimationRuntime = new PlayerAnimationRuntime(packs, animationOverrides);
+    }
+
+    public PlayerAnimationRuntime playerAnimationRuntime() {
+        return playerAnimationRuntime;
+    }
+
+    public boolean sampleFirstPerson(PlayerAnimationState state) {
+        return playerAnimationRuntime != null
+                && playerAnimationRuntime.sampleFirstPerson(this.model, state);
     }
 }

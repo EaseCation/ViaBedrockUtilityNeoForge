@@ -3,11 +3,11 @@ package org.oryxel.viabedrockutility.mixin.impl.render;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
-import org.oryxel.viabedrockutility.animation.PlayerAnimationManager;
 import org.oryxel.viabedrockutility.config.LodConfig;
-import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
+import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
 import org.oryxel.viabedrockutility.renderer.AnimationBudget;
+import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -15,10 +15,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PlayerModel.class)
-public abstract class PlayerEntityModelMixin implements IBedrockAnimatedModel {
-    @Unique
-    private PlayerAnimationManager animationManager;
-
+public abstract class PlayerEntityModelMixin {
     // Per-model frame counter for distance-based throttle cadence (LodConfig.shouldAnimate keys on
     // frameCounter % interval). Incremented on every setupAnim that isn't short-circuited. Seeded with
     // identityHashCode so that different players' throttled updates land on different frames (staggered),
@@ -48,16 +45,6 @@ public abstract class PlayerEntityModelMixin implements IBedrockAnimatedModel {
         }
     }
 
-    @Override
-    public PlayerAnimationManager viaBedrockUtility$getAnimationManager() {
-        return this.animationManager;
-    }
-
-    @Override
-    public void viaBedrockUtility$setAnimationManager(PlayerAnimationManager manager) {
-        this.animationManager = manager;
-    }
-
     // Throttle for players that have Bedrock animations. When a player should not animate this frame, the
     // WHOLE setupAnim is frozen (vanilla pose math + the Bedrock TAIL inject below), keeping the last
     // frame's pose — the standard animation-LOD "freeze, don't interpolate" approach. Vanilla-only players
@@ -77,7 +64,8 @@ public abstract class PlayerEntityModelMixin implements IBedrockAnimatedModel {
     // which is the per-player CPU work that scales linearly with a crowded lobby.
     @Inject(method = "setupAnim(Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;)V", at = @At("HEAD"), cancellable = true)
     private void viaBedrockUtility$throttleDistantPlayer(PlayerRenderState state, CallbackInfo ci) {
-        if (this.animationManager == null || !this.animationManager.hasAnimations()) {
+        final var runtime = viaBedrockUtility$runtime(state);
+        if (runtime == null || !runtime.hasAnimations()) {
             return;
         }
         this.setupAnimFrameCounter++;
@@ -99,13 +87,20 @@ public abstract class PlayerEntityModelMixin implements IBedrockAnimatedModel {
 
     @Inject(method = "setupAnim(Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;)V", at = @At("TAIL"))
     private void applyBedrockAnimations(PlayerRenderState state, CallbackInfo ci) {
-        if (this.animationManager == null) {
+        final var runtime = viaBedrockUtility$runtime(state);
+        if (runtime == null) {
             return;
         }
+        final var snapshot = ((ICustomPlayerRendererHolder) state)
+                .viaBedrockUtility$getPlayerAnimationState();
+        runtime.sampleThirdPerson((PlayerModel) (Object) this, snapshot);
+    }
 
-        // Clearing of vanilla rotations and applying Bedrock animations is handled
-        // per-animation inside PlayerAnimationManager.animate() to avoid clearing
-        // bones that are not targeted by a specific animation.
-        animationManager.animate((PlayerModel) (Object) this, state);
+    @Unique
+    private static org.oryxel.viabedrockutility.animation.PlayerAnimationRuntime
+    viaBedrockUtility$runtime(PlayerRenderState state) {
+        final var renderer = ((ICustomPlayerRendererHolder) state)
+                .viaBedrockUtility$getCustomPlayerRenderer();
+        return renderer instanceof CustomPlayerRenderer custom ? custom.playerAnimationRuntime() : null;
     }
 }

@@ -241,7 +241,7 @@ final class AttachableRuntimeInstance {
         final Matrix4f geometryInstallation = BedrockTransformConvention.geometryInstallation(
                 physicalAnchor, scale.x(), scale.y(), scale.z());
         lastHostProfile = firstPerson
-                ? BedrockFirstPersonView.PROFILE_NAME
+                ? AttachableHostContext.FIRST_PERSON_PROFILE
                 : "third_person_bone_deformation";
         lastSemanticChain = host.semanticChain(hostBone);
         lastPresentationChain = host.presentationChain(hostBone);

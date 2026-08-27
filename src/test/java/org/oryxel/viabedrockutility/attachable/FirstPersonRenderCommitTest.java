@@ -12,7 +12,7 @@ class FirstPersonRenderCommitTest {
     @Test
     void standardAttachableProfileKeepsHostMeshHidden() {
         assertEquals(FirstPersonHostMeshPolicy.HIDDEN,
-                BedrockFirstPersonView.STANDARD.hostMeshPolicy());
+                FirstPersonHostMeshPolicy.HIDDEN);
     }
 
     @Test

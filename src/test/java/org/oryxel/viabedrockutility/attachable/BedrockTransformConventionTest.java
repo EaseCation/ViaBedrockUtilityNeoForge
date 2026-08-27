@@ -123,7 +123,7 @@ class BedrockTransformConventionTest {
 
     @Test
     void blockbenchCameraFacesPositiveEditorZIntoNegativeRenderZ() {
-        Vector3f pointInFront = BedrockFirstPersonView.STANDARD.cameraMatrix()
+        Vector3f pointInFront = AttachableHostContext.firstPersonCameraMatrix()
                 .transformPosition(new Vector3f(0.0F,
                         (BedrockTransformConvention.PLAYER_PRESENTATION_ORIGIN_Y - 27.41F) / 16.0F,
                         12.0F / 16.0F));

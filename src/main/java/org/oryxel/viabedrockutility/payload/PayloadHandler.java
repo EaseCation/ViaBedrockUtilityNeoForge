@@ -28,8 +28,6 @@ import org.oryxel.viabedrockutility.payload.impl.skin.SkinAnimationInfoPayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.SkinDataPayload;
 import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticlePayload;
 import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticleV2Payload;
-import org.oryxel.viabedrockutility.animation.PlayerAnimationManager;
-import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import org.oryxel.viabedrockutility.renderer.AnimatedSkinOverlay;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
@@ -632,40 +630,26 @@ public class PayloadHandler {
 
     private static void applyAnimationOverrides(UUID playerUuid, CustomPlayerRenderer renderer,
                                                 String resourcePatch, PackManager manager) {
-        final IBedrockAnimatedModel animatedModel = (IBedrockAnimatedModel) (Object) renderer.getPlayerModel();
-        animatedModel.viaBedrockUtility$setAnimationManager(null);
-        if (manager == null || resourcePatch == null || resourcePatch.isBlank()) {
+        if (manager == null) {
             return;
         }
         try {
-            final JsonObject patch = JsonParser.parseString(resourcePatch).getAsJsonObject();
-            if (!patch.has("animations")) {
-                return;
-            }
-            final JsonObject anims = patch.getAsJsonObject("animations");
-            final PlayerAnimationManager animManager = new PlayerAnimationManager();
-            for (final var animEntry : anims.entrySet()) {
-                final String animIdentifier = animEntry.getValue().getAsString();
-                final AnimationDefinitions.AnimationData animData =
-                        manager.getAnimationDefinitions().getAnimations().get(animIdentifier);
-                if (animData != null) {
-                    animManager.addAnimation(animEntry.getKey(), animData);
-                } else {
-                    ViaBedrockUtilityNeoForge.LOGGER.warn(
-                            "[Skin] Animation '{}' ({}) not found in PackManager for {}",
-                            animEntry.getKey(), animIdentifier, playerUuid);
+            final Map<String, String> overrides = new LinkedHashMap<>();
+            if (resourcePatch != null && !resourcePatch.isBlank()) {
+                final JsonObject patch = JsonParser.parseString(resourcePatch).getAsJsonObject();
+                if (patch.has("animations")) {
+                    for (final var entry : patch.getAsJsonObject("animations").entrySet()) {
+                        overrides.put(entry.getKey(), entry.getValue().getAsString());
+                    }
                 }
             }
-            if (!animManager.isEmpty()) {
-                animatedModel.viaBedrockUtility$setAnimationManager(animManager);
-                ViaBedrockUtilityNeoForge.LOGGER.debug(
-                        "[Skin] Loaded {} animation override(s) for {}: {}",
-                        animManager.getRegisteredAnimationNames().size(), playerUuid,
-                        animManager.getRegisteredAnimationNames());
-            }
+            renderer.setPlayerAnimationRuntime(manager, overrides);
+            ViaBedrockUtilityNeoForge.LOGGER.debug(
+                    "[Skin] Created Bedrock player runtime with {} alias override(s) for {}: {}",
+                    overrides.size(), playerUuid, overrides.keySet());
         } catch (final Exception e) {
             ViaBedrockUtilityNeoForge.LOGGER.warn(
-                    "[Skin] Failed to parse animation overrides for {}: {}", playerUuid, e.getMessage());
+                    "[Skin] Failed to create Bedrock player runtime for {}", playerUuid, e);
         }
     }
 

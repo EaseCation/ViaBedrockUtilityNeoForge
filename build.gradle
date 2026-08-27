@@ -29,6 +29,7 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 def sodiumTestEnabled = providers.gradleProperty('vbuTestSodium')
         .map { it.toBoolean() }
         .getOrElse(false)
+def playerPackStack = providers.gradleProperty('vbuPlayerPackStack')
 
 neoForge {
     version = neo_version
@@ -172,6 +173,10 @@ test {
                 !path.contains('javassist-3.30.2')
     }
     systemProperty 'vbu.testSodium', sodiumTestEnabled.toString()
+    systemProperty 'vbu.workspaceRoot', projectDir.parentFile.absolutePath
+    if (playerPackStack.isPresent()) {
+        systemProperty 'vbu.playerPackStack', playerPackStack.get()
+    }
     // Legacy parser utilities are executable main classes in src/test, not JUnit tests. Their default-package
     // classes are also intentionally outside the tested mod's named module.
     exclude 'AnimationParserTest.class', 'MaterialParserTest.class'

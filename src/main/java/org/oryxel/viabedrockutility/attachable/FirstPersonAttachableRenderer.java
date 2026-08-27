@@ -10,6 +10,7 @@ import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
+import org.oryxel.viabedrockutility.animation.PlayerAnimationState;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,6 +54,9 @@ public final class FirstPersonAttachableRenderer {
         final AttachableOwnerSnapshot owner = new AttachableOwnerSnapshot(
                 player.getUUID(), "minecraft:player", player.getAttackAnim(partialTick),
                 player.getXRot(partialTick), Mth.wrapDegrees(player.getYRot(partialTick) - bodyYaw));
+        if (!customRenderer.sampleFirstPerson(PlayerAnimationState.firstPerson(player, partialTick))) {
+            return;
+        }
 
         if (!item.isEmpty() && DIAGNOSED.add("entry:" + item.itemIdentifier())) {
             ViaBedrockUtilityNeoForge.LOGGER.debug(
@@ -74,7 +78,7 @@ public final class FirstPersonAttachableRenderer {
                 // introducing a second empty off-hand arm. Attachable items retain priority above.
                 if (logicalHand == AttachableQueryContext.LogicalHand.MAIN_HAND
                         && event.getItemStack().isEmpty() && !player.isInvisible()
-                        && renderBedrockArm(event, customRenderer, arm, event.getSwingProgress())) {
+                        && renderBedrockArm(event, customRenderer, arm)) {
                     event.setCanceled(true);
                 }
                 return;
@@ -107,16 +111,12 @@ public final class FirstPersonAttachableRenderer {
         }
     }
 
-    private static boolean renderBedrockArm(RenderHandEvent event, CustomPlayerRenderer renderer, HumanoidArm arm) {
-        return renderBedrockArm(event, renderer, arm, 0.0F);
-    }
-
     private static boolean renderBedrockArm(RenderHandEvent event, CustomPlayerRenderer renderer,
-                                            HumanoidArm arm, float attackTime) {
+                                            HumanoidArm arm) {
         final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(renderer.getPlayerModel());
         if (metadata != null && FirstPersonBedrockArmRenderer.render(
                 new AttachableHostContext(metadata), arm, renderer.getPlayerTexture(),
-                event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight(), attackTime)) {
+                event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight())) {
             return true;
         }
         return false;

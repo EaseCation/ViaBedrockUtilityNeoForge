@@ -10,6 +10,12 @@ import java.util.List;
 
 /** Resolves Bedrock player binding bones and their bind/current deformation matrices. */
 public final class AttachableHostContext {
+    public static final String FIRST_PERSON_PROFILE = "bedrock_player_runtime";
+    private static final Matrix4f FIRST_PERSON_CAMERA =
+            BedrockTransformConvention.blockbenchSceneToRenderSpace(new Matrix4f().lookAt(
+                    0.0F, 27.41F, 0.0F,
+                    0.0F, 27.41F, 10.0F,
+                    0.0F, 1.0F, 0.0F));
     private final BedrockPlayerModelMetadata metadata;
 
     public AttachableHostContext(BedrockPlayerModelMetadata metadata) {
@@ -63,18 +69,16 @@ public final class AttachableHostContext {
     }
 
     public FirstPersonHostMeshPolicy firstPersonHostMeshPolicy() {
-        return BedrockFirstPersonView.STANDARD.hostMeshPolicy();
+        return FirstPersonHostMeshPolicy.HIDDEN;
+    }
+
+    static Matrix4f firstPersonCameraMatrix() {
+        return new Matrix4f(FIRST_PERSON_CAMERA);
     }
 
     /** Prefixes a direct ModelPart render without mutating the host model's current pose. */
     public Matrix4f firstPersonArmRenderPrefix(BedrockPlayerModelMetadata.Bone armBone) {
-        return firstPersonArmRenderPrefix(armBone, 0.0F);
-    }
-
-    /** Prefixes a direct empty-hand arm render with Bedrock's first-person attack layer. */
-    public Matrix4f firstPersonArmRenderPrefix(BedrockPlayerModelMetadata.Bone armBone,
-                                               float attackTime) {
-        final Matrix4f target = firstPersonWorldMatrix(armBone, attackTime);
+        final Matrix4f target = firstPersonWorldMatrix(armBone);
         return target.mul(localMatrix(armBone, true).invert());
     }
 
@@ -87,13 +91,9 @@ public final class AttachableHostContext {
     }
 
     private Matrix4f firstPersonWorldMatrix(BedrockPlayerModelMetadata.Bone bone) {
-        return firstPersonWorldMatrix(bone, 0.0F);
-    }
-
-    private Matrix4f firstPersonWorldMatrix(BedrockPlayerModelMetadata.Bone bone, float attackTime) {
-        final Matrix4f matrix = BedrockFirstPersonView.STANDARD.cameraMatrix();
+        final Matrix4f matrix = new Matrix4f(FIRST_PERSON_CAMERA);
         for (BedrockPlayerModelMetadata.Bone entry : metadata.chainTo(bone)) {
-            matrix.mul(BedrockFirstPersonView.STANDARD.localMatrix(metadata, entry, attackTime));
+            matrix.mul(localMatrix(entry, true));
         }
         return matrix;
     }
