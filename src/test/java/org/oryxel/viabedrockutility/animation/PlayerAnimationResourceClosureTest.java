@@ -131,6 +131,15 @@ class PlayerAnimationResourceClosureTest {
                         1.0F, false, true, 0.1D)));
         assertTrue(Math.abs(walkingModel.offsetX("rightarm") - zeroPhaseArmX) > 1.0e-3F);
 
+        final PlayerAnimationRuntime leftHandedRuntime = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel leftHandedModel = new TestBoneModel();
+        assertTrue(leftHandedRuntime.sampleThirdPerson(leftHandedModel,
+                state(PlayerAnimationState.View.THIRD_PERSON, 1L, "minecraft:stone",
+                        0.0F, 0.0F, 0.0F, 1.0F, false, false, 0.0D,
+                        HumanoidArm.LEFT)));
+        assertEquals(0.0F, leftHandedModel.rotationX("rightarm"), 1.0e-3F);
+        assertEquals(-18.0F, leftHandedModel.rotationX("leftarm"), 1.0e-3F);
+
         final AtomicLong now = new AtomicLong();
         final PlayerAnimationRuntime oneShotRuntime = new PlayerAnimationRuntime(
                 packs, Map.of(), now::get);
@@ -171,10 +180,19 @@ class PlayerAnimationResourceClosureTest {
                                               String mainHandIdentifier, float walkPosition,
                                               float walkSpeed, float attackTime, float armHeight,
                                               boolean slim, boolean bobAnimation, double deltaX) {
+        return state(view, tick, mainHandIdentifier, walkPosition, walkSpeed, attackTime,
+                armHeight, slim, bobAnimation, deltaX, HumanoidArm.RIGHT);
+    }
+
+    private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
+                                              String mainHandIdentifier, float walkPosition,
+                                              float walkSpeed, float attackTime, float armHeight,
+                                              boolean slim, boolean bobAnimation, double deltaX,
+                                              HumanoidArm mainArm) {
         return new PlayerAnimationState(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 view, tick, 0.0F,
-                HumanoidArm.RIGHT, InteractionHand.MAIN_HAND,
+                mainArm, InteractionHand.MAIN_HAND,
                 mainHandIdentifier, "", Set.of(),
                 tick, walkPosition, walkSpeed, attackTime,
                 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, armHeight, slim,
