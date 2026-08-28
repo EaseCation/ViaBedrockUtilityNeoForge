@@ -33,19 +33,16 @@ class PlayerAnimationResourceClosureTest {
     private static final Object LEVEL_INSTANCE = new Object();
 
     @Test
-    void deliveredVanillaAndGunPacksFormACompletePlayerRuntime() throws Exception {
+    void downloadedZePacksAndBundledVanillaFormACompletePlayerRuntime() throws Exception {
         final Path packsRoot = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "bedrock-loader-packs");
         final Path codeFunPacks = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "resource-packs", "CodeFunCore");
-        final Path vanilla = packsRoot.resolve("vanilla.zip");
         final Path gun = packsRoot.resolve("ec_gun_r.zip");
         final String configuredStack = System.getProperty("vbu.playerPackStack", "");
         final List<Path> stack = configuredStack.isBlank()
-                ? List.of(vanilla,
-                        codeFunPacks.resolve("ec_hub.zip"),
-                        codeFunPacks.resolve("rl_defense.zip"),
-                        codeFunPacks.resolve("rl_defense_ec_entity.zip"),
+                ? List.of(codeFunPacks.resolve("ec_hub.zip"),
+                        codeFunPacks.resolve("ec_ze.zip"),
                         gun)
                 : Arrays.stream(configuredStack.split(java.util.regex.Pattern.quote(File.pathSeparator)))
                 .map(Path::of)
