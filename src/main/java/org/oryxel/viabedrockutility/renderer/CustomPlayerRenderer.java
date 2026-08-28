@@ -160,6 +160,10 @@ public class CustomPlayerRenderer extends PlayerRenderer {
 
     public boolean sampleFirstPerson(PlayerAnimationState state) {
         final PlayerAnimationRuntime runtime = playerAnimationRuntime(state);
-        return runtime != null && runtime.sampleFirstPerson(this.model, state);
+        if (runtime == null) {
+            return false;
+        }
+        runtime.sampleFirstPerson(this.model, state);
+        return true;
     }
 }

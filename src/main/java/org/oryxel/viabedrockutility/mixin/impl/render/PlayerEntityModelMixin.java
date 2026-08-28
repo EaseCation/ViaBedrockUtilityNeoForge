@@ -65,7 +65,7 @@ public abstract class PlayerEntityModelMixin {
     @Inject(method = "setupAnim(Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;)V", at = @At("HEAD"), cancellable = true)
     private void viaBedrockUtility$throttleDistantPlayer(PlayerRenderState state, CallbackInfo ci) {
         final var runtime = viaBedrockUtility$runtime(state);
-        if (runtime == null || !runtime.hasAnimations()) {
+        if (runtime == null) {
             return;
         }
         this.setupAnimFrameCounter++;

@@ -13,7 +13,6 @@ import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
-import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
 import team.unnamed.mocha.runtime.ExecutionContext;
 import team.unnamed.mocha.runtime.Scope;
@@ -57,24 +56,20 @@ public final class PlayerAnimationRuntime {
         this.thirdPerson = new ViewInstance(definition.entityData(), animationOverrides, packs);
     }
 
-    public boolean hasAnimations() {
-        return !firstPerson.failed || !thirdPerson.failed;
+    public void sampleFirstPerson(PlayerModel model, PlayerAnimationState state) {
+        sample(model, state, firstPerson);
     }
 
-    public boolean sampleFirstPerson(PlayerModel model, PlayerAnimationState state) {
-        return sample(model, state, firstPerson);
+    public void sampleThirdPerson(PlayerModel model, PlayerAnimationState state) {
+        sample(model, state, thirdPerson);
     }
 
-    public boolean sampleThirdPerson(PlayerModel model, PlayerAnimationState state) {
-        return sample(model, state, thirdPerson);
+    void sampleFirstPerson(IBoneModel model, PlayerAnimationState state) {
+        sample(model, state, firstPerson);
     }
 
-    boolean sampleFirstPerson(IBoneModel model, PlayerAnimationState state) {
-        return sample(model, state, firstPerson);
-    }
-
-    boolean sampleThirdPerson(IBoneModel model, PlayerAnimationState state) {
-        return sample(model, state, thirdPerson);
+    void sampleThirdPerson(IBoneModel model, PlayerAnimationState state) {
+        sample(model, state, thirdPerson);
     }
 
     public void playOnce(String identifier, AnimationDefinitions.AnimationData animation) {
@@ -85,33 +80,24 @@ public final class PlayerAnimationRuntime {
         onceStartMillis.put(identifier, nowMillis.getAsLong());
     }
 
-    private boolean sample(PlayerModel model, PlayerAnimationState state, ViewInstance view) {
-        if (view.failed || state == null) {
-            return false;
-        }
+    private void sample(PlayerModel model, PlayerAnimationState state, ViewInstance view) {
+        Objects.requireNonNull(state, "state");
         if (cachedModel == null || cachedModel.getModel() != model) {
             cachedModel = new McBoneModel(model);
         }
         clearVanillaHostRotations(model);
-        return sample(cachedModel, state, view);
+        sample(cachedModel, state, view);
     }
 
-    private boolean sample(IBoneModel model, PlayerAnimationState state, ViewInstance view) {
-        if (view.failed || state == null) {
-            return false;
-        }
+    private void sample(IBoneModel model, PlayerAnimationState state, ViewInstance view) {
+        Objects.requireNonNull(state, "state");
+        view.update(state);
         try {
-            view.update(state);
             view.runtime.sample(model, state.partialTick(), view.scope, MoLangEvaluationContext.EMPTY);
-            applyOneShots(model, view.scope);
-            return true;
-        } catch (RuntimeException | IOException exception) {
-            view.failed = true;
-            ViaBedrockUtilityNeoForge.LOGGER.error(
-                    "[PlayerAnimation] Disabling invalid runtime for {} view {}",
-                    state.playerUuid(), state.view(), exception);
-            return false;
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to sample Bedrock player animation", exception);
         }
+        applyOneShots(model, view.scope);
     }
 
     private void applyOneShots(IBoneModel model, Scope scope) {
@@ -154,8 +140,6 @@ public final class PlayerAnimationRuntime {
         private final EquippedItemNameValue equippedItemName = new EquippedItemNameValue();
         private final ClientEntityAnimationRuntime runtime;
         private PlayerAnimationState state;
-        private boolean failed;
-
         private ViewInstance(org.cube.converter.data.bedrock.BedrockEntityData entity,
                              Map<String, String> animationOverrides, PackManager packs) {
             scope.set("query", query);

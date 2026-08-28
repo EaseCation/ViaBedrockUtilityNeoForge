@@ -6,6 +6,7 @@ import net.easecation.bedrockmotion.animation.vanilla.AnimateBuilder;
 import net.easecation.bedrockmotion.model.IBoneModel;
 import net.easecation.bedrockmotion.model.IBoneTarget;
 import net.easecation.bedrockmotion.pack.PackManager;
+import net.easecation.bedrockmotion.pack.ServerAnimationLayer;
 import net.easecation.bedrockmotion.pack.content.Content;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import net.minecraft.world.InteractionHand;
@@ -25,7 +26,9 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerAnimationResourceClosureTest {
@@ -51,9 +54,15 @@ class PlayerAnimationResourceClosureTest {
             assertTrue(Files.isRegularFile(pack), pack.toString());
         }
 
-        final PackManager packs = new PackManager(stack.stream()
+        final List<Content> downloaded = stack.stream()
                 .map(PlayerAnimationResourceClosureTest::content)
-                .toList());
+                .toList();
+        final ServerAnimationLayer downloadedLayer = ServerAnimationLayer.foldBottomToTop(
+                downloaded.stream().map(ServerAnimationLayer::fromContent).toList());
+        assertFalse(downloadedLayer.animationControllers()
+                .containsKey("controller.animation.player.root"));
+
+        final PackManager packs = new PackManager(downloaded);
         final var player = packs.getEntityDefinitions().getEntities().get("minecraft:player");
         assertNotNull(player);
         assertEquals("controller.animation.player.root",
@@ -63,26 +72,28 @@ class PlayerAnimationResourceClosureTest {
         assertNotNull(packs.getAnimationDefinitions().getAnimations()
                 .get("animation.gun_player.holding"));
 
+        final IllegalArgumentException missingRoot = assertThrows(IllegalArgumentException.class,
+                () -> new PlayerAnimationRuntime(packs, Map.of(
+                        "root", "controller.animation.player.root.missing")));
+        assertTrue(missingRoot.getMessage().contains("controller.animation.player.root.missing"));
+
         final PlayerAnimationRuntime runtime = new PlayerAnimationRuntime(packs, Map.of(
                 "holding", "animation.gun_player.holding",
                 "move.arms", "animation.gun_player.move.arms",
                 "attack.rotations", "animation.gun_player.attack.rotations",
                 "first_person_attack_rotation", "animation.gun_player.first_person.attack_rotation",
                 "first_person_attack_rotation_item", "animation.gun_player.first_person.attack_rotation_item"));
-        assertTrue(runtime.hasAnimations());
-
         final TestBoneModel model = new TestBoneModel();
-        assertTrue(runtime.sampleThirdPerson(model,
-                state(1L, "easecation:gun_rifle_dynamic_default")));
+        runtime.sampleThirdPerson(model, state(1L, "easecation:gun_rifle_dynamic_default"));
         assertEquals(-80.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-77.5F, model.rotationX("leftarm"), 1.0e-3F);
 
-        assertTrue(runtime.sampleThirdPerson(model, state(2L, "")));
+        runtime.sampleThirdPerson(model, state(2L, ""));
         assertEquals(0.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(0.0F, model.rotationX("leftarm"), 1.0e-3F);
 
-        assertTrue(runtime.sampleThirdPerson(model,
-                state(PlayerAnimationState.View.THIRD_PERSON, 3L, "", 0.0F, 1.0F, 0.0F)));
+        runtime.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 3L, "", 0.0F, 1.0F, 0.0F));
         assertEquals(-57.3F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(57.3F, model.rotationX("leftarm"), 1.0e-3F);
 
@@ -90,53 +101,53 @@ class PlayerAnimationResourceClosureTest {
                 "riding.arms", "animation.player.riding.arms.zombie",
                 "move.arms", "animation.player.move.arms.zombie",
                 "holding", "animation.player.holding.zombie"));
-        assertTrue(zombie.sampleThirdPerson(model,
-                state(PlayerAnimationState.View.THIRD_PERSON, 4L, "", 0.0F, 1.0F, 0.0F)));
+        zombie.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 4L, "", 0.0F, 1.0F, 0.0F));
         assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
 
-        assertTrue(runtime.sampleFirstPerson(model,
-                state(PlayerAnimationState.View.FIRST_PERSON, 5L, "", 0.0F, 0.0F, 0.0F)));
+        runtime.sampleFirstPerson(model,
+                state(PlayerAnimationState.View.FIRST_PERSON, 5L, "", 0.0F, 0.0F, 0.0F));
         final float restingFirstPersonArm = model.rotationX("rightarm");
-        assertTrue(runtime.sampleFirstPerson(model,
-                state(PlayerAnimationState.View.FIRST_PERSON, 6L, "", 0.0F, 0.0F, 0.5F)));
+        runtime.sampleFirstPerson(model,
+                state(PlayerAnimationState.View.FIRST_PERSON, 6L, "", 0.0F, 0.0F, 0.5F));
         assertTrue(Math.abs(model.rotationX("rightarm") - restingFirstPersonArm) > 1.0F);
 
-        assertTrue(runtime.sampleFirstPerson(model,
+        runtime.sampleFirstPerson(model,
                 state(PlayerAnimationState.View.FIRST_PERSON, 7L, "", 0.0F, 0.0F, 0.0F,
-                        1.0F, false, false, 0.0D)));
+                        1.0F, false, false, 0.0D));
         final float equippedArmY = model.offsetY("rightarm");
-        assertTrue(runtime.sampleFirstPerson(model,
+        runtime.sampleFirstPerson(model,
                 state(PlayerAnimationState.View.FIRST_PERSON, 8L, "", 0.0F, 0.0F, 0.0F,
-                        0.0F, false, false, 0.0D)));
+                        0.0F, false, false, 0.0D));
         assertEquals(10.0F, Math.abs(model.offsetY("rightarm") - equippedArmY), 1.0e-3F);
 
-        assertTrue(runtime.sampleFirstPerson(model,
+        runtime.sampleFirstPerson(model,
                 state(PlayerAnimationState.View.FIRST_PERSON, 9L, "", 0.0F, 0.0F, 0.0F,
-                        1.0F, false, true, 0.0D)));
+                        1.0F, false, true, 0.0D));
         final float wideArmY = model.offsetY("rightarm");
-        assertTrue(runtime.sampleFirstPerson(model,
+        runtime.sampleFirstPerson(model,
                 state(PlayerAnimationState.View.FIRST_PERSON, 10L, "", 0.0F, 0.0F, 0.0F,
-                        1.0F, true, true, 0.0D)));
+                        1.0F, true, true, 0.0D));
         assertEquals(0.5F, Math.abs(model.offsetY("rightarm") - wideArmY), 1.0e-3F);
 
         final PlayerAnimationRuntime walkingRuntime = new PlayerAnimationRuntime(packs, Map.of());
         final TestBoneModel walkingModel = new TestBoneModel();
-        assertTrue(walkingRuntime.sampleFirstPerson(walkingModel,
+        walkingRuntime.sampleFirstPerson(walkingModel,
                 state(PlayerAnimationState.View.FIRST_PERSON, 1L, "", 0.0F, 0.0F, 0.0F,
-                        1.0F, false, true, 0.1D)));
+                        1.0F, false, true, 0.1D));
         final float zeroPhaseArmX = walkingModel.offsetX("rightarm");
-        assertTrue(walkingRuntime.sampleFirstPerson(walkingModel,
+        walkingRuntime.sampleFirstPerson(walkingModel,
                 state(PlayerAnimationState.View.FIRST_PERSON, 2L, "", 0.5F, 0.0F, 0.0F,
-                        1.0F, false, true, 0.1D)));
+                        1.0F, false, true, 0.1D));
         assertTrue(Math.abs(walkingModel.offsetX("rightarm") - zeroPhaseArmX) > 1.0e-3F);
 
         final PlayerAnimationRuntime leftHandedRuntime = new PlayerAnimationRuntime(packs, Map.of());
         final TestBoneModel leftHandedModel = new TestBoneModel();
-        assertTrue(leftHandedRuntime.sampleThirdPerson(leftHandedModel,
+        leftHandedRuntime.sampleThirdPerson(leftHandedModel,
                 state(PlayerAnimationState.View.THIRD_PERSON, 1L, "minecraft:stone",
                         0.0F, 0.0F, 0.0F, 1.0F, false, false, 0.0D,
-                        HumanoidArm.LEFT)));
+                        HumanoidArm.LEFT));
         assertEquals(0.0F, leftHandedModel.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-18.0F, leftHandedModel.rotationX("leftarm"), 1.0e-3F);
 
@@ -151,16 +162,16 @@ class PlayerAnimationResourceClosureTest {
                 """).getAsJsonObject()).getFirst();
         oneShotRuntime.playOnce("animation.test.once",
                 new AnimationDefinitions.AnimationData(oneShot, AnimateBuilder.build(oneShot)));
-        assertTrue(oneShotRuntime.sampleThirdPerson(model,
-                state(PlayerAnimationState.View.THIRD_PERSON, 7L, "", 0.0F, 0.0F, 0.0F)));
-        assertTrue(baselineRuntime.sampleThirdPerson(baseline,
-                state(PlayerAnimationState.View.THIRD_PERSON, 7L, "", 0.0F, 0.0F, 0.0F)));
+        oneShotRuntime.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 7L, "", 0.0F, 0.0F, 0.0F));
+        baselineRuntime.sampleThirdPerson(baseline,
+                state(PlayerAnimationState.View.THIRD_PERSON, 7L, "", 0.0F, 0.0F, 0.0F));
         assertEquals(20.0F, model.rotationX("rightarm"), 1.0e-3F);
         now.set(101L);
-        assertTrue(oneShotRuntime.sampleThirdPerson(model,
-                state(PlayerAnimationState.View.THIRD_PERSON, 8L, "", 0.0F, 0.0F, 0.0F)));
-        assertTrue(baselineRuntime.sampleThirdPerson(baseline,
-                state(PlayerAnimationState.View.THIRD_PERSON, 8L, "", 0.0F, 0.0F, 0.0F)));
+        oneShotRuntime.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 8L, "", 0.0F, 0.0F, 0.0F));
+        baselineRuntime.sampleThirdPerson(baseline,
+                state(PlayerAnimationState.View.THIRD_PERSON, 8L, "", 0.0F, 0.0F, 0.0F));
         assertEquals(baseline.rotationX("rightarm"), model.rotationX("rightarm"), 1.0e-3F);
     }
 
