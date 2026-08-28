@@ -47,6 +47,8 @@ class PlayerAnimationResourceClosureTest {
         final List<Path> stack = configuredStack.isBlank()
                 ? List.of(codeFunPacks.resolve("ec_hub.zip"),
                         codeFunPacks.resolve("ec_ze.zip"),
+                        codeFunPacks.resolve("rl_defense.zip"),
+                        codeFunPacks.resolve("rl_defense_ec_entity.zip"),
                         gun)
                 : Arrays.stream(configuredStack.split(java.util.regex.Pattern.quote(File.pathSeparator)))
                 .map(Path::of)
@@ -60,7 +62,7 @@ class PlayerAnimationResourceClosureTest {
                 .toList();
         final ServerAnimationLayer downloadedLayer = ServerAnimationLayer.foldBottomToTop(
                 downloaded.stream().map(ServerAnimationLayer::fromContent).toList());
-        assertFalse(downloadedLayer.animationControllers()
+        assertTrue(downloadedLayer.animationControllers()
                 .containsKey("controller.animation.player.root"));
 
         final PackManager packs = new PackManager(downloaded);
@@ -119,28 +121,29 @@ class PlayerAnimationResourceClosureTest {
         final PlayerAnimationRuntime zombie = new PlayerAnimationRuntime(packs, Map.of(
                 "riding.arms", "animation.player.riding.arms.zombie",
                 "move.arms", "animation.player.move.arms.zombie",
-                "holding", "animation.player.holding.zombie",
-                "bob", "animation.ec_ze.player.none",
-                "attack.positions", "animation.ec_ze.player.none",
-                "attack.rotations", "animation.ec_ze.player.none"));
+                "holding", "animation.player.holding.zombie"));
         zombie.sampleThirdPerson(model,
                 state(PlayerAnimationState.View.THIRD_PERSON, 4L, "", 0.0F, 1.0F, 0.0F));
         assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
-        assertEquals(0.0F, model.rotationZ("rightarm"), 1.0e-3F);
-        assertEquals(0.0F, model.rotationZ("leftarm"), 1.0e-3F);
+        assertTrue(Math.abs(model.rotationZ("rightarm")) <= 5.73F + 1.0e-3F);
+        assertEquals(-model.rotationZ("rightarm"), model.rotationZ("leftarm"), 1.0e-3F);
         zombie.sampleThirdPerson(model,
                 state(PlayerAnimationState.View.THIRD_PERSON, 24L, "", 1.0F, 1.0F, 0.0F));
         assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
-        assertEquals(0.0F, model.rotationZ("rightarm"), 1.0e-3F);
-        assertEquals(0.0F, model.rotationZ("leftarm"), 1.0e-3F);
+        assertTrue(Math.abs(model.rotationZ("rightarm")) <= 5.73F + 1.0e-3F);
+        assertEquals(-model.rotationZ("rightarm"), model.rotationZ("leftarm"), 1.0e-3F);
         zombie.sampleThirdPerson(model,
                 state(PlayerAnimationState.View.THIRD_PERSON, 25L, "", 1.0F, 1.0F, 0.5F));
+        assertTrue(model.rotationX("rightarm") < -100.0F,
+                () -> "zombie attack rightarm=" + model.rotation("rightarm"));
+        assertTrue(model.rotationX("leftarm") < -90.0F,
+                () -> "zombie attack leftarm=" + model.rotation("leftarm"));
+        zombie.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 26L, "", 1.0F, 1.0F, 0.0F));
         assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
-        assertEquals(0.0F, model.rotationZ("rightarm"), 1.0e-3F);
-        assertEquals(0.0F, model.rotationZ("leftarm"), 1.0e-3F);
 
         runtime.sampleFirstPerson(model,
                 state(PlayerAnimationState.View.FIRST_PERSON, 5L, "", 0.0F, 0.0F, 0.0F));
@@ -276,6 +279,57 @@ class PlayerAnimationResourceClosureTest {
         assertEquals(baseline.rotationX("rightarm"), model.rotationX("rightarm"), 1.0e-3F);
     }
 
+    @Test
+    void bedrockMovementQueriesKeepWalkPhaseSeparateFromGroundDistance() throws Exception {
+        final Path workspace = Path.of(System.getProperty("vbu.workspaceRoot"));
+        final Path loaderPacks = workspace.resolve("ec-deploy-assets/bedrock-loader-packs");
+        final Path codeFunPacks = workspace.resolve("ec-deploy-assets/resource-packs/CodeFunCore");
+        final PackManager packs = new PackManager(List.of(
+                content(codeFunPacks.resolve("ec_hub.zip")),
+                content(codeFunPacks.resolve("ec_ze.zip")),
+                content(loaderPacks.resolve("ec_gun_r.zip"))));
+
+        final TestBoneModel phaseZeroModel = new TestBoneModel();
+        final TestBoneModel phaseOneModel = new TestBoneModel();
+        new PlayerAnimationRuntime(packs, Map.of()).sampleThirdPerson(phaseZeroModel,
+                movementState(PlayerAnimationState.View.THIRD_PERSON,
+                        1L, 0.0D, 0.0F, 1.0F, true, false));
+        new PlayerAnimationRuntime(packs, Map.of()).sampleThirdPerson(phaseOneModel,
+                movementState(PlayerAnimationState.View.THIRD_PERSON,
+                        1L, 0.0D, 1.0F, 1.0F, true, false));
+        assertTrue(Math.abs(phaseZeroModel.rotationX("rightarm")
+                - phaseOneModel.rotationX("rightarm")) > 5.0F);
+
+        final PlayerAnimationRuntime firstA = new PlayerAnimationRuntime(packs, Map.of());
+        final PlayerAnimationRuntime firstB = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel firstModelA = new TestBoneModel();
+        final TestBoneModel firstModelB = new TestBoneModel();
+        firstA.sampleFirstPerson(firstModelA, movementState(PlayerAnimationState.View.FIRST_PERSON,
+                1L, 0.0D, 0.0F, 0.4F, true, false));
+        firstB.sampleFirstPerson(firstModelB, movementState(PlayerAnimationState.View.FIRST_PERSON,
+                1L, 0.0D, 0.0F, 0.4F, true, false));
+        firstA.sampleFirstPerson(firstModelA, movementState(PlayerAnimationState.View.FIRST_PERSON,
+                2L, 0.25D, 0.0F, 0.4F, true, false));
+        firstB.sampleFirstPerson(firstModelB, movementState(PlayerAnimationState.View.FIRST_PERSON,
+                2L, 0.25D, 12.0F, 0.4F, true, false));
+        assertPoseEquals(firstModelA, firstModelB);
+
+        final PlayerAnimationRuntime.MovementDistance distance =
+                new PlayerAnimationRuntime.MovementDistance();
+        assertEquals(0.0D, distance.update(movementState(PlayerAnimationState.View.FIRST_PERSON,
+                0L, 0.0D, 0.0F, 0.0F, true, false)), 1.0e-6D);
+        assertEquals(0.0D, distance.update(movementState(PlayerAnimationState.View.FIRST_PERSON,
+                1L, 1.0D, 0.0F, 0.0F, false, false)), 1.0e-6D);
+        assertEquals(0.0D, distance.update(movementState(PlayerAnimationState.View.FIRST_PERSON,
+                2L, 2.0D, 0.0F, 0.0F, false, false)), 1.0e-6D);
+        assertEquals(0.0D, distance.update(movementState(PlayerAnimationState.View.FIRST_PERSON,
+                3L, 3.0D, 0.0F, 0.0F, true, true)), 1.0e-6D);
+        assertEquals(0.0D, distance.update(movementState(PlayerAnimationState.View.FIRST_PERSON,
+                4L, 4.0D, 0.0F, 0.0F, true, true)), 1.0e-6D);
+        assertEquals(1.0D, distance.update(movementState(PlayerAnimationState.View.FIRST_PERSON,
+                5L, 5.0D, 0.0F, 0.0F, true, false)), 1.0e-6D);
+    }
+
     private static PlayerAnimationState state(long tick, String mainHandIdentifier) {
         return state(PlayerAnimationState.View.THIRD_PERSON, tick,
                 mainHandIdentifier, 0.0F, 0.0F, 0.0F);
@@ -363,12 +417,28 @@ class PlayerAnimationResourceClosureTest {
                 view, tick, partialTick,
                 mainArm, InteractionHand.MAIN_HAND,
                 mainHandIdentifier, "", Set.of(),
-                tick, walkSpeed, attackTime,
+                tick, positionX, walkSpeed, attackTime,
                 pitch, relativeHeadYaw, bodyYaw, swimAmount, 1.0F, armHeight, slim,
                 true, true, false, false, false, swimming, false,
                 false, false, false, false, false, false, false, bobAnimation,
                 0, 0, 0, 0.0F, 0.0F,
                 positionX, 0.0D, deltaX, 0.0D, 0.0D);
+    }
+
+    private static PlayerAnimationState movementState(PlayerAnimationState.View view, long tick,
+                                                      double positionX, float walkPosition,
+                                                      float walkSpeed, boolean onGround,
+                                                      boolean crouching) {
+        return new PlayerAnimationState(
+                UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                new PlayerAnimationOwner(PLAYER_INSTANCE, LEVEL_INSTANCE),
+                view, tick, 0.0F, HumanoidArm.RIGHT, InteractionHand.MAIN_HAND,
+                "", "", Set.of(), tick, walkPosition, walkSpeed, 0.0F,
+                0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 1.0F, false,
+                true, onGround, false, crouching, false, false, false,
+                false, false, false, false, false, false, false, true,
+                0, 0, 0, 0.0F, 0.0F,
+                positionX, 0.0D, 0.1D, 0.0D, 0.0D);
     }
 
     private static void assertPoseEquals(TestBoneModel expected, TestBoneModel actual) {
@@ -404,6 +474,10 @@ class PlayerAnimationResourceClosureTest {
 
         private float rotationZ(String name) {
             return bones.get(name).getRotation().z;
+        }
+
+        private Vector3f rotation(String name) {
+            return new Vector3f(bones.get(name).getRotation());
         }
 
         private float offsetX(String name) {

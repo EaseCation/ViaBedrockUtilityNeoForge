@@ -7,6 +7,7 @@ import org.oryxel.viabedrockutility.renderer.BedrockModelPartTransform;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
 
 import java.util.List;
+import java.util.function.Function;
 
 /** Resolves Bedrock player binding bones and their bind/current deformation matrices. */
 public final class AttachableHostContext {
@@ -86,7 +87,7 @@ public final class AttachableHostContext {
     /** Prefixes a direct ModelPart render without mutating the host model's current pose. */
     public Matrix4f firstPersonArmRenderPrefix(BedrockPlayerModelMetadata.Bone armBone) {
         final Matrix4f target = firstPersonWorldMatrix(armBone);
-        return target.mul(localMatrix(armBone, true).invert());
+        return armRenderPrefix(target, localMatrix(armBone, true));
     }
 
     public List<String> semanticChain(BedrockPlayerModelMetadata.Bone bone) {
@@ -98,11 +99,22 @@ public final class AttachableHostContext {
     }
 
     private Matrix4f firstPersonWorldMatrix(BedrockPlayerModelMetadata.Bone bone) {
+        return firstPersonWorldMatrix(metadata.chainTo(bone),
+                entry -> localMatrix(entry, true));
+    }
+
+    static Matrix4f firstPersonWorldMatrix(
+            List<BedrockPlayerModelMetadata.Bone> chain,
+            Function<BedrockPlayerModelMetadata.Bone, Matrix4f> currentLocalMatrix) {
         final Matrix4f matrix = new Matrix4f(FIRST_PERSON_CAMERA);
-        for (BedrockPlayerModelMetadata.Bone entry : metadata.chainTo(bone)) {
-            matrix.mul(localMatrix(entry, true));
+        for (BedrockPlayerModelMetadata.Bone entry : chain) {
+            matrix.mul(currentLocalMatrix.apply(entry));
         }
         return matrix;
+    }
+
+    static Matrix4f armRenderPrefix(Matrix4f targetWorld, Matrix4f armLocal) {
+        return new Matrix4f(targetWorld).mul(new Matrix4f(armLocal).invert());
     }
 
     private static Matrix4f worldMatrix(List<BedrockPlayerModelMetadata.Bone> chain, boolean current) {

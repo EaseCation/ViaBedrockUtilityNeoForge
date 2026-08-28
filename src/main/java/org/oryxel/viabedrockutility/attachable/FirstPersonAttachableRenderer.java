@@ -1,7 +1,10 @@
 package org.oryxel.viabedrockutility.attachable;
 
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
 import net.neoforged.neoforge.client.event.RenderHandEvent;
@@ -65,7 +68,9 @@ public final class FirstPersonAttachableRenderer {
         }
 
         RENDERING.set(true);
+        event.getPoseStack().pushPose();
         try {
+            enterBedrockCameraSpace(event.getPoseStack(), player, event.getPartialTick());
             final AttachableRenderResult result = ViaBedrockUtility.getInstance().getAttachableRuntimeManager().renderFirstPerson(
                     owner, item, logicalHand, arm,
                     customRenderer.getPlayerModel(), event.getPoseStack(), event.getMultiBufferSource(),
@@ -84,6 +89,7 @@ public final class FirstPersonAttachableRenderer {
             }
             event.setCanceled(true);
         } finally {
+            event.getPoseStack().popPose();
             RENDERING.set(false);
         }
     }
@@ -105,5 +111,19 @@ public final class FirstPersonAttachableRenderer {
             return true;
         }
         return false;
+    }
+
+    private static void enterBedrockCameraSpace(PoseStack poses, LocalPlayer player,
+                                                float partialTick) {
+        removeVanillaHandViewTransform(poses,
+                player.getViewXRot(partialTick), Mth.lerp(partialTick, player.xBobO, player.xBob),
+                player.getViewYRot(partialTick), Mth.lerp(partialTick, player.yBobO, player.yBob));
+    }
+
+    static void removeVanillaHandViewTransform(PoseStack poses,
+                                               float viewPitch, float interpolatedPitchBob,
+                                               float viewYaw, float interpolatedYawBob) {
+        poses.mulPose(Axis.YP.rotationDegrees((interpolatedYawBob - viewYaw) * 0.1F));
+        poses.mulPose(Axis.XP.rotationDegrees((interpolatedPitchBob - viewPitch) * 0.1F));
     }
 }

@@ -172,14 +172,14 @@ public final class PlayerAnimationRuntime {
             equippedItemName.state = next;
             bindQueries(next, distanceMoved);
             bindVariables(next);
-            runtime.tick(next.tick(), scope, MoLangEvaluationContext.EMPTY,
+            runtime.tick(next.tick(), next.partialTick(), scope, MoLangEvaluationContext.EMPTY,
                     ignored -> bindVariables(next));
         }
 
         private void bindQueries(PlayerAnimationState value, double distanceMoved) {
             query.set("life_time", Value.of(value.ageInTicks() / 20.0F));
             query.set("frame_alpha", Value.of(value.partialTick()));
-            query.set("modified_distance_moved", Value.of(distanceMoved));
+            query.set("modified_distance_moved", Value.of(value.walkPosition()));
             query.set("walk_distance", Value.of(distanceMoved));
             query.set("modified_move_speed", Value.of(value.walkSpeed()));
             query.set("ground_speed", Value.of(value.walkSpeed()));
@@ -298,14 +298,14 @@ public final class PlayerAnimationRuntime {
         }
     }
 
-    private static final class MovementDistance {
+    static final class MovementDistance {
         private long tick = Long.MIN_VALUE;
         private float partialTick;
         private double x;
         private double z;
         private double distance;
 
-        private double update(PlayerAnimationState state) {
+        double update(PlayerAnimationState state) {
             if (tick == Long.MIN_VALUE) {
                 tick = state.tick();
                 partialTick = state.partialTick();
@@ -313,7 +313,9 @@ public final class PlayerAnimationRuntime {
                 z = state.positionZ();
             } else if (state.tick() > tick
                     || state.tick() == tick && state.partialTick() > partialTick) {
-                distance += Math.hypot(state.positionX() - x, state.positionZ() - z);
+                if (state.onGround() && !state.crouching()) {
+                    distance += Math.hypot(state.positionX() - x, state.positionZ() - z);
+                }
                 tick = state.tick();
                 partialTick = state.partialTick();
                 x = state.positionX();
