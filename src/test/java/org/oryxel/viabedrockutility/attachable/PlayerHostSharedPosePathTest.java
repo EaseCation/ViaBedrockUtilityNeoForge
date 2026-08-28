@@ -76,6 +76,24 @@ class PlayerHostSharedPosePathTest {
     }
 
     @Test
+    void flattenedArmPrefixMustRemoveNonIdentityBodyBindPoseBeforeApplyingArmAbsolutePose() {
+        final Map<String, Matrix4f> current = locals(60.0F);
+        final Map<String, Matrix4f> bind = bindLocals();
+        bind.put("body", BedrockTransformConvention.deformation(
+                BedrockTransformConvention.toJavaModel(new Vector3f(0.0F, 24.0F, 0.0F)),
+                new Vector3f(), new Vector3f(12.0F, -8.0F, 4.0F), new Vector3f(1.0F)));
+
+        final Matrix4f expected = world(chain("rightarm"), current, bind);
+        final Matrix4f parentWorld = world(chain(), current, bind);
+        final Matrix4f currentArmAbsolute = current.get("rightarm");
+        final Matrix4f actual = new Matrix4f(parentWorld)
+                .mul(new Matrix4f(bind.get("body")).invert())
+                .mul(currentArmAbsolute);
+
+        assertMatrixEquals(expected, actual);
+    }
+
+    @Test
     void finalArmAndItemMatricesTrackViewPitchWithoutRetainingViewYaw() {
         final Matrix4f armYawLeft = finalCameraMatrix(35.0F, -120.0F, false);
         final Matrix4f armYawRight = finalCameraMatrix(35.0F, 80.0F, false);

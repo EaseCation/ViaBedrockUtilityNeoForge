@@ -103,7 +103,12 @@ public final class AttachableHostContext {
         if (parent == null) {
             throw new IllegalStateException("Player arm semantic parent is missing: " + parentKey);
         }
-        return firstPersonWorldMatrix(parent);
+        // The flattened ModelPart.render() consumes the arm's current absolute transform. Convert
+        // that absolute transform into the arm's semantic local space against the body's bind pose
+        // before applying the current semantic parent chain. This matters for player geometries with
+        // a non-identity body bind rotation/scale; omitting it silently skews or pins the arm.
+        return firstPersonWorldMatrix(parent)
+                .mul(new Matrix4f(bindWorldMatrix(parent)).invert());
     }
 
     public List<String> semanticChain(BedrockPlayerModelMetadata.Bone bone) {
