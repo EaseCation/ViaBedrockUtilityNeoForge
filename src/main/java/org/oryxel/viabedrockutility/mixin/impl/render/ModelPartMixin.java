@@ -28,7 +28,6 @@ import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
@@ -90,8 +89,6 @@ public abstract class ModelPartMixin implements IModelPart {
             0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, false, 1, 1, java.util.Set.<Direction>of());
 
-    @Unique
-    private static final float VBU_ABSOLUTE_ARM_X_THRESHOLD = 1.0F;
     @Unique
     private static final boolean vbu$INDEXED_RENDER_ENABLED =
             !Boolean.getBoolean("viabedrockutility.disableIndexedRender");
@@ -337,43 +334,6 @@ public abstract class ModelPartMixin implements IModelPart {
 
         BedrockPlayerArmorPose.copy(source, (ModelPart) (Object) this);
 
-        // Vanilla armor/cape models need their baked part offsets (legs at y=12, arms at +/-5,y=2),
-        // but must still inherit dynamic pose translations from crouching, swimming, etc.
-        PartPose targetInitialPose = this.getInitialPose();
-        PartPose sourceInitialPose = source.getInitialPose();
-        this.x = targetInitialPose.x() + (source.x - sourceInitialPose.x());
-        this.y = targetInitialPose.y() + (source.y - sourceInitialPose.y());
-        this.z = targetInitialPose.z() + (source.z - sourceInitialPose.z());
-
-        // During the vanilla left-click swing, HumanoidModel writes the arm x/z positions as absolute
-        // vanilla arm origins. VBU player arms later cancel that dynamic X/Z offset after vanilla's ZYX
-        // rotation, so the armor origin has to keep only the residual that remains after the same rotation
-        // instead of inheriting the full offset (front drift) or dropping all of it (back drift).
-        if (this.vbu$usesAbsoluteSwingArmPosition(sourcePart, source, sourceInitialPose)) {
-            this.vbu$copyAbsoluteSwingArmPosition(source, targetInitialPose);
-        }
-    }
-
-    @Unique
-    private void vbu$copyAbsoluteSwingArmPosition(ModelPart source, PartPose targetInitialPose) {
-        final float swingOffsetX = source.x - targetInitialPose.x();
-        final float swingOffsetZ = source.z - targetInitialPose.z();
-        final Vector3f rotatedSwingOffset = new Vector3f(swingOffsetX, 0.0F, swingOffsetZ)
-                .rotate(this.vbu$tempQuaternion.rotationZYX(source.zRot, source.yRot, source.xRot));
-        this.x = targetInitialPose.x() + swingOffsetX - rotatedSwingOffset.x;
-        this.z = targetInitialPose.z() + swingOffsetZ - rotatedSwingOffset.z;
-    }
-
-    @Unique
-    private boolean vbu$usesAbsoluteSwingArmPosition(IModelPart sourcePart, ModelPart source, PartPose sourceInitialPose) {
-        final String partName = sourcePart.viaBedrockUtility$getName();
-        if (partName == null) {
-            return false;
-        }
-
-        final String normalizedName = partName.replace("_", "").toLowerCase(Locale.ROOT);
-        return ("leftarm".equals(normalizedName) || "rightarm".equals(normalizedName))
-                && Math.abs(source.x - sourceInitialPose.x()) >= VBU_ABSOLUTE_ARM_X_THRESHOLD;
     }
 
     @Override

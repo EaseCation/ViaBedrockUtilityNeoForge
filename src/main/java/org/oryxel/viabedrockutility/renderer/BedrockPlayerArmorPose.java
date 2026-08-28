@@ -40,6 +40,10 @@ public final class BedrockPlayerArmorPose {
             ARMOR_PREFIXES.remove(target);
         } else {
             ARMOR_PREFIXES.put(target, new Matrix4f(deformation));
+            // The prefix is the source player's complete current presentation deformation.
+            // Retaining fields copied by HumanoidModel.copyPropertiesTo would apply crouch,
+            // swing, rotation, or scale a second time after that prefix.
+            target.loadPose(target.getInitialPose());
         }
     }
 

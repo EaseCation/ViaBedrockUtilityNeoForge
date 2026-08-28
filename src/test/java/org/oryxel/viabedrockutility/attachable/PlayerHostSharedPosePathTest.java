@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerHostSharedPosePathTest {
     @Test
-    void bedrockCameraSpaceRemovesTheVanillaHandViewTransformExactly() {
+    void bedrockCameraSpaceKeepsPitchButRemovesVanillaYaw() {
         final float viewPitch = 67.0F;
         final float pitchBob = 4.0F;
         final float viewYaw = -123.0F;
@@ -26,10 +26,12 @@ class PlayerHostSharedPosePathTest {
         poses.mulPose(Axis.XP.rotationDegrees((viewPitch - pitchBob) * 0.1F));
         poses.mulPose(Axis.YP.rotationDegrees((viewYaw - yawBob) * 0.1F));
 
-        FirstPersonAttachableRenderer.removeVanillaHandViewTransform(
-                poses, viewPitch, pitchBob, viewYaw, yawBob);
+        FirstPersonAttachableRenderer.removeVanillaHandYawTransform(
+                poses, viewYaw, yawBob);
 
-        assertMatrixEquals(new Matrix4f(), poses.last().pose());
+        final Matrix4f expected = new Matrix4f()
+                .rotateX((float) Math.toRadians((viewPitch - pitchBob) * 0.1F));
+        assertMatrixEquals(expected, poses.last().pose());
     }
 
     @Test

@@ -115,15 +115,12 @@ public final class FirstPersonAttachableRenderer {
 
     private static void enterBedrockCameraSpace(PoseStack poses, LocalPlayer player,
                                                 float partialTick) {
-        removeVanillaHandViewTransform(poses,
-                player.getViewXRot(partialTick), Mth.lerp(partialTick, player.xBobO, player.xBob),
+        removeVanillaHandYawTransform(poses,
                 player.getViewYRot(partialTick), Mth.lerp(partialTick, player.yBobO, player.yBob));
     }
 
-    static void removeVanillaHandViewTransform(PoseStack poses,
-                                               float viewPitch, float interpolatedPitchBob,
-                                               float viewYaw, float interpolatedYawBob) {
+    static void removeVanillaHandYawTransform(PoseStack poses,
+                                              float viewYaw, float interpolatedYawBob) {
         poses.mulPose(Axis.YP.rotationDegrees((interpolatedYawBob - viewYaw) * 0.1F));
-        poses.mulPose(Axis.XP.rotationDegrees((interpolatedPitchBob - viewPitch) * 0.1F));
     }
 }
