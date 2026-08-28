@@ -11,6 +11,7 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
 import org.oryxel.viabedrockutility.renderer.BedrockModelPartTransform;
+import org.oryxel.viabedrockutility.renderer.BedrockPlayerArmorPose;
 import org.oryxel.viabedrockutility.renderer.VbuCompileScratch;
 import org.oryxel.viabedrockutility.renderer.VbuCuboidBatchRenderer;
 import org.oryxel.viabedrockutility.renderer.VbuRenderMetrics;
@@ -98,6 +99,7 @@ public abstract class ModelPartMixin implements IModelPart {
     @Inject(method = "translateAndRotate", at = @At("HEAD"))
     public void render(PoseStack matrices, CallbackInfo ci) {
         if (!this.isVBUModel) {
+            BedrockPlayerArmorPose.apply((ModelPart) (Object) this, matrices);
             return;
         }
 
@@ -332,6 +334,8 @@ public abstract class ModelPartMixin implements IModelPart {
         if (this.isVBUModel || !sourcePart.viaBedrockUtility$isVBUModel()) {
             return;
         }
+
+        BedrockPlayerArmorPose.copy(source, (ModelPart) (Object) this);
 
         // Vanilla armor/cape models need their baked part offsets (legs at y=12, arms at +/-5,y=2),
         // but must still inherit dynamic pose translations from crouching, swimming, etc.

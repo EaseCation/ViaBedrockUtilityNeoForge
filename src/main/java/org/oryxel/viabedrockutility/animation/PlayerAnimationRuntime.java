@@ -38,6 +38,7 @@ public final class PlayerAnimationRuntime {
     private final Map<String, Long> onceStartMillis = new LinkedHashMap<>();
     private final Vector3f animationScratch = new Vector3f();
     private final LongSupplier nowMillis;
+    private final MovementDistance movementDistance = new MovementDistance();
     private McBoneModel cachedModel;
 
     public PlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides) {
@@ -62,6 +63,7 @@ public final class PlayerAnimationRuntime {
 
     public void sampleThirdPerson(PlayerModel model, PlayerAnimationState state) {
         sample(model, state, thirdPerson);
+        org.oryxel.viabedrockutility.renderer.BedrockPlayerArmorPose.update(model);
     }
 
     void sampleFirstPerson(IBoneModel model, PlayerAnimationState state) {
@@ -91,7 +93,7 @@ public final class PlayerAnimationRuntime {
 
     private void sample(IBoneModel model, PlayerAnimationState state, ViewInstance view) {
         Objects.requireNonNull(state, "state");
-        view.update(state);
+        view.update(state, movementDistance.update(state));
         try {
             view.runtime.sample(model, state.partialTick(), view.scope, MoLangEvaluationContext.EMPTY);
         } catch (IOException exception) {
@@ -165,20 +167,20 @@ public final class PlayerAnimationRuntime {
                     });
         }
 
-        private void update(PlayerAnimationState next) {
+        private void update(PlayerAnimationState next, double distanceMoved) {
             this.state = next;
             equippedItemName.state = next;
-            bindQueries(next);
+            bindQueries(next, distanceMoved);
             bindVariables(next);
             runtime.tick(next.tick(), scope, MoLangEvaluationContext.EMPTY,
                     ignored -> bindVariables(next));
         }
 
-        private void bindQueries(PlayerAnimationState value) {
+        private void bindQueries(PlayerAnimationState value, double distanceMoved) {
             query.set("life_time", Value.of(value.ageInTicks() / 20.0F));
             query.set("frame_alpha", Value.of(value.partialTick()));
-            query.set("modified_distance_moved", Value.of(value.walkPosition()));
-            query.set("walk_distance", Value.of(value.walkPosition()));
+            query.set("modified_distance_moved", Value.of(distanceMoved));
+            query.set("walk_distance", Value.of(distanceMoved));
             query.set("modified_move_speed", Value.of(value.walkSpeed()));
             query.set("ground_speed", Value.of(value.walkSpeed()));
             query.set("vertical_speed", Value.of(value.deltaY()));
@@ -293,6 +295,31 @@ public final class PlayerAnimationRuntime {
             final String normalized = slot.toLowerCase(Locale.ROOT)
                     .replace("_", "").replace(".", "").replace("-", "");
             return normalized.contains("offhand");
+        }
+    }
+
+    private static final class MovementDistance {
+        private long tick = Long.MIN_VALUE;
+        private float partialTick;
+        private double x;
+        private double z;
+        private double distance;
+
+        private double update(PlayerAnimationState state) {
+            if (tick == Long.MIN_VALUE) {
+                tick = state.tick();
+                partialTick = state.partialTick();
+                x = state.positionX();
+                z = state.positionZ();
+            } else if (state.tick() > tick
+                    || state.tick() == tick && state.partialTick() > partialTick) {
+                distance += Math.hypot(state.positionX() - x, state.positionZ() - z);
+                tick = state.tick();
+                partialTick = state.partialTick();
+                x = state.positionX();
+                z = state.positionZ();
+            }
+            return distance;
         }
     }
 

@@ -83,6 +83,22 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         return this.texture;
     }
 
+    @Override
+    protected void setupRotations(PlayerRenderState state, PoseStack poseStack,
+                                  float bodyRot, float scale) {
+        if (this.playerAnimationPacks == null || state.swimAmount <= 0.0F || state.isFallFlying) {
+            super.setupRotations(state, poseStack, bodyRot, scale);
+            return;
+        }
+        final float swimAmount = state.swimAmount;
+        state.swimAmount = 0.0F;
+        try {
+            super.setupRotations(state, poseStack, bodyRot, scale);
+        } finally {
+            state.swimAmount = swimAmount;
+        }
+    }
+
     public ResourceLocation getPlayerTexture() {
         return this.texture;
     }

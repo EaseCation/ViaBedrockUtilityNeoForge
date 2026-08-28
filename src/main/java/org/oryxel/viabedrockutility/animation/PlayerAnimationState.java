@@ -35,7 +35,6 @@ public record PlayerAnimationState(
         String offHandIdentifier,
         Set<String> mainHandTags,
         float ageInTicks,
-        float walkPosition,
         float walkSpeed,
         float attackTime,
         float pitch,
@@ -65,6 +64,8 @@ public record PlayerAnimationState(
         int useMaxDuration,
         float useItemStartupProgress,
         float useItemIntervalProgress,
+        double positionX,
+        double positionZ,
         double deltaX,
         double deltaY,
         double deltaZ) {
@@ -101,13 +102,12 @@ public record PlayerAnimationState(
                 ? Math.max(0.0F, useMaxDuration - useRemainingTicks + partialTick - 1.0F) : 0.0F;
         final ChargedProjectiles projectiles = mainHand.get(DataComponents.CHARGED_PROJECTILES);
         final boolean itemCharged = projectiles != null && !projectiles.isEmpty();
+        final Vec3 position = player.getPosition(partialTick);
         final Vec3 movement = player.getDeltaMovement();
         final float bodyYaw = Mth.rotLerp(partialTick, player.yBodyRotO, player.yBodyRot);
         final float headYaw = Mth.wrapDegrees(Mth.rotLerp(partialTick, player.yHeadRotO, player.yHeadRot)
                 - bodyYaw);
         final float pitch = player.getXRot(partialTick);
-        final float walkPosition = renderState == null
-                ? player.walkAnimation.position(partialTick) : renderState.walkAnimationPos;
         final float walkSpeed = renderState == null
                 ? player.walkAnimation.speed(partialTick) : renderState.walkAnimationSpeed;
         final float swimAmount = renderState == null
@@ -120,7 +120,7 @@ public record PlayerAnimationState(
                 view, player.tickCount, partialTick, bedrockMainArm(view, player.getMainArm()),
                 player.isUsingItem() ? player.getUsedItemHand() : InteractionHand.MAIN_HAND,
                 identifier(mainHand), identifier(offHand), tags(mainHand),
-                player.tickCount + partialTick, walkPosition, walkSpeed, attackTime,
+                player.tickCount + partialTick, walkSpeed, attackTime,
                 pitch, headYaw, bodyYaw, swimAmount, (float) distance, armHeight,
                 player.getSkin().model() == PlayerSkin.Model.SLIM,
                 player.isAlive(), player.onGround(), player.isPassenger(), player.isCrouching(),
@@ -134,6 +134,7 @@ public record PlayerAnimationState(
                 useRemainingTicks, useMaxDuration,
                 usingMainHand ? Mth.clamp(useElapsedTicks / 5.0F, 0.0F, 1.0F) : 0.0F,
                 useItemIntervalProgress(useAnimation, useElapsedTicks),
+                position.x, position.z,
                 movement.x, movement.y, movement.z);
     }
 

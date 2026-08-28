@@ -58,6 +58,13 @@ public final class AttachableHostContext {
         return BedrockTransformConvention.hostDeformation(currentWorldMatrix(bone), bindWorldMatrix(bone));
     }
 
+    /** Complete deformation of the flattened third-person presentation chain for armor layers. */
+    public Matrix4f presentationDeformationMatrix(BedrockPlayerModelMetadata.Bone bone) {
+        return BedrockTransformConvention.hostDeformation(
+                worldMatrix(metadata.presentationChainTo(bone), true),
+                worldMatrix(metadata.presentationChainTo(bone), false));
+    }
+
     public Matrix4f attachmentMatrix(BedrockPlayerModelMetadata.Bone bone) {
         return BedrockTransformConvention.hostAttachment(
                 currentWorldMatrix(bone), bindWorldMatrix(bone), bone.pivot());

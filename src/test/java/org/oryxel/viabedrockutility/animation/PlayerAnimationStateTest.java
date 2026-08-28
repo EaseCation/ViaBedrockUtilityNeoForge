@@ -67,9 +67,10 @@ class PlayerAnimationStateTest {
                 java.util.UUID.randomUUID(), new PlayerAnimationOwner(new Object(), new Object()),
                 view, 0L, 0.0F, HumanoidArm.RIGHT,
                 net.minecraft.world.InteractionHand.MAIN_HAND, "", "", java.util.Set.of(),
-                0.0F, 0.0F, 0.0F, 0.0F, 0.0F, relativeHeadYaw, 0.0F, 0.0F,
+                0.0F, 0.0F, 0.0F, 0.0F, relativeHeadYaw, 0.0F, 0.0F,
                 0.0F, 1.0F, false, true, true, false, false, false, false, false,
                 false, false, false, false, false, false, false, false,
-                0, 0, 0, 0.0F, 0.0F, 0.0D, 0.0D, 0.0D);
+                0, 0, 0, 0.0F, 0.0F,
+                0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
     }
 }

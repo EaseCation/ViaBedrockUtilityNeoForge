@@ -120,7 +120,9 @@ class PlayerAnimationResourceClosureTest {
                 "riding.arms", "animation.player.riding.arms.zombie",
                 "move.arms", "animation.player.move.arms.zombie",
                 "holding", "animation.player.holding.zombie",
-                "bob", "animation.ec_ze.player.bob.none"));
+                "bob", "animation.ec_ze.player.none",
+                "attack.positions", "animation.ec_ze.player.none",
+                "attack.rotations", "animation.ec_ze.player.none"));
         zombie.sampleThirdPerson(model,
                 state(PlayerAnimationState.View.THIRD_PERSON, 4L, "", 0.0F, 1.0F, 0.0F));
         assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
@@ -129,6 +131,12 @@ class PlayerAnimationResourceClosureTest {
         assertEquals(0.0F, model.rotationZ("leftarm"), 1.0e-3F);
         zombie.sampleThirdPerson(model,
                 state(PlayerAnimationState.View.THIRD_PERSON, 24L, "", 1.0F, 1.0F, 0.0F));
+        assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
+        assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
+        assertEquals(0.0F, model.rotationZ("rightarm"), 1.0e-3F);
+        assertEquals(0.0F, model.rotationZ("leftarm"), 1.0e-3F);
+        zombie.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 25L, "", 1.0F, 1.0F, 0.5F));
         assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
         assertEquals(0.0F, model.rotationZ("rightarm"), 1.0e-3F);
@@ -166,8 +174,8 @@ class PlayerAnimationResourceClosureTest {
                         1.0F, false, true, 0.1D));
         final float zeroPhaseArmX = walkingModel.offsetX("rightarm");
         walkingRuntime.sampleFirstPerson(walkingModel,
-                state(PlayerAnimationState.View.FIRST_PERSON, 2L, "", 0.5F, 0.0F, 0.0F,
-                        1.0F, false, true, 0.1D));
+                stateAtPartial(PlayerAnimationState.View.FIRST_PERSON, 1L, "",
+                        0.25F, 0.0F, 0.0F, 0.5F));
         assertTrue(Math.abs(walkingModel.offsetX("rightarm") - zeroPhaseArmX) > 1.0e-3F);
 
         final PlayerAnimationRuntime leftHandedRuntime = new PlayerAnimationRuntime(packs, Map.of());
@@ -222,6 +230,28 @@ class PlayerAnimationResourceClosureTest {
                         HumanoidArm.RIGHT, 70.0F, 15.0F));
         assertPoseEquals(firstPersonYawModelA, firstPersonYawModelB);
 
+        final PlayerAnimationRuntime pitchFlat = new PlayerAnimationRuntime(packs, Map.of());
+        final PlayerAnimationRuntime pitchDown = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel pitchFlatModel = new TestBoneModel();
+        final TestBoneModel pitchDownModel = new TestBoneModel();
+        pitchFlat.sampleFirstPerson(pitchFlatModel,
+                stateWithPitch(PlayerAnimationState.View.FIRST_PERSON, 1L, 0.0F));
+        pitchDown.sampleFirstPerson(pitchDownModel,
+                stateWithPitch(PlayerAnimationState.View.FIRST_PERSON, 1L, 60.0F));
+        assertTrue(Math.abs(pitchDownModel.rotationX("body")
+                - pitchFlatModel.rotationX("body")) > 1.0F);
+
+        final PlayerAnimationRuntime standingRuntime = new PlayerAnimationRuntime(packs, Map.of());
+        final PlayerAnimationRuntime swimmingRuntime = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel standingModel = new TestBoneModel();
+        final TestBoneModel swimmingModel = new TestBoneModel();
+        standingRuntime.sampleThirdPerson(standingModel,
+                stateSwimming(PlayerAnimationState.View.THIRD_PERSON, 1L, 0.0F));
+        swimmingRuntime.sampleThirdPerson(swimmingModel,
+                stateSwimming(PlayerAnimationState.View.THIRD_PERSON, 1L, 1.0F));
+        assertTrue(Math.abs(swimmingModel.rotationX("root")
+                - standingModel.rotationX("root")) > 80.0F);
+
         final AtomicLong now = new AtomicLong();
         final PlayerAnimationRuntime oneShotRuntime = new PlayerAnimationRuntime(
                 packs, Map.of(), now::get);
@@ -252,46 +282,93 @@ class PlayerAnimationResourceClosureTest {
     }
 
     private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
-                                              String mainHandIdentifier, float walkPosition,
+                                              String mainHandIdentifier, float positionX,
                                               float walkSpeed, float attackTime) {
-        return state(view, tick, mainHandIdentifier, walkPosition, walkSpeed, attackTime,
+        return state(view, tick, mainHandIdentifier, positionX, walkSpeed, attackTime,
                 1.0F, false, false, 0.0D);
     }
 
     private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
-                                              String mainHandIdentifier, float walkPosition,
+                                              String mainHandIdentifier, float positionX,
                                               float walkSpeed, float attackTime, float armHeight,
                                               boolean slim, boolean bobAnimation, double deltaX) {
-        return state(view, tick, mainHandIdentifier, walkPosition, walkSpeed, attackTime,
+        return state(view, tick, mainHandIdentifier, positionX, walkSpeed, attackTime,
                 armHeight, slim, bobAnimation, deltaX, HumanoidArm.RIGHT);
     }
 
     private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
-                                              String mainHandIdentifier, float walkPosition,
+                                              String mainHandIdentifier, float positionX,
                                               float walkSpeed, float attackTime, float armHeight,
                                               boolean slim, boolean bobAnimation, double deltaX,
                                               HumanoidArm mainArm) {
-        return state(view, tick, mainHandIdentifier, walkPosition, walkSpeed, attackTime,
+        return state(view, tick, mainHandIdentifier, positionX, walkSpeed, attackTime,
                 armHeight, slim, bobAnimation, deltaX, mainArm, 0.0F, 0.0F);
     }
 
     private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
-                                              String mainHandIdentifier, float walkPosition,
+                                              String mainHandIdentifier, float positionX,
                                               float walkSpeed, float attackTime, float armHeight,
                                               boolean slim, boolean bobAnimation, double deltaX,
                                               HumanoidArm mainArm, float relativeHeadYaw,
                                               float bodyYaw) {
+        return state(view, tick, mainHandIdentifier, positionX, walkSpeed, attackTime,
+                armHeight, slim, bobAnimation, deltaX, mainArm, relativeHeadYaw, bodyYaw,
+                0.0F, 0.0F);
+    }
+
+    private static PlayerAnimationState stateAtPartial(PlayerAnimationState.View view, long tick,
+                                                       String mainHandIdentifier, float positionX,
+                                                       float walkSpeed, float attackTime,
+                                                       float partialTick) {
+        return state(view, tick, mainHandIdentifier, positionX, walkSpeed, attackTime,
+                1.0F, false, true, 0.1D, HumanoidArm.RIGHT, 0.0F, 0.0F,
+                partialTick, 0.0F);
+    }
+
+    private static PlayerAnimationState stateWithPitch(PlayerAnimationState.View view, long tick,
+                                                       float pitch) {
+        return state(view, tick, "", 0.0F, 0.0F, 0.0F,
+                1.0F, false, false, 0.0D, HumanoidArm.RIGHT, 0.0F, 0.0F,
+                0.0F, pitch);
+    }
+
+    private static PlayerAnimationState stateSwimming(PlayerAnimationState.View view, long tick,
+                                                       float swimAmount) {
+        return state(view, tick, "", 0.0F, 0.0F, 0.0F,
+                1.0F, false, false, 0.0D, HumanoidArm.RIGHT, 0.0F, 0.0F,
+                0.0F, 0.0F, swimAmount, swimAmount > 0.0F);
+    }
+
+    private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
+                                              String mainHandIdentifier, float positionX,
+                                              float walkSpeed, float attackTime, float armHeight,
+                                              boolean slim, boolean bobAnimation, double deltaX,
+                                              HumanoidArm mainArm, float relativeHeadYaw,
+                                              float bodyYaw, float partialTick, float pitch) {
+        return state(view, tick, mainHandIdentifier, positionX, walkSpeed, attackTime,
+                armHeight, slim, bobAnimation, deltaX, mainArm, relativeHeadYaw, bodyYaw,
+                partialTick, pitch, 0.0F, false);
+    }
+
+    private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
+                                              String mainHandIdentifier, float positionX,
+                                              float walkSpeed, float attackTime, float armHeight,
+                                              boolean slim, boolean bobAnimation, double deltaX,
+                                              HumanoidArm mainArm, float relativeHeadYaw,
+                                              float bodyYaw, float partialTick, float pitch,
+                                              float swimAmount, boolean swimming) {
         return new PlayerAnimationState(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 new PlayerAnimationOwner(PLAYER_INSTANCE, LEVEL_INSTANCE),
-                view, tick, 0.0F,
+                view, tick, partialTick,
                 mainArm, InteractionHand.MAIN_HAND,
                 mainHandIdentifier, "", Set.of(),
-                tick, walkPosition, walkSpeed, attackTime,
-                0.0F, relativeHeadYaw, bodyYaw, 0.0F, 1.0F, armHeight, slim,
-                true, true, false, false, false, false, false,
+                tick, walkSpeed, attackTime,
+                pitch, relativeHeadYaw, bodyYaw, swimAmount, 1.0F, armHeight, slim,
+                true, true, false, false, false, swimming, false,
                 false, false, false, false, false, false, false, bobAnimation,
-                0, 0, 0, 0.0F, 0.0F, deltaX, 0.0D, 0.0D);
+                0, 0, 0, 0.0F, 0.0F,
+                positionX, 0.0D, deltaX, 0.0D, 0.0D);
     }
 
     private static void assertPoseEquals(TestBoneModel expected, TestBoneModel actual) {
