@@ -151,6 +151,35 @@ class PlayerAnimationResourceClosureTest {
         assertEquals(0.0F, leftHandedModel.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-18.0F, leftHandedModel.rotationX("leftarm"), 1.0e-3F);
 
+        final PlayerAnimationRuntime canonicalFirstPerson = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel canonicalFirstPersonModel = new TestBoneModel();
+        canonicalFirstPerson.sampleFirstPerson(canonicalFirstPersonModel,
+                state(PlayerAnimationState.View.FIRST_PERSON, 1L, "",
+                        0.0F, 0.0F, 0.0F, 1.0F, false, false, 0.0D,
+                        HumanoidArm.RIGHT));
+        final float canonicalRestingArm = canonicalFirstPersonModel.rotationX("rightarm");
+        canonicalFirstPerson.sampleFirstPerson(canonicalFirstPersonModel,
+                state(PlayerAnimationState.View.FIRST_PERSON, 2L, "",
+                        0.0F, 0.0F, 0.5F, 1.0F, false, false, 0.0D,
+                        HumanoidArm.RIGHT));
+        assertTrue(Math.abs(canonicalFirstPersonModel.rotationX("rightarm")
+                - canonicalRestingArm) > 1.0F);
+        assertEquals(0.0F, canonicalFirstPersonModel.rotationX("leftarm"), 1.0e-3F);
+
+        final PlayerAnimationRuntime yawA = new PlayerAnimationRuntime(packs, Map.of());
+        final PlayerAnimationRuntime yawB = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel yawModelA = new TestBoneModel();
+        final TestBoneModel yawModelB = new TestBoneModel();
+        yawA.sampleThirdPerson(yawModelA,
+                state(PlayerAnimationState.View.THIRD_PERSON, 1L, "",
+                        0.0F, 0.0F, 0.0F, 1.0F, false, false, 0.0D,
+                        HumanoidArm.RIGHT, 35.0F, 15.0F));
+        yawB.sampleThirdPerson(yawModelB,
+                state(PlayerAnimationState.View.THIRD_PERSON, 1L, "",
+                        0.0F, 0.0F, 0.0F, 1.0F, false, false, 0.0D,
+                        HumanoidArm.RIGHT, 35.0F, 165.0F));
+        assertPoseEquals(yawModelA, yawModelB);
+
         final AtomicLong now = new AtomicLong();
         final PlayerAnimationRuntime oneShotRuntime = new PlayerAnimationRuntime(
                 packs, Map.of(), now::get);
@@ -200,6 +229,16 @@ class PlayerAnimationResourceClosureTest {
                                               float walkSpeed, float attackTime, float armHeight,
                                               boolean slim, boolean bobAnimation, double deltaX,
                                               HumanoidArm mainArm) {
+        return state(view, tick, mainHandIdentifier, walkPosition, walkSpeed, attackTime,
+                armHeight, slim, bobAnimation, deltaX, mainArm, 0.0F, 0.0F);
+    }
+
+    private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
+                                              String mainHandIdentifier, float walkPosition,
+                                              float walkSpeed, float attackTime, float armHeight,
+                                              boolean slim, boolean bobAnimation, double deltaX,
+                                              HumanoidArm mainArm, float relativeHeadYaw,
+                                              float bodyYaw) {
         return new PlayerAnimationState(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 new PlayerAnimationOwner(PLAYER_INSTANCE, LEVEL_INSTANCE),
@@ -207,10 +246,19 @@ class PlayerAnimationResourceClosureTest {
                 mainArm, InteractionHand.MAIN_HAND,
                 mainHandIdentifier, "", Set.of(),
                 tick, walkPosition, walkSpeed, attackTime,
-                0.0F, 0.0F, 0.0F, 0.0F, 1.0F, armHeight, slim,
+                0.0F, relativeHeadYaw, bodyYaw, 0.0F, 1.0F, armHeight, slim,
                 true, true, false, false, false, false, false,
                 false, false, false, false, false, false, false, bobAnimation,
                 0, 0, 0, 0.0F, 0.0F, deltaX, 0.0D, 0.0D);
+    }
+
+    private static void assertPoseEquals(TestBoneModel expected, TestBoneModel actual) {
+        for (String name : expected.bones.keySet()) {
+            assertEquals(expected.bones.get(name).getRotation(),
+                    actual.bones.get(name).getRotation(), name + " rotation");
+            assertEquals(expected.bones.get(name).getOffset(),
+                    actual.bones.get(name).getOffset(), name + " offset");
+        }
     }
 
     private static Content content(Path path) {

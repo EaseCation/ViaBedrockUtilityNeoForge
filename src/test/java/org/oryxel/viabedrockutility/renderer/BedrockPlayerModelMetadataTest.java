@@ -31,6 +31,14 @@ class BedrockPlayerModelMetadataTest {
                 metadata.presentationChainTo(rightItem).stream()
                         .map(BedrockPlayerModelMetadata.Bone::key).toList());
 
+        final BedrockPlayerModelMetadata.Bone leftItem = metadata.bone("leftitem");
+        assertNotNull(leftItem);
+        assertEquals(List.of("root", "waist", "body", "left_arm", "leftitem"),
+                metadata.chainTo(leftItem).stream().map(BedrockPlayerModelMetadata.Bone::key).toList());
+        assertEquals(List.of("root", "left_arm", "leftitem"),
+                metadata.presentationChainTo(leftItem).stream()
+                        .map(BedrockPlayerModelMetadata.Bone::key).toList());
+
     }
 
     private static void add(BedrockPlayerModelMetadata metadata, String name,

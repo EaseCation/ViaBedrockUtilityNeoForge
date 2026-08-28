@@ -177,7 +177,7 @@ test {
         def path = file.absolutePath.toLowerCase(Locale.ROOT)
         !path.contains('bedrockmotion') &&
                 !path.contains('cubeconverter') &&
-                !path.contains('mocha-3.0.1') &&
+                !path.contains('mocha-3.0.') &&
                 !path.contains('javassist-3.30.2')
     }
     systemProperty 'vbu.testSodium', sodiumTestEnabled.toString()

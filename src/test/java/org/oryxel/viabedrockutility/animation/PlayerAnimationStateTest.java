@@ -5,11 +5,22 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ChargedProjectiles;
+import net.minecraft.world.entity.HumanoidArm;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class PlayerAnimationStateTest {
+    @Test
+    void firstPersonUsesBedrockLogicalHandsWhileThirdPersonKeepsJavaHandedness() {
+        assertEquals(HumanoidArm.RIGHT, PlayerAnimationState.bedrockMainArm(
+                PlayerAnimationState.View.FIRST_PERSON, HumanoidArm.LEFT));
+        assertEquals(HumanoidArm.RIGHT, PlayerAnimationState.bedrockMainArm(
+                PlayerAnimationState.View.FIRST_PERSON, HumanoidArm.RIGHT));
+        assertEquals(HumanoidArm.LEFT, PlayerAnimationState.bedrockMainArm(
+                PlayerAnimationState.View.THIRD_PERSON, HumanoidArm.LEFT));
+    }
+
     @Test
     void bowAnimationFrameUsesJavaModelThresholds() {
         final ItemStack bow = new ItemStack(Items.BOW);

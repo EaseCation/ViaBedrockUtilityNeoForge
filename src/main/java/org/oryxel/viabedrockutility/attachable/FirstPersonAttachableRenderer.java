@@ -47,15 +47,16 @@ public final class FirstPersonAttachableRenderer {
         final AttachableQueryContext.LogicalHand logicalHand = event.getHand() == InteractionHand.MAIN_HAND
                 ? AttachableQueryContext.LogicalHand.MAIN_HAND
                 : AttachableQueryContext.LogicalHand.OFF_HAND;
+        final PlayerAnimationState animationState = PlayerAnimationState.firstPerson(
+                player, event.getPartialTick(), event.getSwingProgress(), event.getEquipProgress());
         final HumanoidArm arm = logicalHand == AttachableQueryContext.LogicalHand.MAIN_HAND
-                ? player.getMainArm() : player.getMainArm().getOpposite();
+                ? animationState.mainArm() : animationState.mainArm().getOpposite();
         final float partialTick = event.getPartialTick();
         final float bodyYaw = Mth.rotLerp(partialTick, player.yBodyRotO, player.yBodyRot);
         final AttachableOwnerSnapshot owner = new AttachableOwnerSnapshot(
                 player.getUUID(), "minecraft:player", player.getAttackAnim(partialTick),
                 player.getXRot(partialTick), Mth.wrapDegrees(player.getYRot(partialTick) - bodyYaw));
-        if (!customRenderer.sampleFirstPerson(PlayerAnimationState.firstPerson(
-                player, partialTick, event.getSwingProgress(), event.getEquipProgress()))) {
+        if (!customRenderer.sampleFirstPerson(animationState)) {
             return;
         }
 

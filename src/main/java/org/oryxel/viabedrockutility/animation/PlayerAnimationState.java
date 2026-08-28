@@ -117,7 +117,7 @@ public record PlayerAnimationState(
 
         return new PlayerAnimationState(
                 player.getUUID(), new PlayerAnimationOwner(player, player.level()),
-                view, player.tickCount, partialTick, player.getMainArm(),
+                view, player.tickCount, partialTick, bedrockMainArm(view, player.getMainArm()),
                 player.isUsingItem() ? player.getUsedItemHand() : InteractionHand.MAIN_HAND,
                 identifier(mainHand), identifier(offHand), tags(mainHand),
                 player.tickCount + partialTick, walkPosition, walkSpeed, attackTime,
@@ -146,6 +146,10 @@ public record PlayerAnimationState(
     public boolean hasMainHandTag(String identifier) {
         final String normalized = identifier == null ? "" : identifier.toLowerCase(Locale.ROOT);
         return mainHandTags.contains(normalized);
+    }
+
+    static HumanoidArm bedrockMainArm(View view, HumanoidArm javaMainArm) {
+        return view == View.FIRST_PERSON ? HumanoidArm.RIGHT : javaMainArm;
     }
 
     private static String identifier(ItemStack stack) {
