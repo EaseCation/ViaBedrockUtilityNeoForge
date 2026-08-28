@@ -657,8 +657,8 @@ public class PayloadHandler {
                     "[Skin] Created Bedrock player runtime with {} alias override(s) for {}: {}",
                     overrides.size(), playerUuid, overrides.keySet());
         } catch (final Exception e) {
-            ViaBedrockUtilityNeoForge.LOGGER.warn(
-                    "[Skin] Failed to create Bedrock player runtime for {}", playerUuid, e);
+            throw new IllegalStateException(
+                    "Failed to create Bedrock player runtime for " + playerUuid, e);
         }
     }
 
