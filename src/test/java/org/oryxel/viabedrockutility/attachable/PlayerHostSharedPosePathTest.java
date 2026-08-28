@@ -62,6 +62,31 @@ class PlayerHostSharedPosePathTest {
         assertMatrixEquals(pitchedArm, finalVisibleArm);
     }
 
+    @Test
+    void finalArmAndItemMatricesTrackViewPitchWithoutRetainingViewYaw() {
+        final Matrix4f armHost = world(chain("rightarm"), locals(0.0F));
+        final Matrix4f itemHost = world(chain("rightarm", "rightitem"), locals(0.0F));
+
+        final Matrix4f armYawLeft = finalCameraMatrix(35.0F, -120.0F, armHost);
+        final Matrix4f armYawRight = finalCameraMatrix(35.0F, 80.0F, armHost);
+        final Matrix4f itemYawLeft = finalCameraMatrix(35.0F, -120.0F, itemHost);
+        final Matrix4f itemYawRight = finalCameraMatrix(35.0F, 80.0F, itemHost);
+        assertMatrixEquals(armYawLeft, armYawRight);
+        assertMatrixEquals(itemYawLeft, itemYawRight);
+
+        assertMatrixChanged(armYawLeft, finalCameraMatrix(-55.0F, 80.0F, armHost));
+        assertMatrixChanged(itemYawLeft, finalCameraMatrix(-55.0F, 80.0F, itemHost));
+    }
+
+    private static Matrix4f finalCameraMatrix(float viewPitch, float viewYaw, Matrix4f host) {
+        final PoseStack poses = new PoseStack();
+        poses.mulPose(Axis.XP.rotationDegrees(viewPitch * 0.1F));
+        poses.mulPose(Axis.YP.rotationDegrees(viewYaw * 0.1F));
+        FirstPersonAttachableRenderer.removeVanillaHandYawTransform(poses, viewYaw, 0.0F);
+        poses.mulPose(host);
+        return new Matrix4f(poses.last().pose());
+    }
+
     private static Matrix4f world(List<BedrockPlayerModelMetadata.Bone> chain,
                                   Map<String, Matrix4f> locals) {
         return AttachableHostContext.firstPersonWorldMatrix(chain,
@@ -104,5 +129,13 @@ class PlayerHostSharedPosePathTest {
             assertEquals(expectedValues[index], actualValues[index], 1.0e-5F,
                     "matrix element " + index);
         }
+    }
+
+    private static void assertMatrixChanged(Matrix4f before, Matrix4f after) {
+        final Vector3f probe = new Vector3f(0.25F, 0.5F, 0.75F);
+        final Vector3f beforePoint = new Matrix4f(before).transformPosition(new Vector3f(probe));
+        final Vector3f afterPoint = new Matrix4f(after).transformPosition(new Vector3f(probe));
+        assertTrue(beforePoint.distance(afterPoint) > 1.0e-5F,
+                () -> "expected final matrix to change: " + beforePoint + " == " + afterPoint);
     }
 }
