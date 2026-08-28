@@ -119,11 +119,20 @@ class PlayerAnimationResourceClosureTest {
         final PlayerAnimationRuntime zombie = new PlayerAnimationRuntime(packs, Map.of(
                 "riding.arms", "animation.player.riding.arms.zombie",
                 "move.arms", "animation.player.move.arms.zombie",
-                "holding", "animation.player.holding.zombie"));
+                "holding", "animation.player.holding.zombie",
+                "bob", "animation.ec_ze.player.bob.none"));
         zombie.sampleThirdPerson(model,
                 state(PlayerAnimationState.View.THIRD_PERSON, 4L, "", 0.0F, 1.0F, 0.0F));
         assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
+        assertEquals(0.0F, model.rotationZ("rightarm"), 1.0e-3F);
+        assertEquals(0.0F, model.rotationZ("leftarm"), 1.0e-3F);
+        zombie.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 24L, "", 1.0F, 1.0F, 0.0F));
+        assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
+        assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
+        assertEquals(0.0F, model.rotationZ("rightarm"), 1.0e-3F);
+        assertEquals(0.0F, model.rotationZ("leftarm"), 1.0e-3F);
 
         runtime.sampleFirstPerson(model,
                 state(PlayerAnimationState.View.FIRST_PERSON, 5L, "", 0.0F, 0.0F, 0.0F));
@@ -198,6 +207,20 @@ class PlayerAnimationResourceClosureTest {
                         0.0F, 0.0F, 0.0F, 1.0F, false, false, 0.0D,
                         HumanoidArm.RIGHT, 35.0F, 165.0F));
         assertPoseEquals(yawModelA, yawModelB);
+
+        final PlayerAnimationRuntime firstPersonYawA = new PlayerAnimationRuntime(packs, Map.of());
+        final PlayerAnimationRuntime firstPersonYawB = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel firstPersonYawModelA = new TestBoneModel();
+        final TestBoneModel firstPersonYawModelB = new TestBoneModel();
+        firstPersonYawA.sampleFirstPerson(firstPersonYawModelA,
+                state(PlayerAnimationState.View.FIRST_PERSON, 1L, "",
+                        0.0F, 0.0F, 0.0F, 1.0F, false, false, 0.0D,
+                        HumanoidArm.RIGHT, -70.0F, 15.0F));
+        firstPersonYawB.sampleFirstPerson(firstPersonYawModelB,
+                state(PlayerAnimationState.View.FIRST_PERSON, 1L, "",
+                        0.0F, 0.0F, 0.0F, 1.0F, false, false, 0.0D,
+                        HumanoidArm.RIGHT, 70.0F, 15.0F));
+        assertPoseEquals(firstPersonYawModelA, firstPersonYawModelB);
 
         final AtomicLong now = new AtomicLong();
         final PlayerAnimationRuntime oneShotRuntime = new PlayerAnimationRuntime(
@@ -300,6 +323,10 @@ class PlayerAnimationResourceClosureTest {
 
         private float rotationX(String name) {
             return bones.get(name).getRotation().x;
+        }
+
+        private float rotationZ(String name) {
+            return bones.get(name).getRotation().z;
         }
 
         private float offsetX(String name) {

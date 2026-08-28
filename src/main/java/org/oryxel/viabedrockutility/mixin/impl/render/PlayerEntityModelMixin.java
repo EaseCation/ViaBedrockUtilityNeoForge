@@ -1,5 +1,6 @@
 package org.oryxel.viabedrockutility.mixin.impl.render;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
@@ -66,6 +67,13 @@ public abstract class PlayerEntityModelMixin {
     private void viaBedrockUtility$throttleDistantPlayer(PlayerRenderState state, CallbackInfo ci) {
         final var runtime = viaBedrockUtility$runtime(state);
         if (runtime == null) {
+            return;
+        }
+        final var snapshot = ((ICustomPlayerRendererHolder) state)
+                .viaBedrockUtility$getPlayerAnimationState();
+        final var localPlayer = Minecraft.getInstance().player;
+        if (snapshot != null && localPlayer != null
+                && snapshot.playerUuid().equals(localPlayer.getUUID())) {
             return;
         }
         this.setupAnimFrameCounter++;

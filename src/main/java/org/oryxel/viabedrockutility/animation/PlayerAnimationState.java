@@ -148,6 +148,10 @@ public record PlayerAnimationState(
         return mainHandTags.contains(normalized);
     }
 
+    public float targetYRotation() {
+        return view == View.FIRST_PERSON ? 0.0F : relativeHeadYaw;
+    }
+
     static HumanoidArm bedrockMainArm(View view, HumanoidArm javaMainArm) {
         return view == View.FIRST_PERSON ? HumanoidArm.RIGHT : javaMainArm;
     }

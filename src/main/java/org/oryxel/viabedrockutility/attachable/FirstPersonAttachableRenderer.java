@@ -4,7 +4,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
-import net.minecraft.util.Mth;
 import net.neoforged.neoforge.client.event.RenderHandEvent;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
@@ -51,11 +50,9 @@ public final class FirstPersonAttachableRenderer {
                 player, event.getPartialTick(), event.getSwingProgress(), event.getEquipProgress());
         final HumanoidArm arm = logicalHand == AttachableQueryContext.LogicalHand.MAIN_HAND
                 ? animationState.mainArm() : animationState.mainArm().getOpposite();
-        final float partialTick = event.getPartialTick();
-        final float bodyYaw = Mth.rotLerp(partialTick, player.yBodyRotO, player.yBodyRot);
         final AttachableOwnerSnapshot owner = new AttachableOwnerSnapshot(
-                player.getUUID(), "minecraft:player", player.getAttackAnim(partialTick),
-                player.getXRot(partialTick), Mth.wrapDegrees(player.getYRot(partialTick) - bodyYaw));
+                player.getUUID(), "minecraft:player", animationState.attackTime(),
+                animationState.pitch(), animationState.targetYRotation());
         if (!customRenderer.sampleFirstPerson(animationState)) {
             return;
         }

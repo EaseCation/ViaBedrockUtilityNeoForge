@@ -204,9 +204,9 @@ public final class PlayerAnimationRuntime {
             query.set("body_y_rotation", Value.of(value.bodyYaw()));
             query.set("body_x_rotation", Value.of(value.pitch()));
             query.set("target_x_rotation", Value.of(value.pitch()));
-            query.set("target_y_rotation", Value.of(value.relativeHeadYaw()));
+            query.set("target_y_rotation", Value.of(value.targetYRotation()));
             query.set("head_x_rotation", Value.of(value.pitch()));
-            query.set("head_y_rotation", Value.of(value.relativeHeadYaw()));
+            query.set("head_y_rotation", Value.of(value.targetYRotation()));
             query.set("day", Value.of(Math.max(1L, value.tick() / 24000L)));
         }
 

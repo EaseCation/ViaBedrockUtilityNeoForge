@@ -22,6 +22,14 @@ class PlayerAnimationStateTest {
     }
 
     @Test
+    void firstPersonTargetYawStaysInCameraSpace() {
+        assertEquals(0.0F, state(PlayerAnimationState.View.FIRST_PERSON, 75.0F)
+                .targetYRotation());
+        assertEquals(75.0F, state(PlayerAnimationState.View.THIRD_PERSON, 75.0F)
+                .targetYRotation());
+    }
+
+    @Test
     void bowAnimationFrameUsesJavaModelThresholds() {
         final ItemStack bow = new ItemStack(Items.BOW);
 
@@ -52,5 +60,16 @@ class PlayerAnimationStateTest {
         final ItemStack crossbow = new ItemStack(Items.CROSSBOW);
         crossbow.set(DataComponents.CHARGED_PROJECTILES, ChargedProjectiles.of(projectile));
         return crossbow;
+    }
+
+    private static PlayerAnimationState state(PlayerAnimationState.View view, float relativeHeadYaw) {
+        return new PlayerAnimationState(
+                java.util.UUID.randomUUID(), new PlayerAnimationOwner(new Object(), new Object()),
+                view, 0L, 0.0F, HumanoidArm.RIGHT,
+                net.minecraft.world.InteractionHand.MAIN_HAND, "", "", java.util.Set.of(),
+                0.0F, 0.0F, 0.0F, 0.0F, 0.0F, relativeHeadYaw, 0.0F, 0.0F,
+                0.0F, 1.0F, false, true, true, false, false, false, false, false,
+                false, false, false, false, false, false, false, false,
+                0, 0, 0, 0.0F, 0.0F, 0.0D, 0.0D, 0.0D);
     }
 }
