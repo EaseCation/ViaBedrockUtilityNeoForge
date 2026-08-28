@@ -76,6 +76,12 @@ public final class AttachableHostContext {
                 firstPersonWorldMatrix(bone), bindWorldMatrix(bone), bone.pivot());
     }
 
+    public Matrix4f firstPersonAttachmentMatrix(BedrockPlayerModelMetadata.Bone bone,
+                                                Vector3f anchorPixels) {
+        return BedrockTransformConvention.hostAttachment(
+                firstPersonWorldMatrix(bone), bindWorldMatrix(bone), anchorPixels);
+    }
+
     public FirstPersonHostMeshPolicy firstPersonHostMeshPolicy() {
         return FirstPersonHostMeshPolicy.HIDDEN;
     }
@@ -100,16 +106,16 @@ public final class AttachableHostContext {
 
     private Matrix4f firstPersonWorldMatrix(BedrockPlayerModelMetadata.Bone bone) {
         return firstPersonWorldMatrix(metadata.chainTo(bone),
-                entry -> localMatrix(entry, true));
+                entry -> localMatrix(entry, true),
+                entry -> localMatrix(entry, false));
     }
 
     static Matrix4f firstPersonWorldMatrix(
             List<BedrockPlayerModelMetadata.Bone> chain,
-            Function<BedrockPlayerModelMetadata.Bone, Matrix4f> currentLocalMatrix) {
-        final Matrix4f matrix = new Matrix4f(FIRST_PERSON_CAMERA);
-        for (BedrockPlayerModelMetadata.Bone entry : chain) {
-            matrix.mul(currentLocalMatrix.apply(entry));
-        }
+            Function<BedrockPlayerModelMetadata.Bone, Matrix4f> currentAbsoluteMatrix,
+            Function<BedrockPlayerModelMetadata.Bone, Matrix4f> bindAbsoluteMatrix) {
+        final Matrix4f matrix = firstPersonCameraMatrix();
+        matrix.mul(worldMatrix(chain, currentAbsoluteMatrix, bindAbsoluteMatrix));
         return matrix;
     }
 
@@ -118,9 +124,29 @@ public final class AttachableHostContext {
     }
 
     private static Matrix4f worldMatrix(List<BedrockPlayerModelMetadata.Bone> chain, boolean current) {
+        return worldMatrix(chain,
+                bone -> localMatrix(bone, current),
+                bone -> localMatrix(bone, false));
+    }
+
+    /**
+     * Rebuilds a semantic Bedrock chain from flattened ModelPart transforms. Each player ModelPart stores
+     * an absolute bind pivot, so a child local transform is derived against its bind parent. Using the
+     * current parent here would cancel parent animation instead of inheriting it.
+     */
+    private static Matrix4f worldMatrix(
+            List<BedrockPlayerModelMetadata.Bone> chain,
+            Function<BedrockPlayerModelMetadata.Bone, Matrix4f> currentAbsoluteMatrix,
+            Function<BedrockPlayerModelMetadata.Bone, Matrix4f> bindAbsoluteMatrix) {
         final Matrix4f matrix = new Matrix4f();
+        Matrix4f bindParent = null;
         for (BedrockPlayerModelMetadata.Bone bone : chain) {
-            matrix.mul(localMatrix(bone, current));
+            final Matrix4f currentAbsolute = currentAbsoluteMatrix.apply(bone);
+            final Matrix4f local = bindParent == null
+                    ? currentAbsolute
+                    : new Matrix4f(bindParent).invert().mul(currentAbsolute);
+            matrix.mul(local);
+            bindParent = bindAbsoluteMatrix.apply(bone);
         }
         return matrix;
     }

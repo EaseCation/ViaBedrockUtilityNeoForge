@@ -74,7 +74,8 @@ public final class FirstPersonAttachableRenderer {
             final AttachableRenderResult result = ViaBedrockUtility.getInstance().getAttachableRuntimeManager().renderFirstPerson(
                     owner, item, logicalHand, arm,
                     customRenderer.getPlayerModel(), event.getPoseStack(), event.getMultiBufferSource(),
-                    event.getPackedLight(), event.getPartialTick(), () -> renderArm(event, customRenderer, arm));
+                    event.getPackedLight(), event.getPartialTick(),
+                    () -> renderArm(event, customRenderer, arm));
             if (result == AttachableRenderResult.NOT_APPLICABLE) {
                 // Bedrock's empty-hand first-person arm is a separate camera-space pose. It must not
                 // inherit either Java's ItemInHandRenderer transform or the third-person zombie pose.
@@ -94,8 +95,10 @@ public final class FirstPersonAttachableRenderer {
         }
     }
 
-    private static void renderArm(RenderHandEvent event, CustomPlayerRenderer renderer, HumanoidArm arm) {
-        if (!renderBedrockArm(event, renderer, arm) && DIAGNOSED.add("arm-missing:" + arm)) {
+    private static void renderArm(RenderHandEvent event, CustomPlayerRenderer renderer,
+                                  HumanoidArm arm) {
+        if (!renderBedrockArm(event, renderer, arm)
+                && DIAGNOSED.add("arm-missing:" + arm)) {
             ViaBedrockUtilityNeoForge.LOGGER.warn(
                     "[Attachable] Missing VBU {} arm metadata; suppressing the incomplete Bedrock host arm",
                     arm.name().toLowerCase(java.util.Locale.ROOT));

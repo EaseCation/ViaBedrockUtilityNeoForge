@@ -131,6 +131,16 @@ class BedrockTransformConventionTest {
         assertTrue(pointInFront.z < 0.0F);
     }
 
+    @Test
+    void firstPersonCameraDoesNotOwnPlayerLookPitch() {
+        final Matrix4f expected = BedrockTransformConvention.blockbenchSceneToRenderSpace(
+                new Matrix4f().lookAt(
+                        0.0F, 27.41F, 0.0F,
+                        0.0F, 27.41F, 10.0F,
+                        0.0F, 1.0F, 0.0F));
+        assertMatrixEquals(expected, AttachableHostContext.firstPersonCameraMatrix());
+    }
+
     private static void assertMatrixEquals(Matrix4f expected, Matrix4f actual) {
         for (int column = 0; column < 4; column++) {
             for (int row = 0; row < 4; row++) {

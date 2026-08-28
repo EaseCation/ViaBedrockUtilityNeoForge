@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerHostSharedPosePathTest {
     @Test
-    void bedrockCameraSpaceKeepsPitchButRemovesVanillaYaw() {
+    void bedrockCameraSpaceKeepsVanillaPitchButRemovesTransientJavaYaw() {
         final float viewPitch = 67.0F;
         final float pitchBob = 4.0F;
         final float viewYaw = -123.0F;
@@ -26,11 +26,10 @@ class PlayerHostSharedPosePathTest {
         poses.mulPose(Axis.XP.rotationDegrees((viewPitch - pitchBob) * 0.1F));
         poses.mulPose(Axis.YP.rotationDegrees((viewYaw - yawBob) * 0.1F));
 
-        FirstPersonAttachableRenderer.removeVanillaHandYawTransform(
-                poses, viewYaw, yawBob);
+        FirstPersonAttachableRenderer.removeVanillaHandYawTransform(poses, viewYaw, yawBob);
 
         final Matrix4f expected = new Matrix4f()
-                .rotateX((float) Math.toRadians((viewPitch - pitchBob) * 0.1F));
+                .rotateX((viewPitch - pitchBob) * 0.1F * (float) Math.PI / 180.0F);
         assertMatrixEquals(expected, poses.last().pose());
     }
 
@@ -40,18 +39,30 @@ class PlayerHostSharedPosePathTest {
         final List<BedrockPlayerModelMetadata.Bone> itemChain = chain("rightarm", "rightitem");
         final Map<String, Matrix4f> flat = locals(0.0F);
         final Map<String, Matrix4f> pitched = locals(60.0F);
+        final Map<String, Matrix4f> bind = bindLocals();
 
-        final Matrix4f flatArm = world(armChain, flat);
-        final Matrix4f pitchedArm = world(armChain, pitched);
-        final Matrix4f flatItem = world(itemChain, flat);
-        final Matrix4f pitchedItem = world(itemChain, pitched);
+        final Matrix4f flatArm = world(armChain, flat, bind);
+        final Matrix4f pitchedArm = world(armChain, pitched, bind);
+        final Matrix4f flatItem = world(itemChain, flat, bind);
+        final Matrix4f pitchedItem = world(itemChain, pitched, bind);
 
-        final Vector3f flatArmPoint = flatArm.transformPosition(new Vector3f());
-        final Vector3f pitchedArmPoint = pitchedArm.transformPosition(new Vector3f());
-        final Vector3f flatItemPoint = flatItem.transformPosition(new Vector3f());
-        final Vector3f pitchedItemPoint = pitchedItem.transformPosition(new Vector3f());
-        assertTrue(Math.abs(flatArmPoint.y - pitchedArmPoint.y) > 0.25F);
-        assertTrue(Math.abs(flatItemPoint.y - pitchedItemPoint.y) > 0.25F);
+        final Vector3f itemPivot = BedrockTransformConvention.toJavaModel(
+                new Vector3f(-6.0F, 15.0F, 1.0F));
+        final Vector3f flatArmPoint = flatArm.transformPosition(new Vector3f(itemPivot).div(16.0F));
+        final Vector3f pitchedArmPoint = pitchedArm.transformPosition(new Vector3f(itemPivot).div(16.0F));
+        final Vector3f flatItemPoint = flatItem.transformPosition(new Vector3f(itemPivot).div(16.0F));
+        final Vector3f pitchedItemPoint = pitchedItem.transformPosition(new Vector3f(itemPivot).div(16.0F));
+        assertTrue(flatArmPoint.distance(pitchedArmPoint) > 0.05F,
+                () -> "arm pitch displacement=" + flatArmPoint.distance(pitchedArmPoint));
+        assertTrue(flatItemPoint.distance(pitchedItemPoint) > 0.05F,
+                () -> "item pitch displacement=" + flatItemPoint.distance(pitchedItemPoint));
+
+        final Vector3f flatArmDirection = flatArm.transformDirection(new Vector3f(0.0F, 0.0F, 1.0F)).normalize();
+        final Vector3f pitchedArmDirection = pitchedArm.transformDirection(
+                new Vector3f(0.0F, 0.0F, 1.0F)).normalize();
+        assertTrue(flatArmDirection.distance(pitchedArmDirection) > 0.25F,
+                () -> "body pitch did not rotate the visible arm direction: "
+                        + flatArmDirection + " -> " + pitchedArmDirection);
 
         assertMatrixEquals(new Matrix4f(flatArm).invert().mul(flatItem),
                 new Matrix4f(pitchedArm).invert().mul(pitchedItem));
@@ -64,42 +75,87 @@ class PlayerHostSharedPosePathTest {
 
     @Test
     void finalArmAndItemMatricesTrackViewPitchWithoutRetainingViewYaw() {
-        final Matrix4f armHost = world(chain("rightarm"), locals(0.0F));
-        final Matrix4f itemHost = world(chain("rightarm", "rightitem"), locals(0.0F));
-
-        final Matrix4f armYawLeft = finalCameraMatrix(35.0F, -120.0F, armHost);
-        final Matrix4f armYawRight = finalCameraMatrix(35.0F, 80.0F, armHost);
-        final Matrix4f itemYawLeft = finalCameraMatrix(35.0F, -120.0F, itemHost);
-        final Matrix4f itemYawRight = finalCameraMatrix(35.0F, 80.0F, itemHost);
+        final Matrix4f armYawLeft = finalCameraMatrix(35.0F, -120.0F, false);
+        final Matrix4f armYawRight = finalCameraMatrix(35.0F, 80.0F, false);
+        final Matrix4f itemYawLeft = finalCameraMatrix(35.0F, -120.0F, true);
+        final Matrix4f itemYawRight = finalCameraMatrix(35.0F, 80.0F, true);
         assertMatrixEquals(armYawLeft, armYawRight);
         assertMatrixEquals(itemYawLeft, itemYawRight);
 
-        assertMatrixChanged(armYawLeft, finalCameraMatrix(-55.0F, 80.0F, armHost));
-        assertMatrixChanged(itemYawLeft, finalCameraMatrix(-55.0F, 80.0F, itemHost));
+        assertMatrixChanged(armYawLeft, finalCameraMatrix(-55.0F, 80.0F, false));
+        assertMatrixChanged(itemYawLeft, finalCameraMatrix(-55.0F, 80.0F, true));
+
+        assertMatrixEquals(finalCameraMatrix(0.0F, 0.0F, false),
+                finalCameraMatrix(0.0F, 130.0F, false));
+        assertMatrixEquals(finalCameraMatrix(0.0F, 0.0F, true),
+                finalCameraMatrix(0.0F, -130.0F, true));
     }
 
-    private static Matrix4f finalCameraMatrix(float viewPitch, float viewYaw, Matrix4f host) {
+    @Test
+    void resourceBodyPitchSuppliesPersistentFirstPersonPitch() {
+        float pitchBob = 0.0F;
+        final float viewPitch = 80.0F;
+        for (int tick = 0; tick < 24; tick++) {
+            pitchBob += (viewPitch - pitchBob) * 0.5F;
+        }
+        assertTrue(Math.abs((viewPitch - pitchBob) * 0.1F) < 1.0e-5F);
+
+        final Matrix4f flat = finalCameraMatrix(0.0F, 0.0F, true);
+        final Matrix4f pitched = finalCameraMatrix(viewPitch, 0.0F, true);
+        assertTrue(matrixDistance(flat, pitched) > 0.25F,
+                () -> "resource body pitch did not reach final matrix: " + matrixDistance(flat, pitched));
+        assertMatrixEquals(flat, finalCameraMatrix(0.0F, 0.0F, true));
+    }
+
+    private static Matrix4f finalCameraMatrix(float viewPitch, float viewYaw,
+                                              boolean itemAnchor) {
         final PoseStack poses = new PoseStack();
-        poses.mulPose(Axis.XP.rotationDegrees(viewPitch * 0.1F));
-        poses.mulPose(Axis.YP.rotationDegrees(viewYaw * 0.1F));
-        FirstPersonAttachableRenderer.removeVanillaHandYawTransform(poses, viewYaw, 0.0F);
+        final float pitchBob = viewPitch - 11.0F;
+        final float yawBob = viewYaw + 7.0F;
+        poses.mulPose(Axis.XP.rotationDegrees((viewPitch - pitchBob) * 0.1F));
+        poses.mulPose(Axis.YP.rotationDegrees((viewYaw - yawBob) * 0.1F));
+        FirstPersonAttachableRenderer.removeVanillaHandYawTransform(poses, viewYaw, yawBob);
+        final Matrix4f host = world(
+                itemAnchor ? chain("rightarm", "rightitem") : chain("rightarm"),
+                locals(viewPitch), bindLocals());
         poses.mulPose(host);
         return new Matrix4f(poses.last().pose());
     }
 
     private static Matrix4f world(List<BedrockPlayerModelMetadata.Bone> chain,
-                                  Map<String, Matrix4f> locals) {
+                                  Map<String, Matrix4f> current,
+                                  Map<String, Matrix4f> bind) {
         return AttachableHostContext.firstPersonWorldMatrix(chain,
-                bone -> new Matrix4f(locals.get(bone.key())));
+                bone -> new Matrix4f(current.get(bone.key())),
+                bone -> new Matrix4f(bind.get(bone.key())));
+    }
+
+    private static Map<String, Matrix4f> bindLocals() {
+        final Map<String, Matrix4f> result = new LinkedHashMap<>();
+        result.put("root", new Matrix4f());
+        result.put("waist", new Matrix4f());
+        result.put("body", BedrockTransformConvention.deformation(
+                BedrockTransformConvention.toJavaModel(new Vector3f(0.0F, 24.0F, 0.0F)),
+                new Vector3f(), new Vector3f(), new Vector3f(1.0F)));
+        result.put("rightarm", BedrockTransformConvention.deformation(
+                BedrockTransformConvention.toJavaModel(new Vector3f(-5.0F, 22.0F, 0.0F)),
+                new Vector3f(), new Vector3f(), new Vector3f(1.0F)));
+        result.put("rightitem", new Matrix4f());
+        return result;
     }
 
     private static Map<String, Matrix4f> locals(float pitchDegrees) {
         final Map<String, Matrix4f> result = new LinkedHashMap<>();
         result.put("root", new Matrix4f());
         result.put("waist", new Matrix4f());
-        result.put("body", new Matrix4f().rotateX((float) Math.toRadians(pitchDegrees)));
-        result.put("rightarm", new Matrix4f().translate(0.75F, 1.0F, 1.0F));
-        result.put("rightitem", new Matrix4f().translate(0.0F, -0.5F, 0.75F));
+        result.put("body", BedrockTransformConvention.deformation(
+                BedrockTransformConvention.toJavaModel(new Vector3f(0.0F, 24.0F, 0.0F)),
+                new Vector3f(), new Vector3f(pitchDegrees, 0.0F, 0.0F), new Vector3f(1.0F)));
+        result.put("rightarm", BedrockTransformConvention.deformation(
+                BedrockTransformConvention.toJavaModel(new Vector3f(-5.0F, 22.0F, 0.0F)),
+                new Vector3f(13.5F, 10.0F, 12.0F),
+                new Vector3f(95.0F, -45.0F, 115.0F), new Vector3f(1.0F)));
+        result.put("rightitem", new Matrix4f());
         return result;
     }
 
@@ -132,10 +188,15 @@ class PlayerHostSharedPosePathTest {
     }
 
     private static void assertMatrixChanged(Matrix4f before, Matrix4f after) {
+        assertTrue(matrixDistance(before, after) > 1.0e-5F,
+                () -> "expected final matrix to change: " + matrixDistance(before, after));
+    }
+
+    private static float matrixDistance(Matrix4f before, Matrix4f after) {
         final Vector3f probe = new Vector3f(0.25F, 0.5F, 0.75F);
         final Vector3f beforePoint = new Matrix4f(before).transformPosition(new Vector3f(probe));
         final Vector3f afterPoint = new Matrix4f(after).transformPosition(new Vector3f(probe));
-        assertTrue(beforePoint.distance(afterPoint) > 1.0e-5F,
-                () -> "expected final matrix to change: " + beforePoint + " == " + afterPoint);
+        return beforePoint.distance(afterPoint);
     }
+
 }

@@ -72,13 +72,6 @@ public class LodConfig {
     // back to animating once every {@link #animationThrottleInterval} frames (staggered per entity), so
     // dense near-distance scenes stay bounded. 0 = unlimited (no budget).
     private int maxAnimatedEntitiesPerFrame = 24;
-    // Player-specific budget pool, INDEPENDENT from the entity pool above (players and entities don't
-    // preempt each other — they render in the same pass but draw from separate counters, reset together
-    // once per frame in AnimationBudget.reset). Caps how many players run full-rate Bedrock setupAnim
-    // per frame; the rest fall back to the {@link #animationThrottleInterval} staggered cadence. 0 =
-    // unlimited. NOTE: a newly-added field absent from an existing config file deserializes to 0
-    // (unlimited) — users must delete viabedrockutility.json to regenerate it with this default.
-    private int maxAnimatedPlayersPerFrame = 24;
     private int animationThrottleInterval = 4;
 
     // Particle LOD settings (synced to ParticleManager on load/save)
@@ -212,14 +205,6 @@ public class LodConfig {
         this.maxAnimatedEntitiesPerFrame = maxAnimatedEntitiesPerFrame;
     }
 
-    public int getMaxAnimatedPlayersPerFrame() {
-        return maxAnimatedPlayersPerFrame;
-    }
-
-    public void setMaxAnimatedPlayersPerFrame(int maxAnimatedPlayersPerFrame) {
-        this.maxAnimatedPlayersPerFrame = maxAnimatedPlayersPerFrame;
-    }
-
     public int getAnimationThrottleInterval() {
         return animationThrottleInterval;
     }
@@ -309,7 +294,6 @@ public class LodConfig {
                 textDisplayCullDistance = 0; // never cull holograms in high-quality
                 particleTickLodEnabled = false;
                 maxAnimatedEntitiesPerFrame = 0; // unlimited
-                maxAnimatedPlayersPerFrame = 0;  // unlimited
                 animationThrottleInterval = 1;
                 frozenMeshEnabled = true;
                 frozenMeshEnterDistance = 32.0;
@@ -326,7 +310,6 @@ public class LodConfig {
                 particleTickLodNearDistance = 20;
                 particleTickLodFarDistance = 40;
                 maxAnimatedEntitiesPerFrame = 32;
-                maxAnimatedPlayersPerFrame = 32;
                 animationThrottleInterval = 3;
                 frozenMeshEnabled = true;
                 frozenMeshEnterDistance = 24.0;
@@ -343,7 +326,6 @@ public class LodConfig {
                 particleTickLodNearDistance = 16;
                 particleTickLodFarDistance = 32;
                 maxAnimatedEntitiesPerFrame = 16;
-                maxAnimatedPlayersPerFrame = 16;
                 animationThrottleInterval = 4;
                 frozenMeshEnabled = true;
                 frozenMeshEnterDistance = 18.0;
@@ -360,7 +342,6 @@ public class LodConfig {
                 particleTickLodNearDistance = 12;
                 particleTickLodFarDistance = 24;
                 maxAnimatedEntitiesPerFrame = 8;
-                maxAnimatedPlayersPerFrame = 8;
                 animationThrottleInterval = 6;
                 frozenMeshEnabled = true;
                 frozenMeshEnterDistance = 12.0;
@@ -406,7 +387,6 @@ public class LodConfig {
         renderCullDistance = value.renderCullDistance();
         textDisplayCullDistance = value.textDisplayCullDistance();
         maxAnimatedEntitiesPerFrame = value.maxAnimatedEntitiesPerFrame();
-        maxAnimatedPlayersPerFrame = value.maxAnimatedPlayersPerFrame();
         animationThrottleInterval = value.animationThrottleInterval();
         frozenMeshEnabled = value.frozenMeshEnabled();
         frozenMeshEnterDistance = value.frozenMeshEnterDistance();
