@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -71,6 +72,24 @@ class PlayerAnimationResourceClosureTest {
                 .get("controller.animation.player.root"));
         assertNotNull(packs.getAnimationDefinitions().getAnimations()
                 .get("animation.gun_player.holding"));
+
+        final Content playerHost = content(codeFunPacks.resolve("ec_hub.zip"));
+        final var playerWithoutOptionalAlias = playerHost.getJson("entity/player.entity.json");
+        assertNotNull(playerWithoutOptionalAlias.getAsJsonObject("minecraft:client_entity")
+                .getAsJsonObject("description")
+                .getAsJsonObject("animations")
+                .remove("first_person_attack_rotation_item"));
+        final Content optionalAliasOverlay = new Content();
+        optionalAliasOverlay.putJson("entity/player.entity.json", playerWithoutOptionalAlias);
+        final List<Content> missingOptionalAliasStack = new ArrayList<>(downloaded);
+        missingOptionalAliasStack.add(optionalAliasOverlay);
+        final PackManager missingOptionalAliasPacks = new PackManager(missingOptionalAliasStack);
+        assertFalse(missingOptionalAliasPacks.getEntityDefinitions().getEntities()
+                .get("minecraft:player").entityData().getAnimations()
+                .containsKey("first_person_attack_rotation_item"));
+        final PlayerAnimationRuntime missingOptionalAliasRuntime =
+                new PlayerAnimationRuntime(missingOptionalAliasPacks, Map.of());
+        missingOptionalAliasRuntime.sampleThirdPerson(new TestBoneModel(), state(1L, ""));
 
         final IllegalArgumentException missingRoot = assertThrows(IllegalArgumentException.class,
                 () -> new PlayerAnimationRuntime(packs, Map.of(
