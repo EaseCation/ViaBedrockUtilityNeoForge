@@ -92,8 +92,18 @@ public final class AttachableHostContext {
 
     /** Prefixes a direct ModelPart render without mutating the host model's current pose. */
     public Matrix4f firstPersonArmRenderPrefix(BedrockPlayerModelMetadata.Bone armBone) {
-        final Matrix4f target = firstPersonWorldMatrix(armBone);
-        return armRenderPrefix(target, localMatrix(armBone, true));
+        final String parentKey = armBone.parentKey();
+        if (parentKey == null || parentKey.isBlank()) {
+            return firstPersonCameraMatrix();
+        }
+        // PlayerModel's arm is flattened beneath root. ModelPart.render applies the arm's
+        // complete current absolute transform itself, so the prefix contains only the semantic
+        // Bedrock parent chain, exactly like the 26.1 PlayerBoneModel path.
+        final BedrockPlayerModelMetadata.Bone parent = metadata.bone(parentKey);
+        if (parent == null) {
+            throw new IllegalStateException("Player arm semantic parent is missing: " + parentKey);
+        }
+        return firstPersonWorldMatrix(parent);
     }
 
     public List<String> semanticChain(BedrockPlayerModelMetadata.Bone bone) {
@@ -117,10 +127,6 @@ public final class AttachableHostContext {
         final Matrix4f matrix = firstPersonCameraMatrix();
         matrix.mul(worldMatrix(chain, currentAbsoluteMatrix, bindAbsoluteMatrix));
         return matrix;
-    }
-
-    static Matrix4f armRenderPrefix(Matrix4f targetWorld, Matrix4f armLocal) {
-        return new Matrix4f(targetWorld).mul(new Matrix4f(armLocal).invert());
     }
 
     private static Matrix4f worldMatrix(List<BedrockPlayerModelMetadata.Bone> chain, boolean current) {

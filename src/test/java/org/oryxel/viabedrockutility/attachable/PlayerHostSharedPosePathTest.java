@@ -67,9 +67,11 @@ class PlayerHostSharedPosePathTest {
         assertMatrixEquals(new Matrix4f(flatArm).invert().mul(flatItem),
                 new Matrix4f(pitchedArm).invert().mul(pitchedItem));
 
-        final Matrix4f armLocal = pitched.get("rightarm");
-        final Matrix4f finalVisibleArm = AttachableHostContext.armRenderPrefix(
-                pitchedArm, armLocal).mul(armLocal);
+        // The flattened PlayerModel arm render consumes its absolute current ModelPart transform;
+        // the prefix supplies the semantic parent chain exactly once.
+        final Matrix4f armAbsolute = pitched.get("rightarm");
+        final Matrix4f bodyWorld = world(chain(), pitched, bind);
+        final Matrix4f finalVisibleArm = new Matrix4f(bodyWorld).mul(armAbsolute);
         assertMatrixEquals(pitchedArm, finalVisibleArm);
     }
 
