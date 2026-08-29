@@ -22,4 +22,17 @@ class AttachableRenderTypesTest {
         assertSame(RenderType.entityCutoutNoCull(texture),
                 AttachableRenderTypes.renderType("entity_alphatest", pass, texture));
     }
+
+    @Test
+    void evaluatedDoubleSidedPassUsesNoCullInDefaultAttachablePath() {
+        final ResourceLocation texture = ResourceLocation.parse("minecraft:textures/items/wood_sword");
+        final RenderControllerEvaluator.EvaluatedRenderPass pass =
+                new RenderControllerEvaluator.EvaluatedRenderPass(
+                        "default", null, "geometry.sword", texture.toString(),
+                        Map.of(), Map.of(), false, false,
+                        RenderControllerEvaluator.BlendMode.ALPHA_TEST, false, false, 1.0F, 0xFFFFFFFF);
+
+        assertSame(RenderType.entityCutoutNoCull(texture),
+                AttachableRenderTypes.renderType(pass, texture));
+    }
 }
