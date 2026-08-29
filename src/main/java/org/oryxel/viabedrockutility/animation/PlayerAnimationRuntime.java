@@ -10,7 +10,6 @@ import net.easecation.bedrockmotion.mocha.MoLangEvaluationContext;
 import net.easecation.bedrockmotion.pack.PackManager;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import net.minecraft.client.model.PlayerModel;
-import net.minecraft.client.model.geom.ModelPart;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
@@ -87,7 +86,7 @@ public final class PlayerAnimationRuntime {
         if (cachedModel == null || cachedModel.getModel() != model) {
             cachedModel = new McBoneModel(model);
         }
-        clearVanillaHostRotations(model);
+        resetVanillaHostPose(model);
         sample(cachedModel, state, view);
     }
 
@@ -120,19 +119,15 @@ public final class PlayerAnimationRuntime {
         }
     }
 
-    private static void clearVanillaHostRotations(PlayerModel model) {
-        clear(model.head);
-        clear(model.body);
-        clear(model.rightArm);
-        clear(model.leftArm);
-        clear(model.rightLeg);
-        clear(model.leftLeg);
-    }
-
-    private static void clear(ModelPart part) {
-        part.xRot = 0.0F;
-        part.yRot = 0.0F;
-        part.zRot = 0.0F;
+    /**
+     * The Bedrock player runtime owns the complete host pose for both views. A first-person sample
+     * can follow a third-person setupAnim call on the same PlayerModel, so restoring only rotations
+     * leaves vanilla crouch/swim/attack translations (and scales) in the direct arm render path.
+     * Model.resetPose() restores every ModelPart to its baked pose; the Bedrock adapter then resets
+     * its own rotation/offset/scale state before sampling the authoritative player controller.
+     */
+    static void resetVanillaHostPose(PlayerModel model) {
+        model.resetPose();
     }
 
     private static final class ViewInstance {
