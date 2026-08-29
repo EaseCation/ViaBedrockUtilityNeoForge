@@ -9,10 +9,15 @@ import net.easecation.bedrockmotion.pack.PackManager;
 import net.easecation.bedrockmotion.pack.ServerAnimationLayer;
 import net.easecation.bedrockmotion.pack.content.Content;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
+import net.easecation.bedrockmotion.mocha.MoLangEvaluationContext;
+import net.easecation.bedrockmotion.render.RenderControllerEvaluator;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.Test;
+import team.unnamed.mocha.runtime.Scope;
+import team.unnamed.mocha.runtime.value.MutableObjectBinding;
+import team.unnamed.mocha.runtime.value.Value;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -393,6 +398,36 @@ class PlayerAnimationResourceClosureTest {
         assertNotNull(itemBone.getPolyMesh());
         assertTrue(itemBone.getPolyMesh().getPositions().length > 0);
         assertTrue(itemBone.getPolyMesh().getPolys().length > 0);
+    }
+
+    @Test
+    void woodenSwordAttachableEvaluatesBedrockAlphaTestAsDoubleSided() throws Exception {
+        final Path packPath = Path.of(System.getProperty("vbu.workspaceRoot"),
+                "ec-deploy-assets", "resource-packs", "CodeFunCore", "rl_defense.zip");
+        final PackManager packs = new PackManager(List.of(content(packPath)));
+        final var candidate = packs.getAttachableDefinitions().candidatesFor("minecraft:wooden_sword")
+                .stream()
+                .filter(entry -> entry.identifier().equals("minecraft:wooden_sword.player"))
+                .findFirst()
+                .orElseThrow();
+        final MutableObjectBinding variables = new MutableObjectBinding();
+        variables.set("is_enchanted", Value.of(false));
+        final Scope scope = Scope.create();
+        scope.set("variable", variables);
+
+        final List<RenderControllerEvaluator.EvaluatedRenderPass> passes =
+                RenderControllerEvaluator.evaluatePasses(candidate.data(), scope,
+                        MoLangEvaluationContext.EMPTY, packs.getRenderControllerDefinitions(),
+                        Map.of("geometry.sword", "default"),
+                        Map.of("textures/items/wood_sword", "default",
+                                "textures/misc/enchanted_item_glint", "enchanted"));
+
+        assertEquals(1, passes.size());
+        assertEquals("geometry.sword", passes.getFirst().geometryValue());
+        assertEquals("textures/items/wood_sword", passes.getFirst().textureValue());
+        assertEquals(RenderControllerEvaluator.BlendMode.ALPHA_TEST,
+                passes.getFirst().blendMode());
+        assertFalse(passes.getFirst().cull());
     }
 
     private static PlayerAnimationState state(long tick, String mainHandIdentifier) {
