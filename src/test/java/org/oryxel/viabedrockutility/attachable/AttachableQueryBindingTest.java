@@ -2,7 +2,9 @@ package org.oryxel.viabedrockutility.attachable;
 
 import net.easecation.bedrockmotion.mocha.MoLangEngine;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.item.ItemStack;
 import org.junit.jupiter.api.Test;
 import team.unnamed.mocha.runtime.Scope;
@@ -69,6 +71,29 @@ class AttachableQueryBindingTest {
                 "query.target_x_rotation").getAsNumber());
         assertEquals(37.0D, MoLangEngine.eval(frame.scope(), frame.context(),
                 "query.target_y_rotation").getAsNumber());
+    }
+
+    @Test
+    void invisibleOwnerIsExposedToBedrockQueries() throws Exception {
+        final ArmorStand ownerEntity = new ArmorStand(EntityType.ARMOR_STAND, null);
+        ownerEntity.setInvisible(true);
+        final AttachableOwnerSnapshot owner = new AttachableOwnerSnapshot(
+                UUID.randomUUID(), "minecraft:player", 0.0F);
+        final AttachableItemSnapshot item = new AttachableItemSnapshot(
+                ResourceLocation.parse("minecraft:wooden_sword"), ItemStack.EMPTY);
+        final var frame = AttachableScopeFactory.RuntimeScope.temporary(owner, ownerEntity, item,
+                AttachableQueryContext.LogicalHand.MAIN_HAND, HumanoidArm.RIGHT,
+                AttachableQueryContext.ViewContext.THIRD_PERSON, 1L, 0.0F, "minecraft:wooden_sword.player");
+
+        assertEquals(1.0D, MoLangEngine.eval(frame.scope(), frame.context(),
+                "query.is_invisible").getAsNumber());
+
+        ownerEntity.setInvisible(false);
+        final var visibleFrame = AttachableScopeFactory.RuntimeScope.temporary(owner, ownerEntity, item,
+                AttachableQueryContext.LogicalHand.MAIN_HAND, HumanoidArm.RIGHT,
+                AttachableQueryContext.ViewContext.THIRD_PERSON, 2L, 0.0F, "minecraft:wooden_sword.player");
+        assertEquals(0.0D, MoLangEngine.eval(visibleFrame.scope(), visibleFrame.context(),
+                "query.is_invisible").getAsNumber());
     }
 
     @Test
