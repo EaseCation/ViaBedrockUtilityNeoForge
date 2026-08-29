@@ -363,6 +363,8 @@ class PlayerAnimationResourceClosureTest {
         runtime.sampleThirdPerson(model, stateUsingBow(1L));
 
         assertEquals("1.0", runtime.debugSnapshot().thirdPerson().queries().get("has_target"));
+        assertEquals(0.95D, Double.parseDouble(runtime.debugSnapshot().thirdPerson()
+                .variables().get("item_use_normalized")), 1.0e-6D);
         assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
         assertEquals(35.0F, model.rotationY("rightitem"), 1.0e-3F);
