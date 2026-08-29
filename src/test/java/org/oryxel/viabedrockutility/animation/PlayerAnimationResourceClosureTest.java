@@ -346,9 +346,42 @@ class PlayerAnimationResourceClosureTest {
                 5L, 5.0D, 0.0F, 0.0F, true, false)), 1.0e-6D);
     }
 
+    @Test
+    void thirdPersonBowUseAppliesBedrockBowPose() throws Exception {
+        final Path packsRoot = Path.of(System.getProperty("vbu.workspaceRoot"),
+                "ec-deploy-assets", "bedrock-loader-packs");
+        final Path codeFunPacks = Path.of(System.getProperty("vbu.workspaceRoot"),
+                "ec-deploy-assets", "resource-packs", "CodeFunCore");
+        final PackManager packs = new PackManager(List.of(
+                content(packsRoot.resolve("vanilla.zip")),
+                content(codeFunPacks.resolve("ec_hub.zip")),
+                content(codeFunPacks.resolve("ec_ze.zip")),
+                content(codeFunPacks.resolve("rl_defense.zip")),
+                content(codeFunPacks.resolve("rl_defense_ec_entity.zip"))));
+        final PlayerAnimationRuntime runtime = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel model = new TestBoneModel();
+        runtime.sampleThirdPerson(model, stateUsingBow(1L));
+
+        assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
+        assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
+        assertEquals(35.0F, model.rotationY("rightitem"), 1.0e-3F);
+    }
+
     private static PlayerAnimationState state(long tick, String mainHandIdentifier) {
         return state(PlayerAnimationState.View.THIRD_PERSON, tick,
                 mainHandIdentifier, 0.0F, 0.0F, 0.0F);
+    }
+
+    private static PlayerAnimationState stateUsingBow(long tick) {
+        return new PlayerAnimationState(
+                UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                new PlayerAnimationOwner(PLAYER_INSTANCE, LEVEL_INSTANCE),
+                PlayerAnimationState.View.THIRD_PERSON, tick, 0.0F, HumanoidArm.RIGHT,
+                InteractionHand.MAIN_HAND, "minecraft:bow", "", Set.of(),
+                tick, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F,
+                1.0F, 1.0F, false, true, true, false, false, false, false,
+                false, false, false, true, false, false, false, false, false,
+                1, 19, 20, 0.0F, 0.0F, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
     }
 
     private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
@@ -486,6 +519,10 @@ class PlayerAnimationResourceClosureTest {
 
         private float rotationX(String name) {
             return bones.get(name).getRotation().x;
+        }
+
+        private float rotationY(String name) {
+            return bones.get(name).getRotation().y;
         }
 
         private float rotationZ(String name) {
