@@ -362,9 +362,13 @@ class PlayerAnimationResourceClosureTest {
         final TestBoneModel model = new TestBoneModel();
         runtime.sampleThirdPerson(model, stateUsingBow(1L));
 
+        assertEquals("1.0", runtime.debugSnapshot().thirdPerson().queries().get("has_target"));
         assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
         assertEquals(35.0F, model.rotationY("rightitem"), 1.0e-3F);
+
+        runtime.sampleThirdPerson(model, state(2L, "minecraft:stick"));
+        assertEquals("0.0", runtime.debugSnapshot().thirdPerson().queries().get("has_target"));
     }
 
     @Test
@@ -402,7 +406,7 @@ class PlayerAnimationResourceClosureTest {
                 InteractionHand.MAIN_HAND, "minecraft:bow", "", Set.of(),
                 tick, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F,
                 1.0F, 1.0F, false, true, true, false, false, false, false,
-                false, false, false, true, false, false, false, false, false,
+                false, false, false, true, false, false, true, false, false, false,
                 1, 19, 20, 0.0F, 0.0F, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
     }
 
@@ -491,7 +495,7 @@ class PlayerAnimationResourceClosureTest {
                 tick, positionX, walkSpeed, attackTime,
                 pitch, relativeHeadYaw, bodyYaw, swimAmount, 1.0F, armHeight, slim,
                 true, true, false, false, false, swimming, false,
-                false, false, false, false, false, false, false, bobAnimation,
+                false, false, false, false, false, false, false, false, bobAnimation,
                 0, 0, 0, 0.0F, 0.0F,
                 positionX, 0.0D, deltaX, 0.0D, 0.0D);
     }
@@ -507,7 +511,7 @@ class PlayerAnimationResourceClosureTest {
                 "", "", Set.of(), tick, walkPosition, walkSpeed, 0.0F,
                 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 1.0F, false,
                 true, onGround, false, crouching, false, false, false,
-                false, false, false, false, false, false, false, true,
+                false, false, false, false, false, false, false, false, true,
                 0, 0, 0, 0.0F, 0.0F,
                 positionX, 0.0D, 0.1D, 0.0D, 0.0D);
     }
