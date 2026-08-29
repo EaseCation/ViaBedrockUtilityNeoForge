@@ -6,6 +6,7 @@ import net.easecation.bedrockmotion.entity.ClientEntityAnimationRuntime;
 import net.easecation.bedrockmotion.model.AnimationEventListener;
 import net.easecation.bedrockmotion.model.IBoneModel;
 import net.easecation.bedrockmotion.mocha.LayeredScope;
+import net.easecation.bedrockmotion.mocha.DebugBinding;
 import net.easecation.bedrockmotion.mocha.MoLangEvaluationContext;
 import net.easecation.bedrockmotion.pack.PackManager;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
@@ -16,7 +17,6 @@ import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
 import team.unnamed.mocha.runtime.ExecutionContext;
 import team.unnamed.mocha.runtime.Scope;
 import team.unnamed.mocha.runtime.value.Function;
-import team.unnamed.mocha.runtime.value.MutableObjectBinding;
 import team.unnamed.mocha.runtime.value.NumberValue;
 import team.unnamed.mocha.runtime.value.Value;
 
@@ -63,6 +63,11 @@ public final class PlayerAnimationRuntime {
     public void sampleThirdPerson(PlayerModel model, PlayerAnimationState state) {
         sample(model, state, thirdPerson);
         org.oryxel.viabedrockutility.renderer.BedrockPlayerArmorPose.update(model);
+    }
+
+    /** Captures both view runtimes without mutating either runtime or the host model. */
+    public DebugSnapshot debugSnapshot() {
+        return new DebugSnapshot(firstPerson.debugSnapshot(), thirdPerson.debugSnapshot());
     }
 
     void sampleFirstPerson(IBoneModel model, PlayerAnimationState state) {
@@ -132,8 +137,8 @@ public final class PlayerAnimationRuntime {
 
     private static final class ViewInstance {
         private final LayeredScope scope = new LayeredScope(CustomEntityPayloadHandler.BASE_SCOPE);
-        private final MutableObjectBinding query = new MutableObjectBinding();
-        private final MutableObjectBinding variables = new MutableObjectBinding();
+        private final DebugBinding query = new DebugBinding();
+        private final DebugBinding variables = new DebugBinding();
         private final EquippedItemNameValue equippedItemName = new EquippedItemNameValue();
         private final ClientEntityAnimationRuntime runtime;
         private PlayerAnimationState state;
@@ -199,10 +204,10 @@ public final class PlayerAnimationRuntime {
             query.set("main_hand_item_max_duration", Value.of(value.useMaxDuration()));
             query.set("has_target", NumberValue.zero());
             query.set("body_y_rotation", Value.of(value.bodyYaw()));
-            query.set("body_x_rotation", Value.of(value.pitch()));
-            query.set("target_x_rotation", Value.of(value.pitch()));
+            query.set("body_x_rotation", Value.of(value.targetXRotation()));
+            query.set("target_x_rotation", Value.of(value.targetXRotation()));
             query.set("target_y_rotation", Value.of(value.targetYRotation()));
-            query.set("head_x_rotation", Value.of(value.pitch()));
+            query.set("head_x_rotation", Value.of(value.targetXRotation()));
             query.set("head_y_rotation", Value.of(value.targetYRotation()));
             query.set("day", Value.of(Math.max(1L, value.tick() / 24000L)));
         }
@@ -229,6 +234,11 @@ public final class PlayerAnimationRuntime {
             variables.set("damage_nearby_mobs", NumberValue.zero());
             variables.set("use_item_interval_progress", Value.of(value.useItemIntervalProgress()));
             variables.set("use_item_startup_progress", Value.of(value.useItemStartupProgress()));
+        }
+
+        private ViewDebugSnapshot debugSnapshot() {
+            return new ViewDebugSnapshot(state, runtime.debugSnapshot(),
+                    query.debugSnapshot(), variables.debugSnapshot());
         }
 
         private Value isItemNameAny(ExecutionContext<Object> context, Function.Arguments arguments) {
@@ -339,5 +349,14 @@ public final class PlayerAnimationRuntime {
         public String getAsString() {
             return state == null ? "" : state.equippedItemName(false);
         }
+    }
+
+    public record DebugSnapshot(ViewDebugSnapshot firstPerson, ViewDebugSnapshot thirdPerson) {
+    }
+
+    public record ViewDebugSnapshot(PlayerAnimationState state,
+                                    ClientEntityAnimationRuntime.DebugSnapshot runtime,
+                                    Map<String, String> queries,
+                                    Map<String, String> variables) {
     }
 }

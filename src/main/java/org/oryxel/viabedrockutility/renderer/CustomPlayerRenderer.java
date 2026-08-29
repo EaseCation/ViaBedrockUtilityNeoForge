@@ -182,4 +182,9 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         runtime.sampleFirstPerson(this.model, state);
         return true;
     }
+
+    public PlayerAnimationRuntime.DebugSnapshot playerAnimationDebugSnapshot() {
+        final PlayerAnimationRuntime runtime = this.playerAnimationRuntime.current();
+        return runtime == null ? null : runtime.debugSnapshot();
+    }
 }

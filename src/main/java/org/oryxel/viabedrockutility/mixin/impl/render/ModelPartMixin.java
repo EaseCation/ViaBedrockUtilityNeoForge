@@ -1,12 +1,14 @@
 package org.oryxel.viabedrockutility.mixin.impl.render;
 
 import net.minecraft.client.model.geom.ModelPart;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.core.Direction;
 import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.util.RandomSource;
 import net.easecation.bedrockmotion.util.MathUtil;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
@@ -151,16 +153,46 @@ public abstract class ModelPartMixin implements IModelPart {
         matrices.pushPose();
         try {
             ((ModelPart) (Object) this).translateAndRotate(matrices);
+            // A first-person arm is flattened into an owning ModelPart plus one or more
+            // cube-group children. Observe the actual cube-group pose immediately before
+            // vertex compilation so the diagnostic can distinguish a bad semantic matrix
+            // from a later submission-path discrepancy.
+            if (isFirstPersonArmName(this.name)) {
+                final net.minecraft.world.entity.HumanoidArm arm = isLeftArmName(this.name)
+                        ? net.minecraft.world.entity.HumanoidArm.LEFT
+                        : net.minecraft.world.entity.HumanoidArm.RIGHT;
+                org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.record(
+                        this.vbu$cubeGroup ? "arm_vertex" : "arm_modelpart",
+                        arm, matrices);
+                org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.recordMatrix(
+                        "global_modelview", arm, RenderSystem.getModelViewMatrix());
+                org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.recordMatrix(
+                        this.vbu$cubeGroup ? "final_vertex" : "final_modelpart",
+                        arm, new Matrix4f(RenderSystem.getModelViewMatrix()).mul(matrices.last().pose()));
+            }
             if (this.vbu$cubeGroup || !this.skipDraw) {
                 final PoseStack.Pose pose = matrices.last();
                 final ModelPart.Cube[] cubes = this.vbu$cubesArray;
-                if (cubes.length > 0 && (this.vbu$compiledBatch == null
-                        || !VbuCuboidBatchRenderer.tryRender(
-                        pose, vertices, this.vbu$compiledBatch,
-                        light, overlay, color, VbuCompileScratch.FLAT_NORMAL))) {
+                boolean bulkRendered = false;
+                if (cubes.length > 0 && this.vbu$compiledBatch != null) {
+                    bulkRendered = VbuCuboidBatchRenderer.tryRender(
+                            pose, vertices, this.vbu$compiledBatch,
+                            light, overlay, color, VbuCompileScratch.FLAT_NORMAL);
+                }
+                if (cubes.length > 0 && !bulkRendered) {
                     for (int i = 0; i < cubes.length; i++) {
                         cubes[i].compile(pose, vertices, light, overlay, color);
                     }
+                }
+                if (isFirstPersonArmName(this.name) && cubes.length > 0) {
+                    org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.record(
+                            this.vbu$cubeGroup
+                                    ? (bulkRendered ? "arm_writer" : "arm_compile")
+                                    : "arm_modelpart_submit",
+                            isLeftArmName(this.name)
+                                    ? net.minecraft.world.entity.HumanoidArm.LEFT
+                                    : net.minecraft.world.entity.HumanoidArm.RIGHT,
+                            matrices);
                 }
             }
 
@@ -180,6 +212,17 @@ public abstract class ModelPartMixin implements IModelPart {
         } finally {
             matrices.popPose();
         }
+    }
+
+    @Unique
+    private static boolean isFirstPersonArmName(String name) {
+        return "rightarm".equalsIgnoreCase(name) || "leftarm".equalsIgnoreCase(name)
+                || "right_arm".equalsIgnoreCase(name) || "left_arm".equalsIgnoreCase(name);
+    }
+
+    @Unique
+    private static boolean isLeftArmName(String name) {
+        return "leftarm".equalsIgnoreCase(name) || "left_arm".equalsIgnoreCase(name);
     }
 
     @Unique

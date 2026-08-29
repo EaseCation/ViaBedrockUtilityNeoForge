@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerHostSharedPosePathTest {
     @Test
-    void bedrockCameraSpaceKeepsVanillaPitchButRemovesTransientJavaYaw() {
+    void bedrockCameraSpacePreservesVanillaHandRebound() {
         final float viewPitch = 67.0F;
         final float pitchBob = 4.0F;
         final float viewYaw = -123.0F;
@@ -26,10 +26,9 @@ class PlayerHostSharedPosePathTest {
         poses.mulPose(Axis.XP.rotationDegrees((viewPitch - pitchBob) * 0.1F));
         poses.mulPose(Axis.YP.rotationDegrees((viewYaw - yawBob) * 0.1F));
 
-        FirstPersonAttachableRenderer.removeVanillaHandYawTransform(poses, viewYaw, yawBob);
-
         final Matrix4f expected = new Matrix4f()
-                .rotateX((viewPitch - pitchBob) * 0.1F * (float) Math.PI / 180.0F);
+                .rotateX((viewPitch - pitchBob) * 0.1F * (float) Math.PI / 180.0F)
+                .rotateY((viewYaw - yawBob) * 0.1F * (float) Math.PI / 180.0F);
         assertMatrixEquals(expected, poses.last().pose());
     }
 
@@ -94,50 +93,34 @@ class PlayerHostSharedPosePathTest {
     }
 
     @Test
-    void finalArmAndItemMatricesTrackViewPitchWithoutRetainingViewYaw() {
-        final Matrix4f armYawLeft = finalCameraMatrix(35.0F, -120.0F, false);
-        final Matrix4f armYawRight = finalCameraMatrix(35.0F, 80.0F, false);
-        final Matrix4f itemYawLeft = finalCameraMatrix(35.0F, -120.0F, true);
-        final Matrix4f itemYawRight = finalCameraMatrix(35.0F, 80.0F, true);
-        assertMatrixEquals(armYawLeft, armYawRight);
-        assertMatrixEquals(itemYawLeft, itemYawRight);
+    void firstPersonFinalMatricesKeepOnlyCameraRebound() {
+        final Matrix4f neutralArm = finalCameraMatrix(0.0F, 0.0F, 0.0F, 0.0F, false);
+        final Matrix4f neutralItem = finalCameraMatrix(0.0F, 0.0F, 0.0F, 0.0F, true);
 
-        assertMatrixChanged(armYawLeft, finalCameraMatrix(-55.0F, 80.0F, false));
-        assertMatrixChanged(itemYawLeft, finalCameraMatrix(-55.0F, 80.0F, true));
+        // Absolute camera look is already owned by Java's hand pass. Once bob catches up, it must
+        // not reappear through the Bedrock body queries.
+        assertMatrixEquals(neutralArm,
+                finalCameraMatrix(80.0F, 80.0F, -120.0F, -120.0F, false));
+        assertMatrixEquals(neutralItem,
+                finalCameraMatrix(80.0F, 80.0F, -120.0F, -120.0F, true));
 
-        assertMatrixEquals(finalCameraMatrix(0.0F, 0.0F, false),
-                finalCameraMatrix(0.0F, 130.0F, false));
-        assertMatrixEquals(finalCameraMatrix(0.0F, 0.0F, true),
-                finalCameraMatrix(0.0F, -130.0F, true));
+        final Matrix4f reboundArm = finalCameraMatrix(80.0F, 69.0F, -120.0F, -113.0F, false);
+        final Matrix4f reboundItem = finalCameraMatrix(80.0F, 69.0F, -120.0F, -113.0F, true);
+        assertMatrixChanged(neutralArm, reboundArm);
+        assertMatrixChanged(neutralItem, reboundItem);
+        assertMatrixEquals(new Matrix4f(neutralArm).invert().mul(neutralItem),
+                new Matrix4f(reboundArm).invert().mul(reboundItem));
     }
 
-    @Test
-    void resourceBodyPitchSuppliesPersistentFirstPersonPitch() {
-        float pitchBob = 0.0F;
-        final float viewPitch = 80.0F;
-        for (int tick = 0; tick < 24; tick++) {
-            pitchBob += (viewPitch - pitchBob) * 0.5F;
-        }
-        assertTrue(Math.abs((viewPitch - pitchBob) * 0.1F) < 1.0e-5F);
-
-        final Matrix4f flat = finalCameraMatrix(0.0F, 0.0F, true);
-        final Matrix4f pitched = finalCameraMatrix(viewPitch, 0.0F, true);
-        assertTrue(matrixDistance(flat, pitched) > 0.25F,
-                () -> "resource body pitch did not reach final matrix: " + matrixDistance(flat, pitched));
-        assertMatrixEquals(flat, finalCameraMatrix(0.0F, 0.0F, true));
-    }
-
-    private static Matrix4f finalCameraMatrix(float viewPitch, float viewYaw,
+    private static Matrix4f finalCameraMatrix(float viewPitch, float pitchBob,
+                                              float viewYaw, float yawBob,
                                               boolean itemAnchor) {
         final PoseStack poses = new PoseStack();
-        final float pitchBob = viewPitch - 11.0F;
-        final float yawBob = viewYaw + 7.0F;
         poses.mulPose(Axis.XP.rotationDegrees((viewPitch - pitchBob) * 0.1F));
         poses.mulPose(Axis.YP.rotationDegrees((viewYaw - yawBob) * 0.1F));
-        FirstPersonAttachableRenderer.removeVanillaHandYawTransform(poses, viewYaw, yawBob);
         final Matrix4f host = world(
                 itemAnchor ? chain("rightarm", "rightitem") : chain("rightarm"),
-                locals(viewPitch), bindLocals());
+                locals(0.0F), bindLocals());
         poses.mulPose(host);
         return new Matrix4f(poses.last().pose());
     }

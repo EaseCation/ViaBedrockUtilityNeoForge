@@ -22,11 +22,16 @@ class PlayerAnimationStateTest {
     }
 
     @Test
-    void firstPersonTargetYawStaysInCameraSpace() {
-        assertEquals(0.0F, state(PlayerAnimationState.View.FIRST_PERSON, 75.0F)
-                .targetYRotation());
-        assertEquals(75.0F, state(PlayerAnimationState.View.THIRD_PERSON, 75.0F)
-                .targetYRotation());
+    void firstPersonTargetLookStaysInCameraSpace() {
+        final PlayerAnimationState firstPerson = state(
+                PlayerAnimationState.View.FIRST_PERSON, 60.0F, 75.0F);
+        assertEquals(0.0F, firstPerson.targetXRotation());
+        assertEquals(0.0F, firstPerson.targetYRotation());
+
+        final PlayerAnimationState thirdPerson = state(
+                PlayerAnimationState.View.THIRD_PERSON, 60.0F, 75.0F);
+        assertEquals(60.0F, thirdPerson.targetXRotation());
+        assertEquals(75.0F, thirdPerson.targetYRotation());
     }
 
     @Test
@@ -62,12 +67,13 @@ class PlayerAnimationStateTest {
         return crossbow;
     }
 
-    private static PlayerAnimationState state(PlayerAnimationState.View view, float relativeHeadYaw) {
+    private static PlayerAnimationState state(PlayerAnimationState.View view, float pitch,
+                                              float relativeHeadYaw) {
         return new PlayerAnimationState(
                 java.util.UUID.randomUUID(), new PlayerAnimationOwner(new Object(), new Object()),
                 view, 0L, 0.0F, HumanoidArm.RIGHT,
                 net.minecraft.world.InteractionHand.MAIN_HAND, "", "", java.util.Set.of(),
-                0.0F, 0.0F, 0.0F, 0.0F, 0.0F, relativeHeadYaw, 0.0F, 0.0F,
+                0.0F, 0.0F, 0.0F, 0.0F, pitch, relativeHeadYaw, 0.0F, 0.0F,
                 0.0F, 1.0F, false, true, true, false, false, false, false, false,
                 false, false, false, false, false, false, false, false,
                 0, 0, 0, 0.0F, 0.0F,

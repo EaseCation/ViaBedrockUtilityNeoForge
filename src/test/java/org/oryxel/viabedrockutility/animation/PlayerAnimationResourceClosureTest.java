@@ -241,8 +241,24 @@ class PlayerAnimationResourceClosureTest {
                 stateWithPitch(PlayerAnimationState.View.FIRST_PERSON, 1L, 0.0F));
         pitchDown.sampleFirstPerson(pitchDownModel,
                 stateWithPitch(PlayerAnimationState.View.FIRST_PERSON, 1L, 60.0F));
-        assertTrue(Math.abs(pitchDownModel.rotationX("body")
-                - pitchFlatModel.rotationX("body")) > 1.0F);
+        assertPoseEquals(pitchFlatModel, pitchDownModel);
+        assertEquals("0.0", pitchDown.debugSnapshot().firstPerson()
+                .queries().get("body_x_rotation"));
+        assertEquals("0.0", pitchDown.debugSnapshot().firstPerson()
+                .queries().get("target_x_rotation"));
+        assertEquals("60.0", pitchDown.debugSnapshot().firstPerson()
+                .variables().get("player_x_rotation"));
+
+        final PlayerAnimationRuntime thirdPersonPitchDown = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel thirdPersonPitchDownModel = new TestBoneModel();
+        thirdPersonPitchDown.sampleThirdPerson(thirdPersonPitchDownModel,
+                stateWithPitch(PlayerAnimationState.View.THIRD_PERSON, 1L, 60.0F));
+        assertEquals("60.0", thirdPersonPitchDown.debugSnapshot().thirdPerson()
+                .queries().get("body_x_rotation"));
+        assertEquals("60.0", thirdPersonPitchDown.debugSnapshot().thirdPerson()
+                .queries().get("target_x_rotation"));
+        assertEquals("60.0", thirdPersonPitchDown.debugSnapshot().thirdPerson()
+                .queries().get("head_x_rotation"));
 
         final PlayerAnimationRuntime standingRuntime = new PlayerAnimationRuntime(packs, Map.of());
         final PlayerAnimationRuntime swimmingRuntime = new PlayerAnimationRuntime(packs, Map.of());

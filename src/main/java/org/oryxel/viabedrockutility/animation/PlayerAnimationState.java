@@ -152,7 +152,16 @@ public record PlayerAnimationState(
         return mainHandTags.contains(normalized);
     }
 
+    public float targetXRotation() {
+        // Java's first-person hand pass is already camera-facing. Keep absolute pitch available
+        // through variable.player_x_rotation, but do not apply it to the Bedrock host a second time.
+        return view == View.FIRST_PERSON ? 0.0F : pitch;
+    }
+
     public float targetYRotation() {
+        // The first-person Bedrock pass is already camera-facing. Its small horizontal rebound is
+        // supplied by vanilla's RenderHandEvent transform; feeding the full head/body delta into
+        // the Bedrock body would rotate the visible arm a second time.
         return view == View.FIRST_PERSON ? 0.0F : relativeHeadYaw;
     }
 

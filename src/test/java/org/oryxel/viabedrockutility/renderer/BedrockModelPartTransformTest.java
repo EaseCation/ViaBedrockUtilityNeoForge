@@ -50,6 +50,19 @@ class BedrockModelPartTransformTest {
         assertEquals(3.0F / 16.0F, origin.z, EPSILON);
     }
 
+    @Test
+    void currentMatrixInterpretsBedrockRotationAsDegrees() {
+        Matrix4f actual = BedrockModelPartTransform.compose(
+                new Vector3f(), new Vector3f(), new Vector3f(90.0F, 0.0F, 0.0F),
+                0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F,
+                1.0F, 1.0F, 1.0F, false);
+
+        assertEquals(0.0F, actual.get(1, 1), EPSILON);
+        assertEquals(1.0F, Math.abs(actual.get(1, 2)), EPSILON);
+        assertEquals(1.0F, Math.abs(actual.get(2, 1)), EPSILON);
+        assertEquals(0.0F, actual.get(2, 2), EPSILON);
+    }
+
     private static void assertMatrixEquals(Matrix4f expected, Matrix4f actual) {
         for (int column = 0; column < 4; column++) {
             for (int row = 0; row < 4; row++) {

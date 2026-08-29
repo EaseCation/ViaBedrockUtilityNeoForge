@@ -249,6 +249,9 @@ final class AttachableRuntimeInstance {
         lastGeometryInstallationMatrix = new Matrix4f(geometryInstallation);
         dispatchPendingParticleEvents(physicalAnchor);
         poses.mulPose(geometryInstallation);
+        if (firstPerson) {
+            FirstPersonRenderTrace.record("item_submit", arm, poses);
+        }
         // A single host group covers the whole geometry; with per-root bindings each group
         // renders only its own roots' subtrees under its own host bone.
         final List<ModelPart> roots = plannedPass.hostGroups().size() == 1

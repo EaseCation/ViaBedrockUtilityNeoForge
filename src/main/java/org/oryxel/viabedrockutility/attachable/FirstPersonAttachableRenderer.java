@@ -1,10 +1,8 @@
 package org.oryxel.viabedrockutility.attachable;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
 import net.neoforged.neoforge.client.event.RenderHandEvent;
@@ -55,7 +53,7 @@ public final class FirstPersonAttachableRenderer {
                 ? animationState.mainArm() : animationState.mainArm().getOpposite();
         final AttachableOwnerSnapshot owner = new AttachableOwnerSnapshot(
                 player.getUUID(), "minecraft:player", animationState.attackTime(),
-                animationState.pitch(), animationState.targetYRotation());
+                animationState.targetXRotation(), animationState.targetYRotation());
         if (!customRenderer.sampleFirstPerson(animationState)) {
             return;
         }
@@ -68,9 +66,13 @@ public final class FirstPersonAttachableRenderer {
         }
 
         RENDERING.set(true);
+        final long frameToken = ((long) player.tickCount << 32)
+                ^ Float.floatToIntBits(event.getPartialTick());
+        FirstPersonRenderTrace.begin(player.getUUID(), frameToken);
         event.getPoseStack().pushPose();
         try {
-            enterBedrockCameraSpace(event.getPoseStack(), player, event.getPartialTick());
+            FirstPersonRenderTrace.record("event", arm, event.getPoseStack());
+            FirstPersonRenderTrace.record("camera", arm, event.getPoseStack());
             final AttachableRenderResult result = ViaBedrockUtility.getInstance().getAttachableRuntimeManager().renderFirstPerson(
                     owner, item, logicalHand, arm,
                     customRenderer.getPlayerModel(), event.getPoseStack(), event.getMultiBufferSource(),
@@ -91,6 +93,7 @@ public final class FirstPersonAttachableRenderer {
             event.setCanceled(true);
         } finally {
             event.getPoseStack().popPose();
+            FirstPersonRenderTrace.end();
             RENDERING.set(false);
         }
     }
@@ -116,14 +119,4 @@ public final class FirstPersonAttachableRenderer {
         return false;
     }
 
-    private static void enterBedrockCameraSpace(PoseStack poses, LocalPlayer player,
-                                                float partialTick) {
-        removeVanillaHandYawTransform(poses,
-                player.getViewYRot(partialTick), Mth.lerp(partialTick, player.yBobO, player.yBob));
-    }
-
-    static void removeVanillaHandYawTransform(PoseStack poses,
-                                              float viewYaw, float interpolatedYawBob) {
-        poses.mulPose(Axis.YP.rotationDegrees((interpolatedYawBob - viewYaw) * 0.1F));
-    }
 }

@@ -74,6 +74,8 @@ public final class BedrockModelPartTransform {
                 .translate(x / BedrockTransformConvention.PIXELS_PER_BLOCK,
                         y / BedrockTransformConvention.PIXELS_PER_BLOCK,
                         z / BedrockTransformConvention.PIXELS_PER_BLOCK)
+                // ModelPart's native rotations are already radians. Bedrock animation rotation
+                // is applied by beforeVanilla(), where its degree conversion is explicit.
                 .rotateZYX(zRot, yRot, xRot)
                 .scale(xScale, yScale, zScale)
                 .mul(afterVanilla(pivot, vanillaPivotWrapper, neededOffset, x, z));
