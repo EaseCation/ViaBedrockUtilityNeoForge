@@ -367,6 +367,28 @@ class PlayerAnimationResourceClosureTest {
         assertEquals(35.0F, model.rotationY("rightitem"), 1.0e-3F);
     }
 
+    @Test
+    void woodenSwordAttachableResolvesToNonEmptyTextureMeshGeometry() throws Exception {
+        final Path packPath = Path.of(System.getProperty("vbu.workspaceRoot"),
+                "ec-deploy-assets", "resource-packs", "CodeFunCore", "rl_defense.zip");
+        final PackManager packs = new PackManager(List.of(content(packPath)));
+
+        final var candidates = packs.getAttachableDefinitions()
+                .candidatesFor("minecraft:wooden_sword");
+        assertTrue(candidates.stream().anyMatch(candidate ->
+                candidate.identifier().equals("minecraft:wooden_sword.player")));
+
+        final var geometry = packs.getModelDefinitions().getEntityModels().get("geometry.sword");
+        assertNotNull(geometry);
+        final var itemBone = geometry.getParents().stream()
+                .filter(parent -> parent.getName().equals("rightitem"))
+                .findFirst()
+                .orElseThrow();
+        assertNotNull(itemBone.getPolyMesh());
+        assertTrue(itemBone.getPolyMesh().getPositions().length > 0);
+        assertTrue(itemBone.getPolyMesh().getPolys().length > 0);
+    }
+
     private static PlayerAnimationState state(long tick, String mainHandIdentifier) {
         return state(PlayerAnimationState.View.THIRD_PERSON, tick,
                 mainHandIdentifier, 0.0F, 0.0F, 0.0F);
