@@ -607,73 +607,54 @@ public final class GeometryUtil {
             final float depth = mesh.getDepth();
             final List<BoundaryQuad> faces = new ArrayList<>();
 
-            // Bedrock texture_meshes use an X/Z sprite plane with pixel depth along Y. This is
-            // also why the vanilla bow definitions use a non-zero local_pivot.z while depth is
-            // only one pixel. Java's generated item uses a different local axis, so only the
-            // alpha-span generation is shared; the Bedrock axes stay intact here.
-            faces.add(new BoundaryQuad(
-                    new float[][]{{0, 0, 0}, {uvWidth, 0, 0},
-                            {uvWidth, 0, uvHeight}, {0, 0, uvHeight}},
-                    new float[]{0, -1, 0},
-                    new float[]{0, 0, 1, 0, 1, 1, 0, 1}, mesh));
-            faces.add(new BoundaryQuad(
-                    new float[][]{{uvWidth, depth, 0}, {0, depth, 0},
-                            {0, depth, uvHeight}, {uvWidth, depth, uvHeight}},
-                    new float[]{0, 1, 0},
-                    new float[]{1, 0, 1, 1, 0, 1, 0, 0}, mesh));
+            // Bedrock texture_meshes use an X/Z sprite plane with pixel depth along Y. Build
+            // every face with Java's direction-specific vertex/UV mapping, then convert axes.
+            faces.add(javaGeneratedFace(Direction.SOUTH, 0, 0, 16, 16, 7.5F, 8.5F,
+                    0, 0, 16, 16, mesh, depth));
+            faces.add(javaGeneratedFace(Direction.NORTH, 0, 0, 16, 16, 7.5F, 8.5F,
+                    16, 0, 0, 16, mesh, depth));
 
             if (texture != null) {
                 for (SpriteSpan span : spriteSpans(texture)) {
                     final float min = span.min();
                     final float max = span.max() + 1.0F;
                     final float anchor = span.anchor();
-                    final float[][] positions;
-                    final float[] normal;
-                    final float[] uvs;
+                    float fromX = 0.0F, fromY = 0.0F, toX = 0.0F, toY = 0.0F;
+                    float minU = 0.0F, minV = 0.0F, maxU = 0.0F, maxV = 0.0F;
+                    final Direction direction;
                     switch (span.facing()) {
                         case UP -> {
-                            final float z = anchor * zScale;
-                            positions = new float[][]{{min * xScale, 0, z}, {max * xScale, 0, z},
-                                    {max * xScale, depth, z}, {min * xScale, depth, z}};
-                            normal = new float[]{0, 0, -1};
-                            uvs = new float[]{min / texture.width(), anchor / texture.height(),
-                                    max / texture.width(), anchor / texture.height(),
-                                    max / texture.width(), (anchor + 1.0F) / texture.height(),
-                                    min / texture.width(), (anchor + 1.0F) / texture.height()};
+                            direction = Direction.UP;
+                            fromX = min * xScale; toX = (max) * xScale;
+                            fromY = 16.0F - anchor * zScale; toY = fromY;
+                            minU = min * xScale; maxU = max * xScale;
+                            minV = anchor * zScale; maxV = (anchor + 1.0F) * zScale;
                         }
                         case DOWN -> {
-                            final float z = (anchor + 1.0F) * zScale;
-                            positions = new float[][]{{min * xScale, depth, z}, {max * xScale, depth, z},
-                                    {max * xScale, 0, z}, {min * xScale, 0, z}};
-                            normal = new float[]{0, 0, 1};
-                            uvs = new float[]{min / texture.width(), (anchor + 1.0F) / texture.height(),
-                                    max / texture.width(), (anchor + 1.0F) / texture.height(),
-                                    max / texture.width(), anchor / texture.height(),
-                                    min / texture.width(), anchor / texture.height()};
+                            direction = Direction.DOWN;
+                            fromX = min * xScale; toX = max * xScale;
+                            fromY = 16.0F - (anchor + 1.0F) * zScale; toY = fromY;
+                            minU = min * xScale; maxU = max * xScale;
+                            minV = anchor * zScale; maxV = (anchor + 1.0F) * zScale;
                         }
                         case LEFT -> {
-                            final float x = anchor * xScale;
-                            positions = new float[][]{{x, 0, min * zScale}, {x, depth, min * zScale},
-                                    {x, depth, max * zScale}, {x, 0, max * zScale}};
-                            normal = new float[]{-1, 0, 0};
-                            uvs = new float[]{anchor / texture.width(), min / texture.height(),
-                                    anchor / texture.width(), max / texture.height(),
-                                    (anchor + 1.0F) / texture.width(), max / texture.height(),
-                                    (anchor + 1.0F) / texture.width(), min / texture.height()};
+                            direction = Direction.EAST;
+                            fromX = anchor * xScale; toX = fromX;
+                            fromY = 16.0F - max * zScale; toY = 16.0F - min * zScale;
+                            minU = anchor * xScale; maxU = (anchor + 1.0F) * xScale;
+                            minV = min * zScale; maxV = max * zScale;
                         }
                         case RIGHT -> {
-                            final float x = (anchor + 1.0F) * xScale;
-                            positions = new float[][]{{x, depth, min * zScale}, {x, 0, min * zScale},
-                                    {x, 0, max * zScale}, {x, depth, max * zScale}};
-                            normal = new float[]{1, 0, 0};
-                            uvs = new float[]{(anchor + 1.0F) / texture.width(), max / texture.height(),
-                                    (anchor + 1.0F) / texture.width(), min / texture.height(),
-                                    anchor / texture.width(), min / texture.height(),
-                                    anchor / texture.width(), max / texture.height()};
+                            direction = Direction.WEST;
+                            fromX = (anchor + 1.0F) * xScale; toX = fromX;
+                            fromY = 16.0F - max * zScale; toY = 16.0F - min * zScale;
+                            minU = anchor * xScale; maxU = (anchor + 1.0F) * xScale;
+                            minV = min * zScale; maxV = max * zScale;
                         }
                         default -> throw new AssertionError(span.facing());
                     }
-                    faces.add(new BoundaryQuad(positions, normal, uvs, mesh));
+                    faces.add(javaGeneratedFace(direction, fromX, fromY, toX, toY,
+                            7.5F, 8.5F, minU, minV, maxU, maxV, mesh, depth));
                 }
             }
 
@@ -763,6 +744,55 @@ public final class GeometryUtil {
     }
 
     private record BoundaryQuad(float[][] positions, float[] normal, float[] uvs, TextureMesh mesh) {
+    }
+
+    /** Converts one Java generated-item face into the Bedrock texture_mesh local axes. */
+    private static BoundaryQuad javaGeneratedFace(Direction direction,
+                                                   float fromX, float fromY,
+                                                   float toX, float toY,
+                                                   float fromZ, float toZ,
+                                                   float minU, float minV,
+                                                   float maxU, float maxV,
+                                                   TextureMesh mesh, float depth) {
+        final float[][] javaVertices = switch (direction) {
+            case DOWN -> new float[][]{
+                    {fromX, fromY, toZ}, {fromX, fromY, fromZ},
+                    {toX, fromY, fromZ}, {toX, fromY, toZ}};
+            case UP -> new float[][]{
+                    {fromX, toY, fromZ}, {fromX, toY, toZ},
+                    {toX, toY, toZ}, {toX, toY, fromZ}};
+            case NORTH -> new float[][]{
+                    {toX, toY, fromZ}, {toX, fromY, fromZ},
+                    {fromX, fromY, fromZ}, {fromX, toY, fromZ}};
+            case SOUTH -> new float[][]{
+                    {fromX, toY, toZ}, {fromX, fromY, toZ},
+                    {toX, fromY, toZ}, {toX, toY, toZ}};
+            case WEST -> new float[][]{
+                    {fromX, toY, fromZ}, {fromX, fromY, fromZ},
+                    {fromX, fromY, toZ}, {fromX, toY, toZ}};
+            case EAST -> new float[][]{
+                    {toX, toY, toZ}, {toX, fromY, toZ},
+                    {toX, fromY, fromZ}, {toX, toY, fromZ}};
+        };
+        final float[][] bedrock = new float[javaVertices.length][3];
+        for (int i = 0; i < javaVertices.length; i++) {
+            final float[] vertex = javaVertices[i];
+            bedrock[i] = new float[]{vertex[0], (vertex[2] - 7.5F) * depth, 16.0F - vertex[1]};
+        }
+        final float[] uvs = new float[8];
+        for (int i = 0; i < 4; i++) {
+            uvs[i * 2] = (i < 2 ? minU : maxU) / 16.0F;
+            uvs[i * 2 + 1] = (i == 0 || i == 3 ? minV : maxV) / 16.0F;
+        }
+        final float[] normal = switch (direction) {
+            case SOUTH -> new float[]{0, 1, 0};
+            case NORTH -> new float[]{0, -1, 0};
+            case UP -> new float[]{0, 0, -1};
+            case DOWN -> new float[]{0, 0, 1};
+            case EAST -> new float[]{1, 0, 0};
+            case WEST -> new float[]{-1, 0, 0};
+        };
+        return new BoundaryQuad(bedrock, normal, uvs, mesh);
     }
 
     private enum SpriteFacing {
