@@ -8,6 +8,7 @@ import net.minecraft.world.entity.HumanoidArm;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /** Matches an owner-held item against indexed attachable definitions by evaluating item conditions. */
 final class AttachableCandidateMatcher {
@@ -68,7 +69,7 @@ final class AttachableCandidateMatcher {
 
     private static boolean hasThirdPersonAnimation(AttachableDefinitions.AttachableDefinition definition) {
         return definition.data().getAnimations().keySet().stream()
-                .map(String::toLowerCase)
+                .map(name -> name.toLowerCase(Locale.ROOT))
                 .anyMatch(name -> name.startsWith("3rd"));
     }
 
