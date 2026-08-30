@@ -202,9 +202,10 @@ public final class PlayerAnimationRuntime {
             query.set("item_remaining_use_duration", Value.of(value.useRemainingTicks()));
             query.set("main_hand_item_use_duration", Value.of(value.useRemainingTicks()));
             query.set("main_hand_item_max_duration", Value.of(value.useMaxDuration()));
-            // The Bedrock player controller uses has_target to layer its bow-and-arrow arm pose.
-            // Java exposes the equivalent state as the active BOW use animation, not as an AI target.
-            query.set("has_target", Value.of(value.bowAiming()));
+            // has_target is an entity-target query, not the Java bow-use state. Some vanilla player
+            // roots already apply bow_equipped while using a bow; setting this here would layer the
+            // separate bow_and_arrow animation on top and double the arm offsets.
+            query.set("has_target", NumberValue.zero());
             query.set("body_y_rotation", Value.of(value.bodyYaw()));
             query.set("body_x_rotation", Value.of(value.targetXRotation()));
             query.set("target_x_rotation", Value.of(value.targetXRotation()));

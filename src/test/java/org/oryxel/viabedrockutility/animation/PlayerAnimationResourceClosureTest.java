@@ -367,12 +367,21 @@ class PlayerAnimationResourceClosureTest {
         final TestBoneModel model = new TestBoneModel();
         runtime.sampleThirdPerson(model, stateUsingBow(1L));
 
-        assertEquals("1.0", runtime.debugSnapshot().thirdPerson().queries().get("has_target"));
+        assertEquals("0.0", runtime.debugSnapshot().thirdPerson().queries().get("has_target"));
         assertEquals(0.95D, Double.parseDouble(runtime.debugSnapshot().thirdPerson()
                 .variables().get("item_use_normalized")), 1.0e-6D);
         assertEquals(-90.0F, model.rotationX("rightarm"), 1.0e-3F);
         assertEquals(-90.0F, model.rotationX("leftarm"), 1.0e-3F);
         assertEquals(35.0F, model.rotationY("rightitem"), 1.0e-3F);
+
+        final PackManager vanillaOnly = new PackManager(List.of(content(packsRoot.resolve("vanilla.zip"))));
+        final PlayerAnimationRuntime vanillaRuntime = new PlayerAnimationRuntime(vanillaOnly, Map.of());
+        final TestBoneModel vanillaModel = new TestBoneModel();
+        vanillaRuntime.sampleThirdPerson(vanillaModel, stateUsingBow(11L));
+        assertEquals(-90.0F, vanillaModel.rotationX("rightarm"), 1.0e-3F);
+        assertEquals(-5.0F, vanillaModel.rotationY("rightarm"), 1.0e-3F);
+        assertEquals(-90.0F, vanillaModel.rotationX("leftarm"), 1.0e-3F);
+        assertEquals(27.5F, vanillaModel.rotationY("leftarm"), 1.0e-3F);
 
         runtime.sampleThirdPerson(model, state(2L, "minecraft:stick"));
         assertEquals("0.0", runtime.debugSnapshot().thirdPerson().queries().get("has_target"));
