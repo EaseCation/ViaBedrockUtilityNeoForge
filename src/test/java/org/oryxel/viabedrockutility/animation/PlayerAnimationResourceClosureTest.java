@@ -388,6 +388,28 @@ class PlayerAnimationResourceClosureTest {
     }
 
     @Test
+    void thirdPersonBowKeepsBothArmsAlignedWhenCameraTurns() throws Exception {
+        final Path workspace = Path.of(System.getProperty("vbu.workspaceRoot"));
+        final Path packsRoot = workspace.resolve("ec-deploy-assets/bedrock-loader-packs");
+        final Path codeFunPacks = workspace.resolve("ec-deploy-assets/resource-packs/CodeFunCore");
+        final PackManager packs = new PackManager(List.of(
+                content(packsRoot.resolve("vanilla.zip")),
+                content(codeFunPacks.resolve("ec_hub.zip")),
+                content(codeFunPacks.resolve("ec_ze.zip")),
+                content(codeFunPacks.resolve("rl_defense.zip")),
+                content(codeFunPacks.resolve("rl_defense_ec_entity.zip"))));
+
+        final PlayerAnimationRuntime runtime = new PlayerAnimationRuntime(packs, Map.of());
+        final TestBoneModel model = new TestBoneModel();
+        runtime.sampleThirdPerson(model, stateUsingBow(2L, 31.0F, -17.0F));
+
+        assertEquals(-107.0F, model.rotationX("rightarm"), 1.0e-3F);
+        assertEquals(-107.0F, model.rotationX("leftarm"), 1.0e-3F);
+        assertEquals(32.5F, model.rotationY("leftarm") - model.rotationY("rightarm"), 1.0e-3F);
+        assertEquals(35.0F, model.rotationY("rightitem"), 1.0e-3F);
+    }
+
+    @Test
     void woodenSwordAttachableResolvesToNonEmptyTextureMeshGeometry() throws Exception {
         final Path packPath = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "resource-packs", "CodeFunCore", "rl_defense.zip");
@@ -445,12 +467,16 @@ class PlayerAnimationResourceClosureTest {
     }
 
     private static PlayerAnimationState stateUsingBow(long tick) {
+        return stateUsingBow(tick, 0.0F, 0.0F);
+    }
+
+    private static PlayerAnimationState stateUsingBow(long tick, float relativeHeadYaw, float pitch) {
         return new PlayerAnimationState(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 new PlayerAnimationOwner(PLAYER_INSTANCE, LEVEL_INSTANCE),
                 PlayerAnimationState.View.THIRD_PERSON, tick, 0.0F, HumanoidArm.RIGHT,
                 InteractionHand.MAIN_HAND, "minecraft:bow", "", Set.of(),
-                tick, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F,
+                tick, 0.0F, 0.0F, 0.0F, pitch, relativeHeadYaw, 0.0F, 0.0F,
                 1.0F, 1.0F, false, true, true, false, false, false, false,
                 false, false, false, true, false, false, true, false, false, false,
                 1, 19, 20, 0.0F, 0.0F, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
