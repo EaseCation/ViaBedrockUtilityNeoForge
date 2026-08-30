@@ -609,10 +609,15 @@ public final class GeometryUtil {
             faces.add(new BoundaryQuad(
                     new float[][]{{0, 0, 0}, {uvWidth, 0, 0}, {uvWidth, 0, uvHeight}, {0, 0, uvHeight}},
                     new float[]{0, -1, 0},
-                    new float[]{1, 0, 1, 1, 0, 1, 0, 0}, mesh));
+                    // Java's generated-item SOUTH face: left/top -> right/top ->
+                    // right/bottom -> left/bottom. The previous implementation used
+                    // the NORTH ordering for both faces, mirroring the visible sprite.
+                    new float[]{0, 0, 1, 0, 1, 1, 0, 1}, mesh));
             faces.add(new BoundaryQuad(
                     new float[][]{{0, depth, 0}, {0, depth, uvHeight}, {uvWidth, depth, uvHeight}, {uvWidth, depth, 0}},
                     new float[]{0, 1, 0},
+                    // Java's generated-item NORTH face reverses U so the image has the
+                    // same orientation when viewed from the back.
                     new float[]{1, 0, 1, 1, 0, 1, 0, 0}, mesh));
 
             for (SpriteSpan span : spriteSpans(texture)) {
