@@ -243,7 +243,13 @@ public class ViaBedrockUtility {
         final var attachableDebug = net.minecraft.commands.Commands.literal("vbuattachabledebug")
                 .executes(context -> sendAttachableDebug(context, false))
                 .then(net.minecraft.commands.Commands.literal("copy")
-                        .executes(context -> sendAttachableDebug(context, true)));
+                        .executes(context -> sendAttachableDebug(context, true)))
+                .then(net.minecraft.commands.Commands.literal("clear")
+                        .executes(context -> {
+                            this.attachableRuntimeManager.clear();
+                            context.getSource().sendSuccess(() -> Component.literal("VBU attachable diagnostics cleared"), false);
+                            return Command.SINGLE_SUCCESS;
+                        }));
         event.getDispatcher().register(attachableDebug);
 
         final var playerDebug = net.minecraft.commands.Commands.literal("vbuplayerdebug")
@@ -273,6 +279,7 @@ public class ViaBedrockUtility {
                     + ", lastSeenTick=" + snapshot.lastSeenTick()
                     + ", binding=" + snapshot.bindingBone()
                     + ", hostProfile=" + snapshot.hostProfile()
+                    + ", renderPath=" + snapshot.renderPath()
                     + ", semanticChain=" + snapshot.semanticChain()
                     + ", presentationChain=" + snapshot.presentationChain()
                     + ", controllers=" + snapshot.controllerStates()

@@ -66,6 +66,7 @@ final class AttachableRuntimeInstance {
     volatile Matrix4f lastPhysicalAnchorMatrix;
     volatile Matrix4f lastGeometryInstallationMatrix;
     volatile String lastGeometrySummary = "unbuilt";
+    volatile String lastRenderPath = "VBU_ATTACHABLE";
     volatile String lastFailure = "Runtime did not submit geometry";
     private final List<PendingParticleEvent> pendingParticleEvents = new ArrayList<>();
     private final List<PendingSoundEvent> pendingSoundEvents = new ArrayList<>();
@@ -453,6 +454,6 @@ final class AttachableRuntimeInstance {
                 }
             }
         }
-        return "cuboids=" + cuboids + ",vertices=" + vertices;
+        return "modelKind=VBU_GEOMETRY,cuboids=" + cuboids + ",vertices=" + vertices;
     }
 }

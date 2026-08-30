@@ -139,7 +139,8 @@ public final class AttachableRuntimeManager {
                             ? null : runtime.lastPhysicalAnchorMatrix.get(new float[16]),
                     runtime.lastGeometryInstallationMatrix == null
                             ? null : runtime.lastGeometryInstallationMatrix.get(new float[16]),
-                    runtime.lastGeometrySummary);
+                    runtime.lastGeometrySummary,
+                    runtime.lastRenderPath);
         }).toList();
     }
 
@@ -292,7 +293,13 @@ public final class AttachableRuntimeManager {
                 }
             }
         }
-        return found ? "Pure texture_mesh attachable delegated to Java ItemRenderer" : null;
+        if (!found) {
+            return null;
+        }
+        return "renderPath=JAVA_ITEM_FALLBACK,modelKind=TEXTURE_MESH,geometry="
+                + String.join("|", definition.data().getGeometries().values())
+                + ",textures=" + String.join("|", definition.data().getTextures().values())
+                + ",reason=Pure texture_mesh attachable delegated to Java ItemRenderer";
     }
 
     private void recordAttempt(AttachableRuntimeRegistry.RuntimeKey key, long tick, long generation,

@@ -38,7 +38,8 @@ public final class AttachableDebugLog {
                             Map<String, String> controllerStates,
                             List<String> renderPasses, float[] physicalAnchorMatrix,
                             float[] geometryInstallationMatrix,
-                            String geometrySummary) {
+                            String geometrySummary,
+                            String renderPath) {
         public DebugInfo {
             semanticChain = List.copyOf(semanticChain);
             presentationChain = List.copyOf(presentationChain);
@@ -48,6 +49,7 @@ public final class AttachableDebugLog {
             geometryInstallationMatrix = geometryInstallationMatrix == null
                     ? null : geometryInstallationMatrix.clone();
             geometrySummary = geometrySummary == null ? "" : geometrySummary;
+            renderPath = renderPath == null ? "UNAVAILABLE" : renderPath;
         }
 
         @Override
