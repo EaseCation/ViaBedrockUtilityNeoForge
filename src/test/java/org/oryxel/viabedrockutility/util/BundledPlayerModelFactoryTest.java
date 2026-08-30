@@ -55,6 +55,11 @@ class BundledPlayerModelFactoryTest {
 
         assertTrue(files.contains("models/entity/humanoid.custom.geo.json"));
         assertTrue(files.contains("textures/particle/particles.png"));
+        assertTrue(files.contains("textures/items/wood_sword.png"));
+        assertTrue(files.contains("textures/items/bow_standby.png"));
+        assertTrue(files.contains("textures/items/bow_pulling_0.png"));
+        assertTrue(files.contains("textures/items/bow_pulling_1.png"));
+        assertTrue(files.contains("textures/items/bow_pulling_2.png"));
         assertFalse(files.isEmpty());
         assertTrue(files.stream().allMatch(path -> path.equals("LICENSE")
                 || path.equals("manifest.json")
