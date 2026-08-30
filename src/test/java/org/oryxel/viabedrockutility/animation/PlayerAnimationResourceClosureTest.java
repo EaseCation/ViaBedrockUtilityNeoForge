@@ -426,9 +426,8 @@ class PlayerAnimationResourceClosureTest {
                 .filter(parent -> parent.getName().equals("rightitem"))
                 .findFirst()
                 .orElseThrow();
-        assertNotNull(itemBone.getPolyMesh());
-        assertTrue(itemBone.getPolyMesh().getPositions().length > 0);
-        assertTrue(itemBone.getPolyMesh().getPolys().length > 0);
+        assertTrue(itemBone.getTextureMeshes().size() > 0);
+        assertEquals("default", itemBone.getTextureMeshes().getFirst().getTexture());
     }
 
     @Test

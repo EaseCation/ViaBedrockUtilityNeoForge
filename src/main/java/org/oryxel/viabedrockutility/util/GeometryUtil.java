@@ -38,24 +38,21 @@ public final class GeometryUtil {
         return buildModel(geometry, player, slim, geometryName, false, null);
     }
 
-    /**
-     * Builds an attachable geometry in its local Bedrock space. Unlike an entity/player model,
-     * an attachable is rendered below an already resolved hand anchor, so its coordinates must
-     * not receive the player presentation-origin translation.
-     */
+    /** Builds an attachable geometry for an already resolved hand anchor. */
     public static Model buildAttachableModel(final BedrockGeometryModel geometry, final String geometryName) {
         return buildAttachableModel(geometry, geometryName, null);
     }
 
     /**
      * Builds an attachable and, when texture data is available, adds Bedrock's alpha-derived
-     * voxel boundary faces for texture_meshes. The base mesh remains owned by CubeConverter;
-     * this resolver is intentionally runtime-side because a geometry texture is selected by an
-     * attachable render-controller pass rather than by the geometry JSON itself.
+     * voxel boundary faces for texture_meshes. Texture alpha is intentionally resolved at runtime
+     * because an attachable render-controller pass selects the texture independently of geometry.
      */
     public static Model buildAttachableModel(final BedrockGeometryModel geometry, final String geometryName,
                                              final Function<String, TextureAlpha> textureResolver) {
-        return buildModel(geometry, false, false, geometryName, true, textureResolver);
+        // Ordinary cubes/poly_meshes keep the long-standing absolute Bedrock geometry contract.
+        // Only texture_meshes are local sprite sheets installed below the resolved hand anchor.
+        return buildModel(geometry, false, false, geometryName, false, textureResolver);
     }
 
     private static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim,
@@ -125,9 +122,9 @@ public final class GeometryUtil {
             if (bone.getPolyMesh() != null) {
                 buildPolyMeshCuboids(bone.getPolyMesh(), uvWidth, uvHeight, cuboidGroups, localGeometry);
             }
-            if (localGeometry && textureResolver != null && !bone.getTextureMeshes().isEmpty()) {
+            if (textureResolver != null && !bone.getTextureMeshes().isEmpty()) {
                 buildTextureMeshBoundaryCuboids(bone.getTextureMeshes(), uvWidth, uvHeight,
-                        textureResolver, cuboidGroups, localGeometry);
+                        textureResolver, cuboidGroups);
             }
 
             int groupIndex = 0;
@@ -315,7 +312,11 @@ public final class GeometryUtil {
 
         boolean opaque(int x, int y) {
             return x >= 0 && x < width && y >= 0 && y < height
-                    && (alpha[y * width + x] & 0xff) > 140;
+                    && (alpha[y * width + x] & 0xff) != 0;
+        }
+
+        boolean transparent(int x, int y) {
+            return !opaque(x, y);
         }
     }
 
@@ -592,8 +593,7 @@ public final class GeometryUtil {
     private static void buildTextureMeshBoundaryCuboids(List<TextureMesh> meshes, float uvWidth,
                                                          float uvHeight,
                                                          Function<String, TextureAlpha> textureResolver,
-                                                         List<CuboidGroup> cuboidGroups,
-                                                         boolean localGeometry) {
+                                                         List<CuboidGroup> cuboidGroups) {
         for (TextureMesh mesh : meshes) {
             final TextureAlpha texture = textureResolver.apply(mesh.getTexture());
             if (texture == null) {
@@ -604,82 +604,70 @@ public final class GeometryUtil {
             final float depth = mesh.getDepth();
             final List<BoundaryQuad> faces = new ArrayList<>();
 
-            // Vertical transitions (left/right neighbours) produce X-facing strips.
-            for (int y = 0; y < texture.height(); y++) {
-                for (int x = 0; x <= texture.width(); x++) {
-                    final boolean left = texture.opaque(x - 1, y);
-                    final boolean right = texture.opaque(x, y);
-                    if (left == right) {
-                        continue;
-                    }
-                    final int direction = left ? 1 : -1;
-                    float sx = x;
-                    float ex = x;
-                    float sy = y;
-                    float ey = y + 1;
-                    // Blockbench widens a zero-width edge in UV space to keep the strip
-                    // addressable. The position remains on the actual alpha boundary.
-                    float uvSx = sx;
-                    float uvEx = ex;
-                    float uvSy = sy;
-                    float uvEy = ey;
-                    uvSx += 0.1F * -direction;
-                    uvEx += 0.4F * -direction;
-                    uvSy += 0.1F;
-                    uvEy -= 0.1F;
-                    faces.add(new BoundaryQuad(
-                            new float[][]{
-                                    {x * xScale, 0.0F, y * zScale},
-                                    {x * xScale, depth, y * zScale},
-                                    {x * xScale, depth, (y + 1) * zScale},
-                                    {x * xScale, 0.0F, (y + 1) * zScale}
-                            },
-                            new float[]{direction, 0.0F, 0.0F},
-                            new float[]{
-                                    uvEx / texture.width(), 1.0F - uvSy / texture.height(),
-                                    uvEx / texture.width(), 1.0F - uvEy / texture.height(),
-                                    uvSx / texture.width(), 1.0F - uvEy / texture.height(),
-                                    uvSx / texture.width(), 1.0F - uvSy / texture.height()
-                            }, mesh));
-                }
-            }
+            // Bedrock texture_meshes are the Bedrock-space equivalent of Java's generated item
+            // model: two complete faces at depth 0..1 plus only alpha-boundary side spans.
+            faces.add(new BoundaryQuad(
+                    new float[][]{{0, 0, 0}, {uvWidth, 0, 0}, {uvWidth, 0, uvHeight}, {0, 0, uvHeight}},
+                    new float[]{0, -1, 0},
+                    new float[]{1, 0, 1, 1, 0, 1, 0, 0}, mesh));
+            faces.add(new BoundaryQuad(
+                    new float[][]{{0, depth, 0}, {0, depth, uvHeight}, {uvWidth, depth, uvHeight}, {uvWidth, depth, 0}},
+                    new float[]{0, 1, 0},
+                    new float[]{1, 0, 1, 1, 0, 1, 0, 0}, mesh));
 
-            // Horizontal transitions (top/bottom neighbours) produce Z-facing strips.
-            for (int x = 0; x < texture.width(); x++) {
-                for (int y = 0; y <= texture.height(); y++) {
-                    final boolean above = texture.opaque(x, y - 1);
-                    final boolean below = texture.opaque(x, y);
-                    if (above == below) {
-                        continue;
+            for (SpriteSpan span : spriteSpans(texture)) {
+                final float min = span.min();
+                final float max = span.max() + 1.0F;
+                final float anchor = span.anchor();
+                // These are the normalized equivalents of ItemModelGenerator's f6..f9 UVs;
+                // unlike model-space Y, texture V is not reflected a second time.
+                final float[][] positions;
+                final float[] normal;
+                final float[] uvs;
+                switch (span.facing()) {
+                    case UP -> {
+                        float z = anchor * zScale;
+                        positions = new float[][]{{min * xScale, 0, z}, {min * xScale, depth, z},
+                                {max * xScale, depth, z}, {max * xScale, 0, z}};
+                        normal = new float[]{0, 0, -1};
+                        uvs = new float[]{min / texture.width(), anchor / texture.height(),
+                                min / texture.width(), (anchor + 1.0F) / texture.height(),
+                                max / texture.width(), (anchor + 1.0F) / texture.height(),
+                                max / texture.width(), anchor / texture.height()};
                     }
-                    final int direction = above ? -1 : 1;
-                    float sx = x;
-                    float ex = x + 1;
-                    float sy = y;
-                    float ey = y;
-                    float uvSx = sx;
-                    float uvEx = ex;
-                    float uvSy = sy;
-                    float uvEy = ey;
-                    uvSy += 0.1F * direction;
-                    uvEy += 0.4F * direction;
-                    uvSx += 0.1F;
-                    uvEx -= 0.1F;
-                    faces.add(new BoundaryQuad(
-                            new float[][]{
-                                    {x * xScale, 0.0F, y * zScale},
-                                    {(x + 1) * xScale, 0.0F, y * zScale},
-                                    {(x + 1) * xScale, depth, y * zScale},
-                                    {x * xScale, depth, y * zScale}
-                            },
-                            new float[]{0.0F, 0.0F, -direction},
-                            new float[]{
-                                    uvEx / texture.width(), 1.0F - uvSy / texture.height(),
-                                    uvEx / texture.width(), 1.0F - uvEy / texture.height(),
-                                    uvSx / texture.width(), 1.0F - uvEy / texture.height(),
-                                    uvSx / texture.width(), 1.0F - uvSy / texture.height()
-                            }, mesh));
+                    case DOWN -> {
+                        float z = anchor * zScale;
+                        positions = new float[][]{{min * xScale, 0, z}, {max * xScale, 0, z},
+                                {max * xScale, depth, z}, {min * xScale, depth, z}};
+                        normal = new float[]{0, 0, 1};
+                        uvs = new float[]{min / texture.width(), (anchor + 1.0F) / texture.height(),
+                                max / texture.width(), (anchor + 1.0F) / texture.height(),
+                                max / texture.width(), anchor / texture.height(),
+                                min / texture.width(), anchor / texture.height()};
+                    }
+                    case LEFT -> {
+                        float x = anchor * xScale;
+                        positions = new float[][]{{x, 0, min * zScale}, {x, depth, min * zScale},
+                                {x, depth, max * zScale}, {x, 0, max * zScale}};
+                        normal = new float[]{-1, 0, 0};
+                        uvs = new float[]{anchor / texture.width(), max / texture.height(),
+                                anchor / texture.width(), min / texture.height(),
+                                (anchor + 1.0F) / texture.width(), min / texture.height(),
+                                (anchor + 1.0F) / texture.width(), max / texture.height()};
+                    }
+                    case RIGHT -> {
+                        float x = anchor * xScale;
+                        positions = new float[][]{{x, 0, min * zScale}, {x, 0, max * zScale},
+                                {x, depth, max * zScale}, {x, depth, min * zScale}};
+                        normal = new float[]{1, 0, 0};
+                        uvs = new float[]{anchor / texture.width(), max / texture.height(),
+                                anchor / texture.width(), min / texture.height(),
+                                (anchor + 1.0F) / texture.width(), min / texture.height(),
+                                (anchor + 1.0F) / texture.width(), max / texture.height()};
+                    }
+                    default -> throw new AssertionError(span.facing());
                 }
+                faces.add(new BoundaryQuad(positions, normal, uvs, mesh));
             }
 
             for (int batch = 0; batch < faces.size(); batch += 6) {
@@ -698,7 +686,7 @@ public final class GeometryUtil {
                         final float[] p = transformTextureMeshPoint(face.positions()[v], face.mesh());
                         final float[] uv = face.uvs();
                         vertices[v] = new ModelPart.Vertex(
-                                toJavaGeometry(new Vector3f(p[0], p[1], p[2]), localGeometry),
+                                toJavaGeometry(new Vector3f(p[0], p[1], p[2]), true),
                                 uv[v * 2], uv[v * 2 + 1]);
                     }
                     final float[] n = transformTextureMeshNormal(face.normal(), face.mesh());
@@ -707,6 +695,40 @@ public final class GeometryUtil {
                 }
                 ((ICuboid) (Object) cuboid).viaBedrockUtility$markAsVBU();
                 appendCuboid(cuboidGroups, CuboidTransform.IDENTITY, cuboid);
+            }
+        }
+    }
+
+    private static List<SpriteSpan> spriteSpans(TextureAlpha texture) {
+        final List<SpriteSpan> spans = new ArrayList<>();
+        for (int y = 0; y < texture.height(); y++) {
+            for (int x = 0; x < texture.width(); x++) {
+                final boolean visible = !texture.transparent(x, y);
+                checkSpriteTransition(SpriteFacing.UP, spans, texture, x, y, visible);
+                checkSpriteTransition(SpriteFacing.DOWN, spans, texture, x, y, visible);
+                checkSpriteTransition(SpriteFacing.LEFT, spans, texture, x, y, visible);
+                checkSpriteTransition(SpriteFacing.RIGHT, spans, texture, x, y, visible);
+            }
+        }
+        return spans;
+    }
+
+    private static void checkSpriteTransition(SpriteFacing facing, List<SpriteSpan> spans,
+                                              TextureAlpha texture, int x, int y, boolean visible) {
+        if (texture.transparent(x + facing.xOffset, y + facing.yOffset) && visible) {
+            final int anchor = facing.horizontal() ? y : x;
+            final int position = facing.horizontal() ? x : y;
+            SpriteSpan existing = null;
+            for (SpriteSpan span : spans) {
+                if (span.facing() == facing && span.anchor() == anchor) {
+                    existing = span;
+                    break;
+                }
+            }
+            if (existing == null) {
+                spans.add(new SpriteSpan(facing, position, position, anchor));
+            } else {
+                existing.expand(position);
             }
         }
     }
@@ -734,6 +756,47 @@ public final class GeometryUtil {
     }
 
     private record BoundaryQuad(float[][] positions, float[] normal, float[] uvs, TextureMesh mesh) {
+    }
+
+    private enum SpriteFacing {
+        UP(0, -1), DOWN(0, 1), LEFT(-1, 0), RIGHT(1, 0);
+
+        private final int xOffset;
+        private final int yOffset;
+
+        SpriteFacing(int xOffset, int yOffset) {
+            this.xOffset = xOffset;
+            this.yOffset = yOffset;
+        }
+
+        boolean horizontal() {
+            return this == UP || this == DOWN;
+        }
+    }
+
+    private static final class SpriteSpan {
+        private final SpriteFacing facing;
+        private int min;
+        private int max;
+        private final int anchor;
+
+        private SpriteSpan(SpriteFacing facing, int min, int max, int anchor) {
+            this.facing = facing;
+            this.min = min;
+            this.max = max;
+            this.anchor = anchor;
+        }
+
+        private void expand(int position) {
+            min = Math.min(min, position);
+            max = Math.max(max, position);
+        }
+
+        private SpriteFacing facing() { return facing; }
+        private int min() { return min; }
+        private int max() { return max; }
+        private int anchor() { return anchor; }
+        private boolean horizontal() { return facing.horizontal(); }
     }
 
     private static Direction normalToDirection(float nx, float ny, float nz) {
