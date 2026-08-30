@@ -607,80 +607,72 @@ public final class GeometryUtil {
             final float depth = mesh.getDepth();
             final List<BoundaryQuad> faces = new ArrayList<>();
 
-            // Bedrock texture_meshes are the Bedrock-space equivalent of Java's generated item:
-            // the sprite occupies X/Y and depth is along Z. Java's generated item uses
-            // z=7.5..8.5 for the same one-pixel thickness; this local mesh uses 0..depth.
+            // Bedrock texture_meshes use an X/Z sprite plane with pixel depth along Y. This is
+            // also why the vanilla bow definitions use a non-zero local_pivot.z while depth is
+            // only one pixel. Java's generated item uses a different local axis, so only the
+            // alpha-span generation is shared; the Bedrock axes stay intact here.
             faces.add(new BoundaryQuad(
-                    new float[][]{{0, uvHeight, depth}, {uvWidth, uvHeight, depth},
-                            {uvWidth, 0, depth}, {0, 0, depth}},
-                    new float[]{0, 0, 1},
-                    // Java's generated-item SOUTH face: left/top -> right/top ->
-                    // right/bottom -> left/bottom. Source Y is Bedrock-down, so the source
-                    // vertices are reversed before the shared Y reflection to retain this
-                    // Java winding in model space.
-                    new float[]{0, 1, 1, 1, 1, 0, 0, 0}, mesh));
+                    new float[][]{{0, 0, 0}, {uvWidth, 0, 0},
+                            {uvWidth, 0, uvHeight}, {0, 0, uvHeight}},
+                    new float[]{0, -1, 0},
+                    new float[]{0, 0, 1, 0, 1, 1, 0, 1}, mesh));
             faces.add(new BoundaryQuad(
-                    new float[][]{{uvWidth, 0, 0}, {uvWidth, uvHeight, 0},
-                            {0, uvHeight, 0}, {0, 0, 0}},
-                    new float[]{0, 0, -1},
-                    // Java's generated-item NORTH face reverses U so the image has the
-                    // same orientation when viewed from the back.
+                    new float[][]{{uvWidth, depth, 0}, {0, depth, 0},
+                            {0, depth, uvHeight}, {uvWidth, depth, uvHeight}},
+                    new float[]{0, 1, 0},
                     new float[]{1, 0, 1, 1, 0, 1, 0, 0}, mesh));
 
             if (texture != null) {
                 for (SpriteSpan span : spriteSpans(texture)) {
-                final float min = span.min();
-                final float max = span.max() + 1.0F;
-                final float anchor = span.anchor();
-                // These are the normalized equivalents of ItemModelGenerator's f6..f9 UVs;
-                // unlike model-space Y, texture V is not reflected a second time.
-                final float[][] positions;
-                final float[] normal;
-                final float[] uvs;
-                switch (span.facing()) {
-                    case UP -> {
-                        float y = anchor * zScale;
-                        positions = new float[][]{{min * xScale, y, 0}, {max * xScale, y, 0},
-                                {max * xScale, y, depth}, {min * xScale, y, depth}};
-                        // Bedrock -Y becomes Java +Y after the shared Y reflection.
-                        normal = new float[]{0, -1, 0};
-                        uvs = new float[]{min / texture.width(), anchor / texture.height(),
-                                max / texture.width(), anchor / texture.height(),
-                                max / texture.width(), (anchor + 1.0F) / texture.height(),
-                                min / texture.width(), (anchor + 1.0F) / texture.height()};
+                    final float min = span.min();
+                    final float max = span.max() + 1.0F;
+                    final float anchor = span.anchor();
+                    final float[][] positions;
+                    final float[] normal;
+                    final float[] uvs;
+                    switch (span.facing()) {
+                        case UP -> {
+                            final float z = anchor * zScale;
+                            positions = new float[][]{{min * xScale, 0, z}, {min * xScale, depth, z},
+                                    {max * xScale, depth, z}, {max * xScale, 0, z}};
+                            normal = new float[]{0, 0, -1};
+                            uvs = new float[]{min / texture.width(), 1.0F - anchor / texture.height(),
+                                    min / texture.width(), 1.0F - (anchor + 1.0F) / texture.height(),
+                                    max / texture.width(), 1.0F - (anchor + 1.0F) / texture.height(),
+                                    max / texture.width(), 1.0F - anchor / texture.height()};
+                        }
+                        case DOWN -> {
+                            final float z = (anchor + 1.0F) * zScale;
+                            positions = new float[][]{{min * xScale, depth, z}, {min * xScale, 0, z},
+                                    {max * xScale, 0, z}, {max * xScale, depth, z}};
+                            normal = new float[]{0, 0, 1};
+                            uvs = new float[]{min / texture.width(), 1.0F - (anchor + 1.0F) / texture.height(),
+                                    min / texture.width(), 1.0F - anchor / texture.height(),
+                                    max / texture.width(), 1.0F - anchor / texture.height(),
+                                    max / texture.width(), 1.0F - (anchor + 1.0F) / texture.height()};
+                        }
+                        case LEFT -> {
+                            final float x = anchor * xScale;
+                            positions = new float[][]{{x, 0, min * zScale}, {x, 0, max * zScale},
+                                    {x, depth, max * zScale}, {x, depth, min * zScale}};
+                            normal = new float[]{-1, 0, 0};
+                            uvs = new float[]{anchor / texture.width(), 1.0F - max / texture.height(),
+                                    (anchor + 1.0F) / texture.width(), 1.0F - max / texture.height(),
+                                    (anchor + 1.0F) / texture.width(), 1.0F - min / texture.height(),
+                                    anchor / texture.width(), 1.0F - min / texture.height()};
+                        }
+                        case RIGHT -> {
+                            final float x = (anchor + 1.0F) * xScale;
+                            positions = new float[][]{{x, depth, min * zScale}, {x, depth, max * zScale},
+                                    {x, 0, max * zScale}, {x, 0, min * zScale}};
+                            normal = new float[]{1, 0, 0};
+                            uvs = new float[]{(anchor + 1.0F) / texture.width(), 1.0F - min / texture.height(),
+                                    anchor / texture.width(), 1.0F - min / texture.height(),
+                                    anchor / texture.width(), 1.0F - max / texture.height(),
+                                    (anchor + 1.0F) / texture.width(), 1.0F - max / texture.height()};
+                        }
+                        default -> throw new AssertionError(span.facing());
                     }
-                    case DOWN -> {
-                        float y = (anchor + 1.0F) * zScale;
-                        positions = new float[][]{{min * xScale, y, depth}, {max * xScale, y, depth},
-                                {max * xScale, y, 0}, {min * xScale, y, 0}};
-                        normal = new float[]{0, 1, 0};
-                        uvs = new float[]{min / texture.width(), (anchor + 1.0F) / texture.height(),
-                                max / texture.width(), (anchor + 1.0F) / texture.height(),
-                                max / texture.width(), anchor / texture.height(),
-                                min / texture.width(), anchor / texture.height()};
-                    }
-                    case LEFT -> {
-                        float x = anchor * xScale;
-                        positions = new float[][]{{x, min * zScale, depth}, {x, max * zScale, depth},
-                                {x, max * zScale, 0}, {x, min * zScale, 0}};
-                        normal = new float[]{1, 0, 0};
-                        uvs = new float[]{anchor / texture.width(), max / texture.height(),
-                                anchor / texture.width(), min / texture.height(),
-                                (anchor + 1.0F) / texture.width(), min / texture.height(),
-                                (anchor + 1.0F) / texture.width(), max / texture.height()};
-                    }
-                    case RIGHT -> {
-                        float x = anchor * xScale;
-                        positions = new float[][]{{x, min * zScale, 0}, {x, max * zScale, 0},
-                                {x, max * zScale, depth}, {x, min * zScale, depth}};
-                        normal = new float[]{-1, 0, 0};
-                        uvs = new float[]{anchor / texture.width(), max / texture.height(),
-                                anchor / texture.width(), min / texture.height(),
-                                (anchor + 1.0F) / texture.width(), min / texture.height(),
-                                (anchor + 1.0F) / texture.width(), max / texture.height()};
-                    }
-                    default -> throw new AssertionError(span.facing());
-                }
                     faces.add(new BoundaryQuad(positions, normal, uvs, mesh));
                 }
             }
