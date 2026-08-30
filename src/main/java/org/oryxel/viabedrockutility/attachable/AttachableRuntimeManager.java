@@ -39,6 +39,12 @@ import java.util.UUID;
  * {@link AttachableDebugLog}.
  */
 public final class AttachableRuntimeManager {
+    public enum DebugRenderMode {
+        AUTO,
+        JAVA_ITEM,
+        VBU
+    }
+
     private static final long RUNTIME_TTL_TICKS = 20L * 30L;
     private static final long DEBUG_ATTEMPT_TTL_TICKS = 20L * 30L;
     private final AttachableRuntimeRegistry<AttachableRuntimeInstance> runtimes = new AttachableRuntimeRegistry<>();
@@ -46,6 +52,7 @@ public final class AttachableRuntimeManager {
     private final AttachableDebugAttemptStore debugAttempts = new AttachableDebugAttemptStore();
     private final AttachableClientTickCounter tickCounter = new AttachableClientTickCounter();
     private volatile Set<ResourceLocation> candidateItemIdentifiers = Set.of();
+    private volatile DebugRenderMode debugRenderMode = DebugRenderMode.AUTO;
 
     public AttachableRenderResult renderThirdPerson(PlayerRenderState state, AttachableItemSnapshot item,
                                                     AttachableQueryContext.LogicalHand hand, HumanoidArm physicalArm,
@@ -126,6 +133,15 @@ public final class AttachableRuntimeManager {
 
     public int size() {
         return runtimes.size();
+    }
+
+    public DebugRenderMode debugRenderMode() {
+        return debugRenderMode;
+    }
+
+    public void setDebugRenderMode(DebugRenderMode mode) {
+        debugRenderMode = mode == null ? DebugRenderMode.AUTO : mode;
+        clear();
     }
 
     public List<DebugInfo> debugSnapshot() {
@@ -228,8 +244,9 @@ public final class AttachableRuntimeManager {
         // Java's ItemRenderer already owns the exact item/generated extrusion, hand transforms,
         // use animation and left/right mirroring. Let it render these meshes directly instead of
         // applying a second attachable bone transform, while retaining VBU for real 3D geometry.
-        if (view == AttachableQueryContext.ViewContext.FIRST_PERSON
-                || view == AttachableQueryContext.ViewContext.THIRD_PERSON) {
+        if (debugRenderMode != DebugRenderMode.VBU
+                && (view == AttachableQueryContext.ViewContext.FIRST_PERSON
+                || view == AttachableQueryContext.ViewContext.THIRD_PERSON)) {
             final String detail = textureMeshOnlyDetail(packs, candidate.definition());
             if (detail != null) {
                 recordAttempt(key, tick, generation.generation(), item, view,

@@ -249,7 +249,17 @@ public class ViaBedrockUtility {
                             this.attachableRuntimeManager.clear();
                             context.getSource().sendSuccess(() -> Component.literal("VBU attachable diagnostics cleared"), false);
                             return Command.SINGLE_SUCCESS;
-                        }));
+                        }))
+                .then(net.minecraft.commands.Commands.literal("mode")
+                        .then(net.minecraft.commands.Commands.literal("auto")
+                                .executes(context -> setAttachableDebugMode(context,
+                                        AttachableRuntimeManager.DebugRenderMode.AUTO)))
+                        .then(net.minecraft.commands.Commands.literal("java")
+                                .executes(context -> setAttachableDebugMode(context,
+                                        AttachableRuntimeManager.DebugRenderMode.JAVA_ITEM)))
+                        .then(net.minecraft.commands.Commands.literal("vbu")
+                                .executes(context -> setAttachableDebugMode(context,
+                                        AttachableRuntimeManager.DebugRenderMode.VBU))));
         event.getDispatcher().register(attachableDebug);
 
         final var playerDebug = net.minecraft.commands.Commands.literal("vbuplayerdebug")
@@ -267,6 +277,7 @@ public class ViaBedrockUtility {
         final LocalPlayer player = Minecraft.getInstance().player;
         final String header = "VBU attachables: generation=" + this.packGeneration.generation()
                 + ", runtimes=" + snapshots.size() + ", attempts=" + attempts.size()
+                + ", mode=" + this.attachableRuntimeManager.debugRenderMode()
                 + (player == null ? "" : ", main=" + player.getMainHandItem().getItem()
                 + ", off=" + player.getOffhandItem().getItem());
         final java.util.List<String> lines = new java.util.ArrayList<>();
@@ -309,6 +320,15 @@ public class ViaBedrockUtility {
         for (String line : lines) {
             ViaBedrockUtilityNeoForge.LOGGER.info("[AttachableDebug] {}", line);
         }
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int setAttachableDebugMode(
+            com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
+            AttachableRuntimeManager.DebugRenderMode mode) {
+        this.attachableRuntimeManager.setDebugRenderMode(mode);
+        context.getSource().sendSuccess(() -> Component.literal(
+                "VBU attachable render mode=" + this.attachableRuntimeManager.debugRenderMode()), false);
         return Command.SINGLE_SUCCESS;
     }
 
