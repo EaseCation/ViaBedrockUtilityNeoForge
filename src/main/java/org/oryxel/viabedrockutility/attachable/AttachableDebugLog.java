@@ -68,6 +68,7 @@ public final class AttachableDebugLog {
         CONDITION_REJECTED,
         RUNTIME_REJECTED,
         RUNTIME_EXCEPTION,
+        JAVA_ITEM_FALLBACK,
         RENDERED
     }
 

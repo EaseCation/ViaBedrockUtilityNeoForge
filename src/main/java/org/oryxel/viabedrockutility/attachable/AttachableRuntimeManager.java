@@ -14,6 +14,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
+import org.cube.converter.model.element.Parent;
+import org.cube.converter.model.impl.bedrock.BedrockGeometryModel;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.attachable.AttachableDebugLog.AttemptStage;
 import org.oryxel.viabedrockutility.attachable.AttachableDebugLog.DebugAttempt;
@@ -221,6 +223,21 @@ public final class AttachableRuntimeManager {
             return AttachableRenderResult.NOT_APPLICABLE;
         }
 
+        // A pure Bedrock texture_mesh is the resource-pack representation of a 2D item sprite.
+        // Java's ItemRenderer already owns the exact item/generated extrusion, hand transforms,
+        // use animation and left/right mirroring. Let it render these meshes directly instead of
+        // applying a second attachable bone transform, while retaining VBU for real 3D geometry.
+        if (view == AttachableQueryContext.ViewContext.FIRST_PERSON
+                || view == AttachableQueryContext.ViewContext.THIRD_PERSON) {
+            final String detail = textureMeshOnlyDetail(packs, candidate.definition());
+            if (detail != null) {
+                recordAttempt(key, tick, generation.generation(), item, view,
+                        AttemptStage.JAVA_ITEM_FALLBACK, candidateCount,
+                        candidate.definition().identifier(), List.of(), "", detail);
+                return AttachableRenderResult.NOT_APPLICABLE;
+            }
+        }
+
         final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(playerModel);
         if (metadata == null) {
             recordAttempt(key, tick, generation.generation(), item, view, AttemptStage.METADATA_MISSING,
@@ -254,6 +271,28 @@ public final class AttachableRuntimeManager {
                     "[Attachable] Runtime failed for " + candidate.definition().identifier(), throwable);
             return AttachableRenderResult.SUPPRESSED;
         }
+    }
+
+    private static String textureMeshOnlyDetail(PackManager packs,
+                                                AttachableDefinitions.AttachableDefinition definition) {
+        if (definition.data().getGeometries().isEmpty()) {
+            return null;
+        }
+        boolean found = false;
+        for (String geometryName : definition.data().getGeometries().values()) {
+            final BedrockGeometryModel geometry = packs.getModelDefinitions().getEntityModels().get(geometryName);
+            if (geometry == null) {
+                continue;
+            }
+            found = true;
+            for (Parent bone : geometry.getParents()) {
+                if (!bone.getCubes().isEmpty() || bone.getPolyMesh() != null
+                        || bone.getTextureMeshes().isEmpty()) {
+                    return null;
+                }
+            }
+        }
+        return found ? "Pure texture_mesh attachable delegated to Java ItemRenderer" : null;
     }
 
     private void recordAttempt(AttachableRuntimeRegistry.RuntimeKey key, long tick, long generation,
