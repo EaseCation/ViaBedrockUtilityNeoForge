@@ -70,6 +70,14 @@ class BedrockTransformConventionTest {
     }
 
     @Test
+    void attachableLocalCoordinatesDoNotReceivePresentationOrigin() {
+        Vector3f local = BedrockTransformConvention.toJavaLocalModel(new Vector3f(3.0F, 7.0F, -2.0F));
+        assertEquals(3.0F, local.x, 1.0e-6F);
+        assertEquals(-7.0F, local.y, 1.0e-6F);
+        assertEquals(-2.0F, local.z, 1.0e-6F);
+    }
+
+    @Test
     void geometryInstallationOnlyAddsRootScale() {
         Matrix4f physicalAnchor = new Matrix4f()
                 .translation(-0.5F, 0.75F, -1.25F)

@@ -44,6 +44,11 @@ public final class BedrockTransformConvention {
         return new Vector3f(bedrockPixels.x, -bedrockPixels.y + PLAYER_PRESENTATION_ORIGIN_Y, bedrockPixels.z);
     }
 
+    /** Converts a Bedrock displacement/attachable-local coordinate without a scene origin shift. */
+    public static Vector3f toJavaLocalModel(Vector3f bedrockPixels) {
+        return new Vector3f(bedrockPixels.x, -bedrockPixels.y, bedrockPixels.z);
+    }
+
     /** Converts a Bedrock-space direction/normal (Y negated, no presentation-origin shift). */
     public static Vector3f toJavaNormal(Vector3f bedrockNormal) {
         return new Vector3f(bedrockNormal.x, -bedrockNormal.y, bedrockNormal.z);

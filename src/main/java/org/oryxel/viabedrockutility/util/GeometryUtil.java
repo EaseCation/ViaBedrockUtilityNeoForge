@@ -8,9 +8,11 @@ import net.minecraft.core.Direction;
 import org.cube.converter.model.element.Cube;
 import org.cube.converter.model.element.Parent;
 import org.cube.converter.model.element.PolyMesh;
+import org.cube.converter.model.element.TextureMesh;
 import org.cube.converter.model.impl.bedrock.BedrockGeometryModel;
 import org.cube.converter.util.element.Position3V;
 import org.cube.converter.util.element.UVMap;
+import org.joml.Matrix3f;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICuboid;
@@ -20,6 +22,8 @@ import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
 import org.oryxel.viabedrockutility.attachable.BedrockTransformConvention;
 
 import java.util.*;
+import java.util.function.Function;
+import java.awt.image.BufferedImage;
 
 public final class GeometryUtil {
     // One kill switch restores the pre-Stage-2 one-cuboid-per-part topology and vanilla tree walk.
@@ -27,10 +31,36 @@ public final class GeometryUtil {
             !Boolean.getBoolean("viabedrockutility.disableIndexedRender");
 
     public static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim) {
-        return buildModel(geometry, player, slim, null);
+        return buildModel(geometry, player, slim, null, false, null);
     }
 
     public static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim, final String geometryName) {
+        return buildModel(geometry, player, slim, geometryName, false, null);
+    }
+
+    /**
+     * Builds an attachable geometry in its local Bedrock space. Unlike an entity/player model,
+     * an attachable is rendered below an already resolved hand anchor, so its coordinates must
+     * not receive the player presentation-origin translation.
+     */
+    public static Model buildAttachableModel(final BedrockGeometryModel geometry, final String geometryName) {
+        return buildAttachableModel(geometry, geometryName, null);
+    }
+
+    /**
+     * Builds an attachable and, when texture data is available, adds Bedrock's alpha-derived
+     * voxel boundary faces for texture_meshes. The base mesh remains owned by CubeConverter;
+     * this resolver is intentionally runtime-side because a geometry texture is selected by an
+     * attachable render-controller pass rather than by the geometry JSON itself.
+     */
+    public static Model buildAttachableModel(final BedrockGeometryModel geometry, final String geometryName,
+                                             final Function<String, TextureAlpha> textureResolver) {
+        return buildModel(geometry, false, false, geometryName, true, textureResolver);
+    }
+
+    private static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim,
+                                    final String geometryName, final boolean localGeometry,
+                                    final Function<String, TextureAlpha> textureResolver) {
         // There are some times when the skin image file is larger than the geometry UV points.
         // In this case, we need to scale UV calls
         // https://github.com/Camotoy/BedrockSkinUtility/issues/9
@@ -78,29 +108,33 @@ public final class GeometryUtil {
                     }
                 }
 
-                final Vector3f javaPos = BedrockTransformConvention.toJavaModel(
-                        new Vector3f(pos.getX(), pos.getY(), pos.getZ()));
+                final Vector3f javaPos = toJavaGeometry(
+                        new Vector3f(pos.getX(), pos.getY(), pos.getZ()), localGeometry);
                 final ModelPart.Cube cuboid = new ModelPart.Cube(0, 0, javaPos.x,
                         javaPos.y - sizeY,
                         javaPos.z, sizeX, sizeY, sizeZ, inflate, inflate, inflate,
                         cube.isMirror(), uvWidth, uvHeight, set);
                 correctUv(cuboid, set, uvMap, uvWidth, uvHeight, cube.getInflate(), cube.isMirror());
                 markAsVbuBox(cuboid, inflate, cube.isMirror());
-                appendCuboid(cuboidGroups, CuboidTransform.from(cube), cuboid);
+                appendCuboid(cuboidGroups, CuboidTransform.from(cube, localGeometry), cuboid);
             }
 
             // poly_mesh vertices are already absolute and use the identity transform. Appending them after
             // boxes preserves their previous relative submission position; an adjacent identity box group
             // may absorb them without changing order.
             if (bone.getPolyMesh() != null) {
-                buildPolyMeshCuboids(bone.getPolyMesh(), uvWidth, uvHeight, cuboidGroups);
+                buildPolyMeshCuboids(bone.getPolyMesh(), uvWidth, uvHeight, cuboidGroups, localGeometry);
+            }
+            if (localGeometry && textureResolver != null && !bone.getTextureMeshes().isEmpty()) {
+                buildTextureMeshBoundaryCuboids(bone.getTextureMeshes(), uvWidth, uvHeight,
+                        textureResolver, cuboidGroups, localGeometry);
             }
 
             int groupIndex = 0;
             for (CuboidGroup group : cuboidGroups) {
                 final ModelPart cubePart = new ModelPart(List.copyOf(group.cuboids), Map.of());
                 final IModelPart cubePartExtension = (IModelPart) (Object) cubePart;
-                cubePartExtension.viaBedrockUtility$setPivot(group.transform.javaPivot());
+                cubePartExtension.viaBedrockUtility$setPivot(group.transform.javaPivot(localGeometry));
                 cubePartExtension.viaBedrockUtility$setAngles(group.transform.rotation());
                 cubePartExtension.viaBedrockUtility$setVBUModel();
                 cubePartExtension.viaBedrockUtility$setCubeGroup();
@@ -119,10 +153,10 @@ public final class GeometryUtil {
             partExtension.viaBedrockUtility$setNeededOffset(neededOffset);
             partExtension.viaBedrockUtility$setAngles(new Vector3f(bone.getRotation().getX(), bone.getRotation().getY(), bone.getRotation().getZ()));
 
-            // All bones (player and entity, including legs) use one coordinate convention: the bone's
-            // rotation pivot is its Bedrock pivot mapped to Java space (Y inverted, +24.016 offset), and
-            // its cubes are positioned in that same inverted-Y space. No setPos is used.
-            partExtension.viaBedrockUtility$setPivot(toJavaPivot(bone.getPivot()));
+            // Entity/player geometry uses the absolute presentation origin. An attachable is local
+            // to its resolved host bone and therefore only reflects Bedrock's Y axis here.
+            partExtension.viaBedrockUtility$setPivot(toJavaGeometry(new Vector3f(
+                    bone.getPivot().getX(), bone.getPivot().getY(), bone.getPivot().getZ()), localGeometry));
 
             final String semanticParent = bone.getParent();
             String name = bone.getName();
@@ -249,6 +283,40 @@ public final class GeometryUtil {
 
     private static Vector3f toJavaPivot(Position3V pivot) {
         return BedrockTransformConvention.toJavaModel(new Vector3f(pivot.getX(), pivot.getY(), pivot.getZ()));
+    }
+
+    private static Vector3f toJavaGeometry(Vector3f bedrock, boolean localGeometry) {
+        return localGeometry
+                ? BedrockTransformConvention.toJavaLocalModel(bedrock)
+                : BedrockTransformConvention.toJavaModel(bedrock);
+    }
+
+    /** CPU-side alpha snapshot used only while constructing a cached attachable model. */
+    public record TextureAlpha(int width, int height, byte[] alpha) {
+        public TextureAlpha {
+            if (width <= 0 || height <= 0 || alpha == null || alpha.length != width * height) {
+                throw new IllegalArgumentException("Invalid texture alpha dimensions");
+            }
+            alpha = alpha.clone();
+        }
+
+        public static TextureAlpha from(BufferedImage image) {
+            Objects.requireNonNull(image, "image");
+            final int width = image.getWidth();
+            final int height = image.getHeight();
+            final byte[] alpha = new byte[width * height];
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    alpha[y * width + x] = (byte) ((image.getRGB(x, y) >>> 24) & 0xff);
+                }
+            }
+            return new TextureAlpha(width, height, alpha);
+        }
+
+        boolean opaque(int x, int y) {
+            return x >= 0 && x < width && y >= 0 && y < height
+                    && (alpha[y * width + x] & 0xff) > 140;
+        }
     }
 
     private static void appendCuboid(List<CuboidGroup> groups, CuboidTransform transform, ModelPart.Cube cuboid) {
@@ -419,7 +487,7 @@ public final class GeometryUtil {
     }
 
     private static void buildPolyMeshCuboids(PolyMesh polyMesh, float uvWidth, float uvHeight,
-                                              List<CuboidGroup> cuboidGroups) {
+                                              List<CuboidGroup> cuboidGroups, boolean localGeometry) {
         final float[][] pmPositions = polyMesh.getPositions();
         final float[][] pmNormals = polyMesh.getNormals();
         final float[][] pmUvs = polyMesh.getUvs();
@@ -443,7 +511,7 @@ public final class GeometryUtil {
                 float pz = pmPositions[posIdx][2];
 
                 // Coordinate transform: Bedrock -> Java model space (Y inverted + presentation origin)
-                final Vector3f javaPos = BedrockTransformConvention.toJavaModel(new Vector3f(px, py, pz));
+                final Vector3f javaPos = toJavaGeometry(new Vector3f(px, py, pz), localGeometry);
                 px = javaPos.x;
                 py = javaPos.y;
                 pz = javaPos.z;
@@ -515,6 +583,159 @@ public final class GeometryUtil {
         }
     }
 
+    /**
+     * Adds the alpha-derived extrusion faces used by Blockbench's texture_mesh preview. A
+     * texture mesh is a complete rectangular front/back sheet plus only the pixel-boundary
+     * side strips; mapping the entire texture onto every side is what produces the visibly
+     * compressed sword/bow edges.
+     */
+    private static void buildTextureMeshBoundaryCuboids(List<TextureMesh> meshes, float uvWidth,
+                                                         float uvHeight,
+                                                         Function<String, TextureAlpha> textureResolver,
+                                                         List<CuboidGroup> cuboidGroups,
+                                                         boolean localGeometry) {
+        for (TextureMesh mesh : meshes) {
+            final TextureAlpha texture = textureResolver.apply(mesh.getTexture());
+            if (texture == null) {
+                continue;
+            }
+            final float xScale = uvWidth / texture.width();
+            final float zScale = uvHeight / texture.height();
+            final float depth = mesh.getDepth();
+            final List<BoundaryQuad> faces = new ArrayList<>();
+
+            // Vertical transitions (left/right neighbours) produce X-facing strips.
+            for (int y = 0; y < texture.height(); y++) {
+                for (int x = 0; x <= texture.width(); x++) {
+                    final boolean left = texture.opaque(x - 1, y);
+                    final boolean right = texture.opaque(x, y);
+                    if (left == right) {
+                        continue;
+                    }
+                    final int direction = left ? 1 : -1;
+                    float sx = x;
+                    float ex = x;
+                    float sy = y;
+                    float ey = y + 1;
+                    // Blockbench widens a zero-width edge in UV space to keep the strip
+                    // addressable. The position remains on the actual alpha boundary.
+                    float uvSx = sx;
+                    float uvEx = ex;
+                    float uvSy = sy;
+                    float uvEy = ey;
+                    uvSx += 0.1F * -direction;
+                    uvEx += 0.4F * -direction;
+                    uvSy += 0.1F;
+                    uvEy -= 0.1F;
+                    faces.add(new BoundaryQuad(
+                            new float[][]{
+                                    {x * xScale, 0.0F, y * zScale},
+                                    {x * xScale, depth, y * zScale},
+                                    {x * xScale, depth, (y + 1) * zScale},
+                                    {x * xScale, 0.0F, (y + 1) * zScale}
+                            },
+                            new float[]{direction, 0.0F, 0.0F},
+                            new float[]{
+                                    uvEx / texture.width(), 1.0F - uvSy / texture.height(),
+                                    uvEx / texture.width(), 1.0F - uvEy / texture.height(),
+                                    uvSx / texture.width(), 1.0F - uvEy / texture.height(),
+                                    uvSx / texture.width(), 1.0F - uvSy / texture.height()
+                            }, mesh));
+                }
+            }
+
+            // Horizontal transitions (top/bottom neighbours) produce Z-facing strips.
+            for (int x = 0; x < texture.width(); x++) {
+                for (int y = 0; y <= texture.height(); y++) {
+                    final boolean above = texture.opaque(x, y - 1);
+                    final boolean below = texture.opaque(x, y);
+                    if (above == below) {
+                        continue;
+                    }
+                    final int direction = above ? -1 : 1;
+                    float sx = x;
+                    float ex = x + 1;
+                    float sy = y;
+                    float ey = y;
+                    float uvSx = sx;
+                    float uvEx = ex;
+                    float uvSy = sy;
+                    float uvEy = ey;
+                    uvSy += 0.1F * direction;
+                    uvEy += 0.4F * direction;
+                    uvSx += 0.1F;
+                    uvEx -= 0.1F;
+                    faces.add(new BoundaryQuad(
+                            new float[][]{
+                                    {x * xScale, 0.0F, y * zScale},
+                                    {(x + 1) * xScale, 0.0F, y * zScale},
+                                    {(x + 1) * xScale, depth, y * zScale},
+                                    {x * xScale, depth, y * zScale}
+                            },
+                            new float[]{0.0F, 0.0F, -direction},
+                            new float[]{
+                                    uvEx / texture.width(), 1.0F - uvSy / texture.height(),
+                                    uvEx / texture.width(), 1.0F - uvEy / texture.height(),
+                                    uvSx / texture.width(), 1.0F - uvEy / texture.height(),
+                                    uvSx / texture.width(), 1.0F - uvSy / texture.height()
+                            }, mesh));
+                }
+            }
+
+            for (int batch = 0; batch < faces.size(); batch += 6) {
+                final int end = Math.min(batch + 6, faces.size());
+                final EnumSet<Direction> directions = EnumSet.noneOf(Direction.class);
+                for (int i = 0; i < end - batch; i++) {
+                    directions.add(Direction.values()[i]);
+                }
+                final ModelPart.Cube cuboid = new ModelPart.Cube(
+                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 1, 1, directions);
+                final ModelPart.Polygon[] polygons = cuboid.polygons;
+                for (int i = batch; i < end; i++) {
+                    final BoundaryQuad face = faces.get(i);
+                    final ModelPart.Vertex[] vertices = new ModelPart.Vertex[4];
+                    for (int v = 0; v < 4; v++) {
+                        final float[] p = transformTextureMeshPoint(face.positions()[v], face.mesh());
+                        final float[] uv = face.uvs();
+                        vertices[v] = new ModelPart.Vertex(
+                                toJavaGeometry(new Vector3f(p[0], p[1], p[2]), localGeometry),
+                                uv[v * 2], uv[v * 2 + 1]);
+                    }
+                    final float[] n = transformTextureMeshNormal(face.normal(), face.mesh());
+                    polygons[i - batch] = new ModelPart.Polygon(
+                            vertices, BedrockTransformConvention.toJavaNormal(new Vector3f(n[0], n[1], n[2])));
+                }
+                ((ICuboid) (Object) cuboid).viaBedrockUtility$markAsVBU();
+                appendCuboid(cuboidGroups, CuboidTransform.IDENTITY, cuboid);
+            }
+        }
+    }
+
+    private static float[] transformTextureMeshPoint(float[] point, TextureMesh mesh) {
+        final Position3V pivot = mesh.getLocalPivot();
+        final Position3V scale = mesh.getScale();
+        final Position3V rotation = mesh.getRotation();
+        final Position3V position = mesh.getPosition();
+        float x = (point[0] - pivot.getX()) * scale.getX();
+        float y = (point[1] - pivot.getY()) * scale.getY();
+        float z = (point[2] - pivot.getZ()) * scale.getZ();
+        final Vector3f rotated = rotateTextureMesh(new Vector3f(x, y, z), rotation);
+        return new float[]{rotated.x + position.getX(), rotated.y + position.getY(), rotated.z + position.getZ()};
+    }
+
+    private static float[] transformTextureMeshNormal(float[] normal, TextureMesh mesh) {
+        final Vector3f rotated = rotateTextureMesh(new Vector3f(normal[0], normal[1], normal[2]), mesh.getRotation());
+        return new float[]{rotated.x, rotated.y, rotated.z};
+    }
+
+    private static Vector3f rotateTextureMesh(Vector3f value, Position3V rotation) {
+        return new Matrix3f().rotationZYX((float) Math.toRadians(rotation.getZ()),
+                (float) Math.toRadians(rotation.getY()), (float) Math.toRadians(rotation.getX())).transform(value);
+    }
+
+    private record BoundaryQuad(float[][] positions, float[] normal, float[] uvs, TextureMesh mesh) {
+    }
+
     private static Direction normalToDirection(float nx, float ny, float nz) {
         final Vector3f java = BedrockTransformConvention.toJavaNormal(new Vector3f(nx, ny, nz));
         nx = java.x;
@@ -534,7 +755,7 @@ public final class GeometryUtil {
                                    int rotationX, int rotationY, int rotationZ) {
         private static final CuboidTransform IDENTITY = new CuboidTransform(0, 0, 0, 0, 0, 0);
 
-        static CuboidTransform from(Cube cube) {
+        static CuboidTransform from(Cube cube, boolean localGeometry) {
             final Position3V rotation = cube.getRotation();
             if (rotation.getX() == 0.0F && rotation.getY() == 0.0F && rotation.getZ() == 0.0F) {
                 // With no rotation the pivot translations cancel, so all such cubes share one transform.
@@ -551,15 +772,15 @@ public final class GeometryUtil {
             );
         }
 
-        Vector3f javaPivot() {
+        Vector3f javaPivot(boolean localGeometry) {
             if (this == IDENTITY) {
                 return new Vector3f();
             }
-            return BedrockTransformConvention.toJavaModel(new Vector3f(
+            Vector3f pivot = new Vector3f(
                     Float.intBitsToFloat(this.pivotX),
                     Float.intBitsToFloat(this.pivotY),
-                    Float.intBitsToFloat(this.pivotZ)
-            ));
+                    Float.intBitsToFloat(this.pivotZ));
+            return toJavaGeometry(pivot, localGeometry);
         }
 
         Vector3f rotation() {

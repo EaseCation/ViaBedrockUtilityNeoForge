@@ -48,7 +48,7 @@ final class AttachableRuntimeInstance {
     private final AttachableScopeFactory.RuntimeActor actor = new AttachableScopeFactory.RuntimeActor(variables);
     private final Scope persistentScope = Scope.create();
     private final AttachableAnimationRuntime animation;
-    private final Map<String, ModelState> models = new HashMap<>();
+    private final Map<ModelKey, ModelState> models = new HashMap<>();
     private AttachableScopeFactory.RuntimeScope frame;
     private AttachableOwnerSnapshot owner = AttachableOwnerSnapshot.EMPTY;
     private Entity ownerEntity;
@@ -71,6 +71,7 @@ final class AttachableRuntimeInstance {
 
     private record PendingParticleEvent(String alias, String locator, String preEffectExpression) {}
     private record PendingSoundEvent(String alias, String locator) {}
+    private record ModelKey(String geometry, String texture) {}
 
     AttachableRuntimeInstance(AttachableDefinitions.AttachableDefinition definition, PackManager packs) {
         this.definition = definition;
@@ -190,10 +191,15 @@ final class AttachableRuntimeInstance {
         int submittedPasses = 0;
         for (AttachableRenderPlanner.PlannedPass<BedrockPlayerModelMetadata.Bone> plannedPass : planned) {
             try {
-                final ModelState model = models.computeIfAbsent(plannedPass.pass().geometryValue(),
+                final ModelKey modelKey = new ModelKey(plannedPass.pass().geometryValue(),
+                        plannedPass.pass().textureValue());
+                final ModelState model = models.computeIfAbsent(modelKey,
                         ignored -> {
-                            final Model built = GeometryUtil.buildModel(plannedPass.geometry(),
-                                    false, false, plannedPass.pass().geometryValue());
+                            final Model built = GeometryUtil.buildAttachableModel(
+                                    plannedPass.geometry(), plannedPass.pass().geometryValue(),
+                                    alias -> AttachableTextureResolver.resolve(
+                                            packs, definition.data().getTextures(), alias,
+                                            plannedPass.pass().textureValue()));
                             return new ModelState(built, new McBoneModel(built));
                         });
                 animation.sample(model.bones(), partialTick, frame.scope(), frame.context());

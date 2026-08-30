@@ -61,9 +61,11 @@ final class DetachedAttachableRenderer {
             return false;
         }
 
-        final DetachedKey key = new DetachedKey(generation.generation(), definition.identifier(), geometryName);
+        final DetachedKey key = new DetachedKey(generation.generation(), definition.identifier(), geometryName, textureName);
         final DetachedModel detached = detachedModels.computeIfAbsent(key, ignored -> new DetachedModel(
-                GeometryUtil.buildModel(geometry, false, false, geometryName),
+                GeometryUtil.buildAttachableModel(geometry, geometryName,
+                        alias -> AttachableTextureResolver.resolve(
+                                packs, definition.data().getTextures(), alias, textureName)),
                 detachedBounds(packs, geometryName, geometry)));
         final ResourceLocation texture = ResourceLocation.parse(textureName.toLowerCase(Locale.ROOT));
         final String material = defaultValue(definition.data().getMaterials());
@@ -161,7 +163,8 @@ final class DetachedAttachableRenderer {
         return matrix;
     }
 
-    private record DetachedKey(long generation, String attachableIdentifier, String geometryIdentifier) {
+    private record DetachedKey(long generation, String attachableIdentifier, String geometryIdentifier,
+                               String textureIdentifier) {
     }
 
     private record DetachedModel(Model model, DetachedBounds bounds) {
