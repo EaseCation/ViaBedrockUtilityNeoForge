@@ -60,6 +60,35 @@ class BedrockTransformConventionTest {
     }
 
     @Test
+    void geometryInstallationPreservesThePhysicalAnchor() {
+        Matrix4f physicalAnchor = new Matrix4f()
+                .translation(0.75F, -0.25F, 1.5F)
+                .rotateZYX(0.2F, -0.4F, 0.1F);
+        Matrix4f installation = BedrockTransformConvention.geometryInstallation(physicalAnchor);
+
+        assertMatrixEquals(physicalAnchor, installation);
+    }
+
+    @Test
+    void attachableLocalCoordinatesDoNotReceivePresentationOrigin() {
+        Vector3f local = BedrockTransformConvention.toJavaLocalModel(new Vector3f(3.0F, 7.0F, -2.0F));
+        assertEquals(3.0F, local.x, 1.0e-6F);
+        assertEquals(-7.0F, local.y, 1.0e-6F);
+        assertEquals(-2.0F, local.z, 1.0e-6F);
+    }
+
+    @Test
+    void geometryInstallationOnlyAddsRootScale() {
+        Matrix4f physicalAnchor = new Matrix4f()
+                .translation(-0.5F, 0.75F, -1.25F)
+                .rotateZYX(-0.15F, 0.3F, -0.25F);
+        Matrix4f installation = BedrockTransformConvention.geometryInstallation(
+                physicalAnchor, 0.6F, 0.8F, 1.2F);
+
+        assertMatrixEquals(new Matrix4f(physicalAnchor).scale(0.6F, 0.8F, 1.2F), installation);
+    }
+
+    @Test
     void blockbenchPreviewVectorsUseTheirOwnCoordinateBridge() {
         Vector3f position = BedrockTransformConvention.blockbenchVectorToJavaModel(
                 new Vector3f(-13.5F, -10.0F, 12.0F));
@@ -102,12 +131,22 @@ class BedrockTransformConventionTest {
 
     @Test
     void blockbenchCameraFacesPositiveEditorZIntoNegativeRenderZ() {
-        Vector3f pointInFront = BedrockFirstPersonView.STANDARD.cameraMatrix()
+        Vector3f pointInFront = AttachableHostContext.firstPersonCameraMatrix()
                 .transformPosition(new Vector3f(0.0F,
                         (BedrockTransformConvention.PLAYER_PRESENTATION_ORIGIN_Y - 27.41F) / 16.0F,
                         12.0F / 16.0F));
 
         assertTrue(pointInFront.z < 0.0F);
+    }
+
+    @Test
+    void firstPersonCameraDoesNotOwnPlayerLookPitch() {
+        final Matrix4f expected = BedrockTransformConvention.blockbenchSceneToRenderSpace(
+                new Matrix4f().lookAt(
+                        0.0F, 27.41F, 0.0F,
+                        0.0F, 27.41F, 10.0F,
+                        0.0F, 1.0F, 0.0F));
+        assertMatrixEquals(expected, AttachableHostContext.firstPersonCameraMatrix());
     }
 
     private static void assertMatrixEquals(Matrix4f expected, Matrix4f actual) {

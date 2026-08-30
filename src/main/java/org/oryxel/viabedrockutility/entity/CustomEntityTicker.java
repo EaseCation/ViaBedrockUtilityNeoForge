@@ -450,6 +450,7 @@ public class CustomEntityTicker implements AnimationEventListener {
                                     controller,
                                     this.entityDefinition.entityData().getAnimations(),
                                     this.packManager.getAnimationDefinitions(),
+                                    this.packManager.getAnimationControllerDefinitions(),
                                     this);
                             this.controllerInstances.add(instance);
                             ViaBedrockUtilityNeoForge.LOGGER.debug("[Animation] Registered controller '{}' ({})", animate.name(), animId);

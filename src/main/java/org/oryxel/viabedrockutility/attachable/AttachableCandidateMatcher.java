@@ -8,6 +8,7 @@ import net.minecraft.world.entity.HumanoidArm;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /** Matches an owner-held item against indexed attachable definitions by evaluating item conditions. */
 final class AttachableCandidateMatcher {
@@ -41,7 +42,35 @@ final class AttachableCandidateMatcher {
                     "[Attachable] Multiple definitions matched " + item.itemIdentifier() + ": " + identifiers,
                     null);
         }
-        return matches.isEmpty() ? null : matches.getFirst();
+        if (matches.isEmpty()) {
+            return null;
+        }
+
+        // Bedrock player attachables commonly have a separate *.player definition that only
+        // supplies player-specific geometry/materials. The owning player entity still declares
+        // the 3rd-person item animation (3rdtool/3rdbow/etc.) on its companion definition. When
+        // the selected player definition has no such animation, use that companion for third
+        // person so the item inherits the same Bedrock hand pose instead of staying at origin.
+        if (view == AttachableQueryContext.ViewContext.THIRD_PERSON
+                && "minecraft:player".equalsIgnoreCase(owner.identifier())) {
+            Candidate selected = matches.getFirst();
+            if (!hasThirdPersonAnimation(selected.definition())) {
+                for (Candidate candidate : matches) {
+                    if (hasThirdPersonAnimation(candidate.definition())) {
+                        selected = candidate;
+                        break;
+                    }
+                }
+            }
+            return selected;
+        }
+        return matches.getFirst();
+    }
+
+    private static boolean hasThirdPersonAnimation(AttachableDefinitions.AttachableDefinition definition) {
+        return definition.data().getAnimations().keySet().stream()
+                .map(name -> name.toLowerCase(Locale.ROOT))
+                .anyMatch(name -> name.startsWith("3rd"));
     }
 
     record Candidate(AttachableDefinitions.AttachableDefinition definition) {

@@ -31,7 +31,19 @@ final class AttachableRenderTypes {
         if ((pass.colorArgb() >>> 24) < 255 || name.contains("blend") || name.contains("spectator")) {
             return RenderType.entityTranslucent(texture);
         }
-        final boolean cull = !name.contains("no_cull") && !name.contains("double_sided");
+        // entity_alphatest is defined by Bedrock as entity_nocull. This matters
+        // for flat texture_mesh attachables such as vanilla swords: a one-sided
+        // Java cutout can disappear solely because its visible face is reversed.
+        final boolean cull = pass.cull()
+                && !name.contains("no_cull")
+                && !name.contains("double_sided")
+                && !name.equals("entity_alphatest")
+                && !name.equals("entity_alphatest_glint")
+                && !name.equals("entity_alphatest_glint_item")
+                && !name.equals("entity_alphatest_change_color")
+                && !name.equals("entity_alphatest_change_color_glint")
+                && !name.equals("item_in_hand_entity_alphatest")
+                && !name.equals("item_in_hand_entity_alphatest_color");
         if (name.contains("alpha_test") || name.contains("alphatest")
                 || name.contains("enchanted") || name.contains("glint")) {
             return cull ? RenderType.entityCutout(texture) : RenderType.entityCutoutNoCull(texture);

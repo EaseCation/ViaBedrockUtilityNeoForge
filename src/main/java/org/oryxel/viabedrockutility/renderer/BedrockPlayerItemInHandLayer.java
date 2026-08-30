@@ -72,14 +72,12 @@ public class BedrockPlayerItemInHandLayer extends PlayerItemInHandLayer<PlayerRe
         final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(model);
         if (metadata == null) {
             warnMissingMetadata();
-            super.renderArmWithItem(state, item, arm, poseStack, bufferSource, packedLight);
             return;
         }
 
         AttachPoint attach = resolveAttach(metadata, arm);
         if (attach == null) {
             warnMissingAttach();
-            super.renderArmWithItem(state, item, arm, poseStack, bufferSource, packedLight);
             return;
         }
         logAttachPoint(state, arm, attach);
@@ -165,31 +163,20 @@ public class BedrockPlayerItemInHandLayer extends PlayerItemInHandLayer<PlayerRe
             return new AttachPoint("locator:" + locator.locator().originalName(), locator.bone(), armTarget, locator.locator().point());
         }
 
-        if (armBone != null) {
-            BedrockPlayerModelMetadata.Bounds bounds = armBone.bounds();
-            if (bounds == null) {
-                bounds = metadata.directChildBounds(armBone);
-            }
-            if (bounds != null) {
-                // VBU compatibility fallback, not an official Bedrock attachable semantic.
-                return new AttachPoint("arm_bounds_fallback", armBone, armBone, bounds.handFallbackPoint());
-            }
-        }
-
         return null;
     }
 
     private static void warnMissingMetadata() {
         if (!warnedMissingMetadata) {
             warnedMissingMetadata = true;
-            ViaBedrockUtilityNeoForge.LOGGER.warn("[VBU] Custom player model has no Bedrock attach metadata; using vanilla hand item transform");
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[VBU] Custom player model has no Bedrock attach metadata; suppressing player item host");
         }
     }
 
     private static void warnMissingAttach() {
         if (!warnedMissingAttach) {
             warnedMissingAttach = true;
-            ViaBedrockUtilityNeoForge.LOGGER.warn("[VBU] No Bedrock hand attach point found; using vanilla hand item transform");
+            ViaBedrockUtilityNeoForge.LOGGER.warn("[VBU] No Bedrock hand attach point found; suppressing player item host");
         }
     }
 

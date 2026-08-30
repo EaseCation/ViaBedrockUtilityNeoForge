@@ -17,9 +17,9 @@ import org.joml.Vector3f;
  * and {@link #blockbenchRotationToJavaModel(Vector3f)} — Blockbench editor space bridges.</li>
  * <li>{@link #bedrockBindingOffset(Vector3f, BindingOffsetFrame)} — Bedrock bone/locator binding
  * offsets to the local axes declared by an anchor.</li>
- * <li>{@link #deformation(Vector3f, Vector3f, Vector3f, Vector3f)}, {@link #hostDeformation(Matrix4f, Matrix4f)}
- * and {@link #hostAttachment(Matrix4f, Matrix4f, Vector3f)} — bone-space composition on already
- * converted values.</li>
+ * <li>{@link #deformation(Vector3f, Vector3f, Vector3f, Vector3f)}, {@link #hostDeformation(Matrix4f, Matrix4f)},
+ * {@link #hostAttachment(Matrix4f, Matrix4f, Vector3f)} and
+ * {@link #geometryInstallation(Matrix4f)} — bone-space composition on already converted values.</li>
  * </ul>
  * Animation offsets cross the Bedrock→Java boundary exactly once, in
  * {@code ModelPartBoneTarget.addOffset} (Y negation); {@code IModelPart} offset/pivot setters store
@@ -42,6 +42,11 @@ public final class BedrockTransformConvention {
 
     public static Vector3f toJavaModel(Vector3f bedrockPixels) {
         return new Vector3f(bedrockPixels.x, -bedrockPixels.y + PLAYER_PRESENTATION_ORIGIN_Y, bedrockPixels.z);
+    }
+
+    /** Converts a Bedrock displacement/attachable-local coordinate without a scene origin shift. */
+    public static Vector3f toJavaLocalModel(Vector3f bedrockPixels) {
+        return new Vector3f(bedrockPixels.x, -bedrockPixels.y, bedrockPixels.z);
     }
 
     /** Converts a Bedrock-space direction/normal (Y negated, no presentation-origin shift). */
@@ -114,6 +119,14 @@ public final class BedrockTransformConvention {
         return new Vector3f(-blockbenchDegrees.x, -blockbenchDegrees.y, blockbenchDegrees.z);
     }
 
+    /**
+     * Bedrock animation Euler deltas use the same axes as VBU's Java ModelPart animation adapter.
+     * Unlike Blockbench preview rotations, they have not crossed an editor-space reflection.
+     */
+    public static Vector3f bedrockAnimationRotationToJavaModel(Vector3f bedrockDegrees) {
+        return new Vector3f(bedrockDegrees);
+    }
+
     private static Vector3f reflectedHostVector(Vector3f vector) {
         return new Vector3f(-vector.x, -vector.y, vector.z);
     }
@@ -147,6 +160,18 @@ public final class BedrockTransformConvention {
                 .translate(javaAnchorPixels.x / PIXELS_PER_BLOCK,
                         javaAnchorPixels.y / PIXELS_PER_BLOCK,
                         javaAnchorPixels.z / PIXELS_PER_BLOCK);
+    }
+
+    /** Keeps model installation explicit from the physical anchor used by locators and effects. */
+    public static Matrix4f geometryInstallation(Matrix4f physicalAnchor) {
+        return geometryInstallation(physicalAnchor, 1.0F, 1.0F, 1.0F);
+    }
+
+    /** Applies the attachable root scale without changing the established attachment anchor. */
+    public static Matrix4f geometryInstallation(Matrix4f physicalAnchor,
+                                                float scaleX, float scaleY, float scaleZ) {
+        return new Matrix4f(physicalAnchor)
+                .scale(scaleX, scaleY, scaleZ);
     }
 
 }

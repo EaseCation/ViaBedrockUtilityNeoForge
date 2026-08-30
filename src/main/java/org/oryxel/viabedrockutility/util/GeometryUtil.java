@@ -8,9 +8,11 @@ import net.minecraft.core.Direction;
 import org.cube.converter.model.element.Cube;
 import org.cube.converter.model.element.Parent;
 import org.cube.converter.model.element.PolyMesh;
+import org.cube.converter.model.element.TextureMesh;
 import org.cube.converter.model.impl.bedrock.BedrockGeometryModel;
 import org.cube.converter.util.element.Position3V;
 import org.cube.converter.util.element.UVMap;
+import org.joml.Matrix3f;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICuboid;
@@ -20,6 +22,8 @@ import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
 import org.oryxel.viabedrockutility.attachable.BedrockTransformConvention;
 
 import java.util.*;
+import java.util.function.Function;
+import java.awt.image.BufferedImage;
 
 public final class GeometryUtil {
     // One kill switch restores the pre-Stage-2 one-cuboid-per-part topology and vanilla tree walk.
@@ -27,10 +31,33 @@ public final class GeometryUtil {
             !Boolean.getBoolean("viabedrockutility.disableIndexedRender");
 
     public static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim) {
-        return buildModel(geometry, player, slim, null);
+        return buildModel(geometry, player, slim, null, false, null);
     }
 
     public static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim, final String geometryName) {
+        return buildModel(geometry, player, slim, geometryName, false, null);
+    }
+
+    /** Builds an attachable geometry for an already resolved hand anchor. */
+    public static Model buildAttachableModel(final BedrockGeometryModel geometry, final String geometryName) {
+        return buildAttachableModel(geometry, geometryName, null);
+    }
+
+    /**
+     * Builds an attachable and, when texture data is available, adds Bedrock's alpha-derived
+     * voxel boundary faces for texture_meshes. Texture alpha is intentionally resolved at runtime
+     * because an attachable render-controller pass selects the texture independently of geometry.
+     */
+    public static Model buildAttachableModel(final BedrockGeometryModel geometry, final String geometryName,
+                                             final Function<String, TextureAlpha> textureResolver) {
+        // Ordinary cubes/poly_meshes keep the long-standing absolute Bedrock geometry contract.
+        // Only texture_meshes are local sprite sheets installed below the resolved hand anchor.
+        return buildModel(geometry, false, false, geometryName, false, textureResolver);
+    }
+
+    private static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim,
+                                    final String geometryName, final boolean localGeometry,
+                                    final Function<String, TextureAlpha> textureResolver) {
         // There are some times when the skin image file is larger than the geometry UV points.
         // In this case, we need to scale UV calls
         // https://github.com/Camotoy/BedrockSkinUtility/issues/9
@@ -78,29 +105,33 @@ public final class GeometryUtil {
                     }
                 }
 
-                final Vector3f javaPos = BedrockTransformConvention.toJavaModel(
-                        new Vector3f(pos.getX(), pos.getY(), pos.getZ()));
+                final Vector3f javaPos = toJavaGeometry(
+                        new Vector3f(pos.getX(), pos.getY(), pos.getZ()), localGeometry);
                 final ModelPart.Cube cuboid = new ModelPart.Cube(0, 0, javaPos.x,
                         javaPos.y - sizeY,
                         javaPos.z, sizeX, sizeY, sizeZ, inflate, inflate, inflate,
                         cube.isMirror(), uvWidth, uvHeight, set);
                 correctUv(cuboid, set, uvMap, uvWidth, uvHeight, cube.getInflate(), cube.isMirror());
                 markAsVbuBox(cuboid, inflate, cube.isMirror());
-                appendCuboid(cuboidGroups, CuboidTransform.from(cube), cuboid);
+                appendCuboid(cuboidGroups, CuboidTransform.from(cube, localGeometry), cuboid);
             }
 
             // poly_mesh vertices are already absolute and use the identity transform. Appending them after
             // boxes preserves their previous relative submission position; an adjacent identity box group
             // may absorb them without changing order.
             if (bone.getPolyMesh() != null) {
-                buildPolyMeshCuboids(bone.getPolyMesh(), uvWidth, uvHeight, cuboidGroups);
+                buildPolyMeshCuboids(bone.getPolyMesh(), uvWidth, uvHeight, cuboidGroups, localGeometry);
+            }
+            if (textureResolver != null && !bone.getTextureMeshes().isEmpty()) {
+                buildTextureMeshBoundaryCuboids(bone.getTextureMeshes(), uvWidth, uvHeight,
+                        textureResolver, cuboidGroups);
             }
 
             int groupIndex = 0;
             for (CuboidGroup group : cuboidGroups) {
                 final ModelPart cubePart = new ModelPart(List.copyOf(group.cuboids), Map.of());
                 final IModelPart cubePartExtension = (IModelPart) (Object) cubePart;
-                cubePartExtension.viaBedrockUtility$setPivot(group.transform.javaPivot());
+                cubePartExtension.viaBedrockUtility$setPivot(group.transform.javaPivot(localGeometry));
                 cubePartExtension.viaBedrockUtility$setAngles(group.transform.rotation());
                 cubePartExtension.viaBedrockUtility$setVBUModel();
                 cubePartExtension.viaBedrockUtility$setCubeGroup();
@@ -119,10 +150,10 @@ public final class GeometryUtil {
             partExtension.viaBedrockUtility$setNeededOffset(neededOffset);
             partExtension.viaBedrockUtility$setAngles(new Vector3f(bone.getRotation().getX(), bone.getRotation().getY(), bone.getRotation().getZ()));
 
-            // All bones (player and entity, including legs) use one coordinate convention: the bone's
-            // rotation pivot is its Bedrock pivot mapped to Java space (Y inverted, +24.016 offset), and
-            // its cubes are positioned in that same inverted-Y space. No setPos is used.
-            partExtension.viaBedrockUtility$setPivot(toJavaPivot(bone.getPivot()));
+            // Entity/player geometry uses the absolute presentation origin. An attachable is local
+            // to its resolved host bone and therefore only reflects Bedrock's Y axis here.
+            partExtension.viaBedrockUtility$setPivot(toJavaGeometry(new Vector3f(
+                    bone.getPivot().getX(), bone.getPivot().getY(), bone.getPivot().getZ()), localGeometry));
 
             final String semanticParent = bone.getParent();
             String name = bone.getName();
@@ -249,6 +280,44 @@ public final class GeometryUtil {
 
     private static Vector3f toJavaPivot(Position3V pivot) {
         return BedrockTransformConvention.toJavaModel(new Vector3f(pivot.getX(), pivot.getY(), pivot.getZ()));
+    }
+
+    private static Vector3f toJavaGeometry(Vector3f bedrock, boolean localGeometry) {
+        return localGeometry
+                ? BedrockTransformConvention.toJavaLocalModel(bedrock)
+                : BedrockTransformConvention.toJavaModel(bedrock);
+    }
+
+    /** CPU-side alpha snapshot used only while constructing a cached attachable model. */
+    public record TextureAlpha(int width, int height, byte[] alpha) {
+        public TextureAlpha {
+            if (width <= 0 || height <= 0 || alpha == null || alpha.length != width * height) {
+                throw new IllegalArgumentException("Invalid texture alpha dimensions");
+            }
+            alpha = alpha.clone();
+        }
+
+        public static TextureAlpha from(BufferedImage image) {
+            Objects.requireNonNull(image, "image");
+            final int width = image.getWidth();
+            final int height = image.getHeight();
+            final byte[] alpha = new byte[width * height];
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    alpha[y * width + x] = (byte) ((image.getRGB(x, y) >>> 24) & 0xff);
+                }
+            }
+            return new TextureAlpha(width, height, alpha);
+        }
+
+        boolean opaque(int x, int y) {
+            return x >= 0 && x < width && y >= 0 && y < height
+                    && (alpha[y * width + x] & 0xff) != 0;
+        }
+
+        boolean transparent(int x, int y) {
+            return !opaque(x, y);
+        }
     }
 
     private static void appendCuboid(List<CuboidGroup> groups, CuboidTransform transform, ModelPart.Cube cuboid) {
@@ -419,7 +488,7 @@ public final class GeometryUtil {
     }
 
     private static void buildPolyMeshCuboids(PolyMesh polyMesh, float uvWidth, float uvHeight,
-                                              List<CuboidGroup> cuboidGroups) {
+                                              List<CuboidGroup> cuboidGroups, boolean localGeometry) {
         final float[][] pmPositions = polyMesh.getPositions();
         final float[][] pmNormals = polyMesh.getNormals();
         final float[][] pmUvs = polyMesh.getUvs();
@@ -443,7 +512,7 @@ public final class GeometryUtil {
                 float pz = pmPositions[posIdx][2];
 
                 // Coordinate transform: Bedrock -> Java model space (Y inverted + presentation origin)
-                final Vector3f javaPos = BedrockTransformConvention.toJavaModel(new Vector3f(px, py, pz));
+                final Vector3f javaPos = toJavaGeometry(new Vector3f(px, py, pz), localGeometry);
                 px = javaPos.x;
                 py = javaPos.y;
                 pz = javaPos.z;
@@ -515,6 +584,258 @@ public final class GeometryUtil {
         }
     }
 
+    /**
+     * Adds the alpha-derived extrusion faces used by Blockbench's texture_mesh preview. A
+     * texture mesh is a complete rectangular front/back sheet plus only the pixel-boundary
+     * side strips; mapping the entire texture onto every side is what produces the visibly
+     * compressed sword/bow edges.
+     */
+    private static void buildTextureMeshBoundaryCuboids(List<TextureMesh> meshes, float uvWidth,
+                                                         float uvHeight,
+                                                         Function<String, TextureAlpha> textureResolver,
+                                                         List<CuboidGroup> cuboidGroups) {
+        for (TextureMesh mesh : meshes) {
+            final TextureAlpha texture = textureResolver.apply(mesh.getTexture());
+            // Bedrock's texture_mesh always has a rectangular front/back sheet. Alpha data is
+            // only needed for the optional pixel-boundary extrusion; a missing image must not
+            // turn the whole attachable into an empty model (Java's item/generated path has the
+            // same rectangular geometry even before seam fixing).
+            final int textureWidth = texture == null ? Math.max(1, Math.round(uvWidth)) : texture.width();
+            final int textureHeight = texture == null ? Math.max(1, Math.round(uvHeight)) : texture.height();
+            final float xScale = uvWidth / textureWidth;
+            final float zScale = uvHeight / textureHeight;
+            final float depth = mesh.getDepth();
+            final List<BoundaryQuad> faces = new ArrayList<>();
+
+            // Bedrock texture_meshes use an X/Z sprite plane with pixel depth along Y. Build
+            // every face with Java's direction-specific vertex/UV mapping, then convert axes.
+            faces.add(javaGeneratedFace(Direction.SOUTH, 0, 0, 16, 16, 7.5F, 8.5F,
+                    0, 0, 16, 16, mesh, depth));
+            faces.add(javaGeneratedFace(Direction.NORTH, 0, 0, 16, 16, 7.5F, 8.5F,
+                    16, 0, 0, 16, mesh, depth));
+
+            if (texture != null) {
+                for (SpriteSpan span : spriteSpans(texture)) {
+                    final float min = span.min();
+                    final float max = span.max() + 1.0F;
+                    final float anchor = span.anchor();
+                    float fromX = 0.0F, fromY = 0.0F, toX = 0.0F, toY = 0.0F;
+                    float minU = 0.0F, minV = 0.0F, maxU = 0.0F, maxV = 0.0F;
+                    final Direction direction;
+                    switch (span.facing()) {
+                        case UP -> {
+                            direction = Direction.UP;
+                            fromX = min * xScale; toX = (max) * xScale;
+                            fromY = 16.0F - anchor * zScale; toY = fromY;
+                            minU = min * xScale; maxU = max * xScale;
+                            minV = anchor * zScale; maxV = (anchor + 1.0F) * zScale;
+                        }
+                        case DOWN -> {
+                            direction = Direction.DOWN;
+                            fromX = min * xScale; toX = max * xScale;
+                            fromY = 16.0F - (anchor + 1.0F) * zScale; toY = fromY;
+                            minU = min * xScale; maxU = max * xScale;
+                            minV = anchor * zScale; maxV = (anchor + 1.0F) * zScale;
+                        }
+                        case LEFT -> {
+                            direction = Direction.EAST;
+                            fromX = anchor * xScale; toX = fromX;
+                            fromY = 16.0F - max * zScale; toY = 16.0F - min * zScale;
+                            minU = anchor * xScale; maxU = (anchor + 1.0F) * xScale;
+                            minV = min * zScale; maxV = max * zScale;
+                        }
+                        case RIGHT -> {
+                            direction = Direction.WEST;
+                            fromX = (anchor + 1.0F) * xScale; toX = fromX;
+                            fromY = 16.0F - max * zScale; toY = 16.0F - min * zScale;
+                            minU = anchor * xScale; maxU = (anchor + 1.0F) * xScale;
+                            minV = min * zScale; maxV = max * zScale;
+                        }
+                        default -> throw new AssertionError(span.facing());
+                    }
+                    faces.add(javaGeneratedFace(direction, fromX, fromY, toX, toY,
+                            7.5F, 8.5F, minU, minV, maxU, maxV, mesh, depth));
+                }
+            }
+
+            for (int batch = 0; batch < faces.size(); batch += 6) {
+                final int end = Math.min(batch + 6, faces.size());
+                final EnumSet<Direction> directions = EnumSet.noneOf(Direction.class);
+                for (int i = 0; i < end - batch; i++) {
+                    directions.add(Direction.values()[i]);
+                }
+                final ModelPart.Cube cuboid = new ModelPart.Cube(
+                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 1, 1, directions);
+                final ModelPart.Polygon[] polygons = cuboid.polygons;
+                for (int i = batch; i < end; i++) {
+                    final BoundaryQuad face = faces.get(i);
+                    final ModelPart.Vertex[] vertices = new ModelPart.Vertex[4];
+                    for (int v = 0; v < 4; v++) {
+                        final float[] p = transformTextureMeshPoint(face.positions()[v], face.mesh());
+                        final float[] uv = face.uvs();
+                        vertices[v] = new ModelPart.Vertex(
+                                toJavaGeometry(new Vector3f(p[0], p[1], p[2]), true),
+                                uv[v * 2], uv[v * 2 + 1]);
+                    }
+                    final float[] n = transformTextureMeshNormal(face.normal(), face.mesh());
+                    polygons[i - batch] = new ModelPart.Polygon(
+                            vertices, BedrockTransformConvention.toJavaNormal(new Vector3f(n[0], n[1], n[2])));
+                }
+                ((ICuboid) (Object) cuboid).viaBedrockUtility$markAsVBU();
+                appendCuboid(cuboidGroups, CuboidTransform.IDENTITY, cuboid);
+            }
+        }
+    }
+
+    private static List<SpriteSpan> spriteSpans(TextureAlpha texture) {
+        final List<SpriteSpan> spans = new ArrayList<>();
+        for (int y = 0; y < texture.height(); y++) {
+            for (int x = 0; x < texture.width(); x++) {
+                final boolean visible = !texture.transparent(x, y);
+                checkSpriteTransition(SpriteFacing.UP, spans, texture, x, y, visible);
+                checkSpriteTransition(SpriteFacing.DOWN, spans, texture, x, y, visible);
+                checkSpriteTransition(SpriteFacing.LEFT, spans, texture, x, y, visible);
+                checkSpriteTransition(SpriteFacing.RIGHT, spans, texture, x, y, visible);
+            }
+        }
+        return spans;
+    }
+
+    private static void checkSpriteTransition(SpriteFacing facing, List<SpriteSpan> spans,
+                                              TextureAlpha texture, int x, int y, boolean visible) {
+        if (texture.transparent(x + facing.xOffset, y + facing.yOffset) && visible) {
+            final int anchor = facing.horizontal() ? y : x;
+            final int position = facing.horizontal() ? x : y;
+            SpriteSpan existing = null;
+            for (SpriteSpan span : spans) {
+                if (span.facing() == facing && span.anchor() == anchor) {
+                    existing = span;
+                    break;
+                }
+            }
+            if (existing == null) {
+                spans.add(new SpriteSpan(facing, position, position, anchor));
+            } else {
+                existing.expand(position);
+            }
+        }
+    }
+
+    private static float[] transformTextureMeshPoint(float[] point, TextureMesh mesh) {
+        final Position3V pivot = mesh.getLocalPivot();
+        final Position3V scale = mesh.getScale();
+        final Position3V rotation = mesh.getRotation();
+        final Position3V position = mesh.getPosition();
+        float x = (point[0] - pivot.getX()) * scale.getX();
+        float y = (point[1] - pivot.getY()) * scale.getY();
+        float z = (point[2] - pivot.getZ()) * scale.getZ();
+        final Vector3f rotated = rotateTextureMesh(new Vector3f(x, y, z), rotation);
+        return new float[]{rotated.x + position.getX(), rotated.y + position.getY(), rotated.z + position.getZ()};
+    }
+
+    private static float[] transformTextureMeshNormal(float[] normal, TextureMesh mesh) {
+        final Vector3f rotated = rotateTextureMesh(new Vector3f(normal[0], normal[1], normal[2]), mesh.getRotation());
+        return new float[]{rotated.x, rotated.y, rotated.z};
+    }
+
+    private static Vector3f rotateTextureMesh(Vector3f value, Position3V rotation) {
+        return new Matrix3f().rotationZYX((float) Math.toRadians(rotation.getZ()),
+                (float) Math.toRadians(rotation.getY()), (float) Math.toRadians(rotation.getX())).transform(value);
+    }
+
+    private record BoundaryQuad(float[][] positions, float[] normal, float[] uvs, TextureMesh mesh) {
+    }
+
+    /** Converts one Java generated-item face into the Bedrock texture_mesh local axes. */
+    private static BoundaryQuad javaGeneratedFace(Direction direction,
+                                                   float fromX, float fromY,
+                                                   float toX, float toY,
+                                                   float fromZ, float toZ,
+                                                   float minU, float minV,
+                                                   float maxU, float maxV,
+                                                   TextureMesh mesh, float depth) {
+        final float[][] javaVertices = switch (direction) {
+            case DOWN -> new float[][]{
+                    {fromX, fromY, toZ}, {fromX, fromY, fromZ},
+                    {toX, fromY, fromZ}, {toX, fromY, toZ}};
+            case UP -> new float[][]{
+                    {fromX, toY, fromZ}, {fromX, toY, toZ},
+                    {toX, toY, toZ}, {toX, toY, fromZ}};
+            case NORTH -> new float[][]{
+                    {toX, toY, fromZ}, {toX, fromY, fromZ},
+                    {fromX, fromY, fromZ}, {fromX, toY, fromZ}};
+            case SOUTH -> new float[][]{
+                    {fromX, toY, toZ}, {fromX, fromY, toZ},
+                    {toX, fromY, toZ}, {toX, toY, toZ}};
+            case WEST -> new float[][]{
+                    {fromX, toY, fromZ}, {fromX, fromY, fromZ},
+                    {fromX, fromY, toZ}, {fromX, toY, toZ}};
+            case EAST -> new float[][]{
+                    {toX, toY, toZ}, {toX, fromY, toZ},
+                    {toX, fromY, fromZ}, {toX, toY, fromZ}};
+        };
+        final float[][] bedrock = new float[javaVertices.length][3];
+        for (int i = 0; i < javaVertices.length; i++) {
+            final float[] vertex = javaVertices[i];
+            bedrock[i] = new float[]{vertex[0], (vertex[2] - 7.5F) * depth, 16.0F - vertex[1]};
+        }
+        final float[] uvs = new float[8];
+        for (int i = 0; i < 4; i++) {
+            uvs[i * 2] = (i < 2 ? minU : maxU) / 16.0F;
+            uvs[i * 2 + 1] = (i == 0 || i == 3 ? minV : maxV) / 16.0F;
+        }
+        final float[] normal = switch (direction) {
+            case SOUTH -> new float[]{0, 1, 0};
+            case NORTH -> new float[]{0, -1, 0};
+            case UP -> new float[]{0, 0, -1};
+            case DOWN -> new float[]{0, 0, 1};
+            case EAST -> new float[]{1, 0, 0};
+            case WEST -> new float[]{-1, 0, 0};
+        };
+        return new BoundaryQuad(bedrock, normal, uvs, mesh);
+    }
+
+    private enum SpriteFacing {
+        UP(0, -1), DOWN(0, 1), LEFT(-1, 0), RIGHT(1, 0);
+
+        private final int xOffset;
+        private final int yOffset;
+
+        SpriteFacing(int xOffset, int yOffset) {
+            this.xOffset = xOffset;
+            this.yOffset = yOffset;
+        }
+
+        boolean horizontal() {
+            return this == UP || this == DOWN;
+        }
+    }
+
+    private static final class SpriteSpan {
+        private final SpriteFacing facing;
+        private int min;
+        private int max;
+        private final int anchor;
+
+        private SpriteSpan(SpriteFacing facing, int min, int max, int anchor) {
+            this.facing = facing;
+            this.min = min;
+            this.max = max;
+            this.anchor = anchor;
+        }
+
+        private void expand(int position) {
+            min = Math.min(min, position);
+            max = Math.max(max, position);
+        }
+
+        private SpriteFacing facing() { return facing; }
+        private int min() { return min; }
+        private int max() { return max; }
+        private int anchor() { return anchor; }
+        private boolean horizontal() { return facing.horizontal(); }
+    }
+
     private static Direction normalToDirection(float nx, float ny, float nz) {
         final Vector3f java = BedrockTransformConvention.toJavaNormal(new Vector3f(nx, ny, nz));
         nx = java.x;
@@ -534,7 +855,7 @@ public final class GeometryUtil {
                                    int rotationX, int rotationY, int rotationZ) {
         private static final CuboidTransform IDENTITY = new CuboidTransform(0, 0, 0, 0, 0, 0);
 
-        static CuboidTransform from(Cube cube) {
+        static CuboidTransform from(Cube cube, boolean localGeometry) {
             final Position3V rotation = cube.getRotation();
             if (rotation.getX() == 0.0F && rotation.getY() == 0.0F && rotation.getZ() == 0.0F) {
                 // With no rotation the pivot translations cancel, so all such cubes share one transform.
@@ -551,15 +872,15 @@ public final class GeometryUtil {
             );
         }
 
-        Vector3f javaPivot() {
+        Vector3f javaPivot(boolean localGeometry) {
             if (this == IDENTITY) {
                 return new Vector3f();
             }
-            return BedrockTransformConvention.toJavaModel(new Vector3f(
+            Vector3f pivot = new Vector3f(
                     Float.intBitsToFloat(this.pivotX),
                     Float.intBitsToFloat(this.pivotY),
-                    Float.intBitsToFloat(this.pivotZ)
-            ));
+                    Float.intBitsToFloat(this.pivotZ));
+            return toJavaGeometry(pivot, localGeometry);
         }
 
         Vector3f rotation() {

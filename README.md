@@ -63,7 +63,7 @@ ViaBedrock handles Bedrock → Java protocol translation on the proxy side, whil
 | `PayloadHandler` | Manages chunked skin data reception and assembly |
 | `CustomPlayerRenderer` | Custom player renderer with texture override and animation overlay support |
 | `AnimatedSkinOverlay` | Animated skin overlays supporting LINEAR (sequential frame) and BLINKING (automatic eye blink) playback modes |
-| `PlayerAnimationManager` | Manages Bedrock animation overrides for players, handling axis clearing against vanilla animations |
+| `PlayerAnimationRuntime` | Runs the merged Bedrock player scripts and root controller with per-player animation alias overrides |
 | `PlayerSkinBuilder` | Cross-version compatible SkinTextures builder |
 
 **Skin Data Flow**:

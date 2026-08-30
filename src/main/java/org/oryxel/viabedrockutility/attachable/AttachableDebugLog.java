@@ -32,21 +32,34 @@ public final class AttachableDebugLog {
 
     public record DebugInfo(AttachableRuntimeRegistry.RuntimeKey runtimeKey,
                             AttachableRuntimeRegistry.RuntimeIdentity identity,
+                            long lastSeenTick,
                             String bindingBone, String hostProfile,
                             List<String> semanticChain, List<String> presentationChain,
                             Map<String, String> controllerStates,
-                            List<String> renderPasses, float[] hostMatrix) {
+                            List<String> renderPasses, float[] physicalAnchorMatrix,
+                            float[] geometryInstallationMatrix,
+                            String geometrySummary,
+                            String renderPath) {
         public DebugInfo {
             semanticChain = List.copyOf(semanticChain);
             presentationChain = List.copyOf(presentationChain);
             controllerStates = Map.copyOf(controllerStates);
             renderPasses = List.copyOf(renderPasses);
-            hostMatrix = hostMatrix == null ? null : hostMatrix.clone();
+            physicalAnchorMatrix = physicalAnchorMatrix == null ? null : physicalAnchorMatrix.clone();
+            geometryInstallationMatrix = geometryInstallationMatrix == null
+                    ? null : geometryInstallationMatrix.clone();
+            geometrySummary = geometrySummary == null ? "" : geometrySummary;
+            renderPath = renderPath == null ? "UNAVAILABLE" : renderPath;
         }
 
         @Override
-        public float[] hostMatrix() {
-            return hostMatrix == null ? null : hostMatrix.clone();
+        public float[] physicalAnchorMatrix() {
+            return physicalAnchorMatrix == null ? null : physicalAnchorMatrix.clone();
+        }
+
+        @Override
+        public float[] geometryInstallationMatrix() {
+            return geometryInstallationMatrix == null ? null : geometryInstallationMatrix.clone();
         }
     }
 
@@ -57,10 +70,12 @@ public final class AttachableDebugLog {
         CONDITION_REJECTED,
         RUNTIME_REJECTED,
         RUNTIME_EXCEPTION,
+        JAVA_ITEM_FALLBACK,
         RENDERED
     }
 
     public record DebugAttempt(AttachableRuntimeRegistry.RuntimeKey runtimeKey, long packGeneration,
+                               long clientTick,
                                String itemIdentifier, AttachableQueryContext.ViewContext view,
                                AttemptStage stage, int candidateCount, String attachableIdentifier,
                                List<String> renderPasses, String bindingBone, String detail) {

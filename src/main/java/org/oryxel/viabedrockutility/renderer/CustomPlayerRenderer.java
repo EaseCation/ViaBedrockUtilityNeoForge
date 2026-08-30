@@ -8,11 +8,14 @@ import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.registries.BuiltInRegistries;
 import com.mojang.blaze3d.vertex.PoseStack;
 import org.joml.Matrix4f;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
-import org.oryxel.viabedrockutility.animation.PlayerAnimationManager;
-import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
+import net.easecation.bedrockmotion.pack.PackManager;
+import org.oryxel.viabedrockutility.animation.PlayerAnimationRuntime;
+import org.oryxel.viabedrockutility.animation.PlayerAnimationRuntimeSlot;
+import org.oryxel.viabedrockutility.animation.PlayerAnimationState;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 import org.oryxel.viabedrockutility.attachable.AttachableItemSnapshot;
 import org.oryxel.viabedrockutility.attachable.AttachableOwnerSnapshot;
@@ -22,11 +25,16 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 
 public class CustomPlayerRenderer extends PlayerRenderer {
     private final ResourceLocation texture;
     private final List<AnimatedSkinOverlay> overlays = new ArrayList<>();
     private volatile BedrockPlayerWorldPose thirdPersonPose;
+    private final PlayerAnimationRuntimeSlot<PlayerAnimationRuntime> playerAnimationRuntime =
+            new PlayerAnimationRuntimeSlot<>();
+    private PackManager playerAnimationPacks;
+    private Map<String, String> playerAnimationOverrides = Map.of();
 
     public CustomPlayerRenderer(final EntityRendererProvider.Context ctx, final PlayerModel model, final boolean slim, ResourceLocation texture) {
         super(ctx, slim);
@@ -56,15 +64,39 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setHandSnapshots(
                 attachables.snapshotIfCandidate(player.getMainHandItem()),
                 attachables.snapshotIfCandidate(player.getOffhandItem()));
+        ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setHandItemIdentifiers(
+                itemIdentifier(player.getMainHandItem()), itemIdentifier(player.getOffhandItem()));
         ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setOwnerSnapshot(
                 new AttachableOwnerSnapshot(player.getUUID(), "minecraft:player",
                         player.getAttackAnim(partialTick), state.xRot,
                         state.yRot));
+        ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setPlayerAnimationState(
+                PlayerAnimationState.thirdPerson(player, state, partialTick));
+    }
+
+    private static ResourceLocation itemIdentifier(net.minecraft.world.item.ItemStack stack) {
+        return stack == null || stack.isEmpty() ? null : BuiltInRegistries.ITEM.getKey(stack.getItem());
     }
 
     @Override
     public ResourceLocation getTextureLocation(PlayerRenderState PlayerRenderState) {
         return this.texture;
+    }
+
+    @Override
+    protected void setupRotations(PlayerRenderState state, PoseStack poseStack,
+                                  float bodyRot, float scale) {
+        if (this.playerAnimationPacks == null || state.swimAmount <= 0.0F || state.isFallFlying) {
+            super.setupRotations(state, poseStack, bodyRot, scale);
+            return;
+        }
+        final float swimAmount = state.swimAmount;
+        state.swimAmount = 0.0F;
+        try {
+            super.setupRotations(state, poseStack, bodyRot, scale);
+        } finally {
+            state.swimAmount = swimAmount;
+        }
     }
 
     public ResourceLocation getPlayerTexture() {
@@ -121,18 +153,38 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         }
     }
 
-    /**
-     * Play a one-shot named animation on this player/NPC (server-triggered via AnimateEntityPacket).
-     * The PlayerAnimationManager lives on this renderer's model (the same instance setupAnim drives); if the
-     * player has no skin looping-animation override yet, one is created lazily so the one-shot still plays.
-     */
     public void playAnimationOnce(final String name, final AnimationDefinitions.AnimationData data) {
-        final IBedrockAnimatedModel animModel = (IBedrockAnimatedModel) (Object) this.model;
-        PlayerAnimationManager manager = animModel.viaBedrockUtility$getAnimationManager();
-        if (manager == null) {
-            manager = new PlayerAnimationManager();
-            animModel.viaBedrockUtility$setAnimationManager(manager);
+        final PlayerAnimationRuntime runtime = this.playerAnimationRuntime.current();
+        if (runtime != null) {
+            runtime.playOnce(name, data);
         }
-        manager.playOnce(name, data);
+    }
+
+    public void setPlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides) {
+        this.playerAnimationPacks = packs;
+        this.playerAnimationOverrides = Map.copyOf(animationOverrides);
+        this.playerAnimationRuntime.replace(new PlayerAnimationRuntime(packs, this.playerAnimationOverrides));
+    }
+
+    public PlayerAnimationRuntime playerAnimationRuntime(PlayerAnimationState state) {
+        if (playerAnimationPacks == null || state == null) {
+            return null;
+        }
+        return playerAnimationRuntime.bind(state.owner(),
+                () -> new PlayerAnimationRuntime(playerAnimationPacks, playerAnimationOverrides));
+    }
+
+    public boolean sampleFirstPerson(PlayerAnimationState state) {
+        final PlayerAnimationRuntime runtime = playerAnimationRuntime(state);
+        if (runtime == null) {
+            return false;
+        }
+        runtime.sampleFirstPerson(this.model, state);
+        return true;
+    }
+
+    public PlayerAnimationRuntime.DebugSnapshot playerAnimationDebugSnapshot() {
+        final PlayerAnimationRuntime runtime = this.playerAnimationRuntime.current();
+        return runtime == null ? null : runtime.debugSnapshot();
     }
 }

@@ -14,7 +14,6 @@ class LodDetailedSettingsTest {
                 -10.0,
                 900.0,
                 -1,
-                900,
                 0,
                 true,
                 2.0,

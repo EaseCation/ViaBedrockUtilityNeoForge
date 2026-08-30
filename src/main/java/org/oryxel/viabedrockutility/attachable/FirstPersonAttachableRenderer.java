@@ -1,15 +1,16 @@
 package org.oryxel.viabedrockutility.attachable;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
-import net.minecraft.util.Mth;
 import net.neoforged.neoforge.client.event.RenderHandEvent;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
+import org.oryxel.viabedrockutility.animation.PlayerAnimationState;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,13 +47,16 @@ public final class FirstPersonAttachableRenderer {
         final AttachableQueryContext.LogicalHand logicalHand = event.getHand() == InteractionHand.MAIN_HAND
                 ? AttachableQueryContext.LogicalHand.MAIN_HAND
                 : AttachableQueryContext.LogicalHand.OFF_HAND;
+        final PlayerAnimationState animationState = PlayerAnimationState.firstPerson(
+                player, event.getPartialTick(), event.getSwingProgress(), event.getEquipProgress());
         final HumanoidArm arm = logicalHand == AttachableQueryContext.LogicalHand.MAIN_HAND
-                ? player.getMainArm() : player.getMainArm().getOpposite();
-        final float partialTick = event.getPartialTick();
-        final float bodyYaw = Mth.rotLerp(partialTick, player.yBodyRotO, player.yBodyRot);
+                ? animationState.mainArm() : animationState.mainArm().getOpposite();
         final AttachableOwnerSnapshot owner = new AttachableOwnerSnapshot(
-                player.getUUID(), "minecraft:player", player.getAttackAnim(partialTick),
-                player.getXRot(partialTick), Mth.wrapDegrees(player.getYRot(partialTick) - bodyYaw));
+                player.getUUID(), "minecraft:player", animationState.attackTime(),
+                animationState.targetXRotation(), animationState.targetYRotation());
+        if (!customRenderer.sampleFirstPerson(animationState)) {
+            return;
+        }
 
         if (!item.isEmpty() && DIAGNOSED.add("entry:" + item.itemIdentifier())) {
             ViaBedrockUtilityNeoForge.LOGGER.debug(
@@ -62,42 +66,57 @@ public final class FirstPersonAttachableRenderer {
         }
 
         RENDERING.set(true);
+        final long frameToken = ((long) player.tickCount << 32)
+                ^ Float.floatToIntBits(event.getPartialTick());
+        FirstPersonRenderTrace.begin(player.getUUID(), frameToken);
+        event.getPoseStack().pushPose();
         try {
+            FirstPersonRenderTrace.record("event", arm, event.getPoseStack());
+            FirstPersonRenderTrace.record("camera", arm, event.getPoseStack());
             final AttachableRenderResult result = ViaBedrockUtility.getInstance().getAttachableRuntimeManager().renderFirstPerson(
                     owner, item, logicalHand, arm,
                     customRenderer.getPlayerModel(), event.getPoseStack(), event.getMultiBufferSource(),
-                    event.getPackedLight(), event.getPartialTick(), () -> renderArm(event, customRenderer, arm));
+                    event.getPackedLight(), event.getPartialTick(),
+                    () -> renderArm(event, customRenderer, arm));
             if (result == AttachableRenderResult.NOT_APPLICABLE) {
+                // Bedrock's empty-hand first-person arm is a separate camera-space pose. It must not
+                // inherit either Java's ItemInHandRenderer transform or the third-person zombie pose.
+                // Only the main-hand empty event renders an arm in vanilla; preserving that rule avoids
+                // introducing a second empty off-hand arm. Attachable items retain priority above.
+                if (logicalHand == AttachableQueryContext.LogicalHand.MAIN_HAND
+                        && event.getItemStack().isEmpty() && !player.isInvisible()
+                        && renderBedrockArm(event, customRenderer, arm)) {
+                    event.setCanceled(true);
+                }
                 return;
             }
             event.setCanceled(true);
         } finally {
+            event.getPoseStack().popPose();
+            FirstPersonRenderTrace.end();
             RENDERING.set(false);
         }
     }
 
-    private static void renderArm(RenderHandEvent event, CustomPlayerRenderer renderer, HumanoidArm arm) {
+    private static void renderArm(RenderHandEvent event, CustomPlayerRenderer renderer,
+                                  HumanoidArm arm) {
+        if (!renderBedrockArm(event, renderer, arm)
+                && DIAGNOSED.add("arm-missing:" + arm)) {
+            ViaBedrockUtilityNeoForge.LOGGER.warn(
+                    "[Attachable] Missing VBU {} arm metadata; suppressing the incomplete Bedrock host arm",
+                    arm.name().toLowerCase(java.util.Locale.ROOT));
+        }
+    }
+
+    private static boolean renderBedrockArm(RenderHandEvent event, CustomPlayerRenderer renderer,
+                                            HumanoidArm arm) {
         final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(renderer.getPlayerModel());
         if (metadata != null && FirstPersonBedrockArmRenderer.render(
                 new AttachableHostContext(metadata), arm, renderer.getPlayerTexture(),
                 event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight())) {
-            return;
+            return true;
         }
-
-        // A malformed custom host should still retain a hand when the attachable takes over the event.
-        if (DIAGNOSED.add("arm-fallback:" + arm)) {
-            ViaBedrockUtilityNeoForge.LOGGER.warn(
-                    "[Attachable] Missing VBU {} arm metadata; using the inherited first-person arm fallback",
-                    arm.name().toLowerCase(java.util.Locale.ROOT));
-        }
-        if (arm == HumanoidArm.RIGHT) {
-            renderer.renderRightHand(event.getPoseStack(), event.getMultiBufferSource(),
-                    event.getPackedLight(), renderer.getPlayerTexture(), true,
-                    Minecraft.getInstance().player);
-        } else {
-            renderer.renderLeftHand(event.getPoseStack(), event.getMultiBufferSource(),
-                    event.getPackedLight(), renderer.getPlayerTexture(), true,
-                    Minecraft.getInstance().player);
-        }
+        return false;
     }
+
 }

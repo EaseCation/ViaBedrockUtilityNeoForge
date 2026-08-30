@@ -4,6 +4,7 @@ import net.easecation.bedrockmotion.pack.content.Content;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
+import org.oryxel.viabedrockutility.util.GeometryUtil;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,10 +15,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TextureProcessor {
     private static final Map<ResourceLocation, LazyBedrockTexture> REGISTERED_TEXTURES =
             new ConcurrentHashMap<>();
+    private static final Map<ResourceLocation, GeometryUtil.TextureAlpha> REGISTERED_ALPHAS =
+            new ConcurrentHashMap<>();
 
     public static void process(final List<Content> packs) {
         final Minecraft client = Minecraft.getInstance();
         final Map<ResourceLocation, LazyBedrockTexture> nextGeneration = new LinkedHashMap<>();
+        final Map<ResourceLocation, GeometryUtil.TextureAlpha> nextGenerationAlphas = new LinkedHashMap<>();
 
         int registered = 0;
         int preloaded = 0;
@@ -50,6 +54,7 @@ public class TextureProcessor {
                     }
                     client.getTextureManager().register(identifier, texture);
                     nextGeneration.put(identifier, texture);
+                    nextGenerationAlphas.put(identifier, GeometryUtil.TextureAlpha.from(image.getImage()));
                     registered++;
                 } catch (final RuntimeException e) {
                     if (texture != null) {
@@ -80,6 +85,8 @@ public class TextureProcessor {
                 .forEach(client.getTextureManager()::release);
         REGISTERED_TEXTURES.clear();
         REGISTERED_TEXTURES.putAll(nextGeneration);
+        REGISTERED_ALPHAS.clear();
+        REGISTERED_ALPHAS.putAll(nextGenerationAlphas);
     }
 
     /** Returns the exact resource location used for a Bedrock texture path. */
@@ -104,10 +111,20 @@ public class TextureProcessor {
         }
     }
 
+    /** Returns the CPU-side alpha snapshot for a registered Bedrock texture, when available. */
+    public static GeometryUtil.TextureAlpha resolveAlpha(final String rawPath) {
+        try {
+            return REGISTERED_ALPHAS.get(normalizeTextureIdentifier(rawPath));
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
     /** Releases every dynamic texture owned by the retired server-pack generation. */
     public static void clear() {
         final Minecraft client = Minecraft.getInstance();
         REGISTERED_TEXTURES.keySet().forEach(client.getTextureManager()::release);
         REGISTERED_TEXTURES.clear();
+        REGISTERED_ALPHAS.clear();
     }
 }

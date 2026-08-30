@@ -135,9 +135,7 @@ final class MinecraftBedrockPoseProvider implements BedrockPoseProvider {
                     anchor.ignoreInheritedScale(), anchor.bindingOffsetFrame(), tick);
         }
         final AttachableHostContext host = new AttachableHostContext(metadata);
-        final Matrix4f current = host.currentWorldMatrix(match.bone());
-        final Matrix4f bind = host.bindWorldMatrix(match.bone());
-        Matrix4f anchor = BedrockTransformConvention.hostAttachment(current, bind, match.locator().point());
+        Matrix4f anchor = host.firstPersonAttachmentMatrix(match.bone(), match.locator().point());
         if (match.locator().ignoreInheritedScale()) {
             final Vector3f translation = anchor.getTranslation(new Vector3f());
             final Quaternionf rotation = anchor.getUnnormalizedRotation(new Quaternionf()).normalize();

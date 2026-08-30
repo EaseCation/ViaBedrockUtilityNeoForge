@@ -14,6 +14,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
+import org.cube.converter.model.element.Parent;
+import org.cube.converter.model.impl.bedrock.BedrockGeometryModel;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.attachable.AttachableDebugLog.AttemptStage;
 import org.oryxel.viabedrockutility.attachable.AttachableDebugLog.DebugAttempt;
@@ -37,6 +39,12 @@ import java.util.UUID;
  * {@link AttachableDebugLog}.
  */
 public final class AttachableRuntimeManager {
+    public enum DebugRenderMode {
+        AUTO,
+        JAVA_ITEM,
+        VBU
+    }
+
     private static final long RUNTIME_TTL_TICKS = 20L * 30L;
     private static final long DEBUG_ATTEMPT_TTL_TICKS = 20L * 30L;
     private final AttachableRuntimeRegistry<AttachableRuntimeInstance> runtimes = new AttachableRuntimeRegistry<>();
@@ -44,6 +52,7 @@ public final class AttachableRuntimeManager {
     private final AttachableDebugAttemptStore debugAttempts = new AttachableDebugAttemptStore();
     private final AttachableClientTickCounter tickCounter = new AttachableClientTickCounter();
     private volatile Set<ResourceLocation> candidateItemIdentifiers = Set.of();
+    private volatile DebugRenderMode debugRenderMode = DebugRenderMode.AUTO;
 
     public AttachableRenderResult renderThirdPerson(PlayerRenderState state, AttachableItemSnapshot item,
                                                     AttachableQueryContext.LogicalHand hand, HumanoidArm physicalArm,
@@ -126,13 +135,28 @@ public final class AttachableRuntimeManager {
         return runtimes.size();
     }
 
+    public DebugRenderMode debugRenderMode() {
+        return debugRenderMode;
+    }
+
+    public void setDebugRenderMode(DebugRenderMode mode) {
+        debugRenderMode = mode == null ? DebugRenderMode.AUTO : mode;
+        clear();
+    }
+
     public List<DebugInfo> debugSnapshot() {
         return runtimes.snapshot().entrySet().stream().map(entry -> {
             final AttachableRuntimeInstance runtime = entry.getValue().runtime();
-            return new DebugInfo(entry.getKey(), entry.getValue().identity(), runtime.lastBinding,
+            return new DebugInfo(entry.getKey(), entry.getValue().identity(), entry.getValue().lastSeenTick(),
+                    runtime.lastBinding,
                     runtime.lastHostProfile, runtime.lastSemanticChain, runtime.lastPresentationChain,
                     runtime.lastControllerStates, runtime.lastRenderPasses,
-                    runtime.lastHostMatrix == null ? null : runtime.lastHostMatrix.get(new float[16]));
+                    runtime.lastPhysicalAnchorMatrix == null
+                            ? null : runtime.lastPhysicalAnchorMatrix.get(new float[16]),
+                    runtime.lastGeometryInstallationMatrix == null
+                            ? null : runtime.lastGeometryInstallationMatrix.get(new float[16]),
+                    runtime.lastGeometrySummary,
+                    runtime.lastRenderPath);
         }).toList();
     }
 
@@ -216,6 +240,22 @@ public final class AttachableRuntimeManager {
             return AttachableRenderResult.NOT_APPLICABLE;
         }
 
+        // A pure Bedrock texture_mesh is the resource-pack representation of a 2D item sprite.
+        // Java's ItemRenderer already owns the exact item/generated extrusion, hand transforms,
+        // use animation and left/right mirroring. Let it render these meshes directly instead of
+        // applying a second attachable bone transform, while retaining VBU for real 3D geometry.
+        if (debugRenderMode != DebugRenderMode.VBU
+                && (view == AttachableQueryContext.ViewContext.FIRST_PERSON
+                || view == AttachableQueryContext.ViewContext.THIRD_PERSON)) {
+            final String detail = textureMeshOnlyDetail(packs, candidate.definition());
+            if (detail != null) {
+                recordAttempt(key, tick, generation.generation(), item, view,
+                        AttemptStage.JAVA_ITEM_FALLBACK, candidateCount,
+                        candidate.definition().identifier(), List.of(), "", detail);
+                return AttachableRenderResult.NOT_APPLICABLE;
+            }
+        }
+
         final BedrockPlayerModelMetadata metadata = BedrockPlayerModelMetadata.get(playerModel);
         if (metadata == null) {
             recordAttempt(key, tick, generation.generation(), item, view, AttemptStage.METADATA_MISSING,
@@ -251,11 +291,40 @@ public final class AttachableRuntimeManager {
         }
     }
 
+    private static String textureMeshOnlyDetail(PackManager packs,
+                                                AttachableDefinitions.AttachableDefinition definition) {
+        if (definition.data().getGeometries().isEmpty()) {
+            return null;
+        }
+        boolean found = false;
+        for (String geometryName : definition.data().getGeometries().values()) {
+            final BedrockGeometryModel geometry = packs.getModelDefinitions().getEntityModels().get(geometryName);
+            if (geometry == null) {
+                continue;
+            }
+            found = true;
+            for (Parent bone : geometry.getParents()) {
+                if (!bone.getCubes().isEmpty() || bone.getPolyMesh() != null
+                        || bone.getTextureMeshes().isEmpty()) {
+                    return null;
+                }
+            }
+        }
+        if (!found) {
+            return null;
+        }
+        return "renderPath=JAVA_ITEM_FALLBACK,modelKind=TEXTURE_MESH,geometry="
+                + String.join("|", definition.data().getGeometries().values())
+                + ",textures=" + String.join("|", definition.data().getTextures().values())
+                + ",reason=Pure texture_mesh attachable delegated to Java ItemRenderer";
+    }
+
     private void recordAttempt(AttachableRuntimeRegistry.RuntimeKey key, long tick, long generation,
                                AttachableItemSnapshot item, AttachableQueryContext.ViewContext view,
                                AttemptStage stage, int candidates, String attachableIdentifier,
                                List<String> renderPasses, String bindingBone, String detail) {
-        final DebugAttempt attempt = new DebugAttempt(key, generation, item.itemIdentifier().toString(), view,
+        final DebugAttempt attempt = new DebugAttempt(key, generation, tick,
+                item.itemIdentifier().toString(), view,
                 stage, candidates, attachableIdentifier, renderPasses, bindingBone, detail);
         final DebugAttempt previous = debugAttempts.record(attempt, tick);
         if (!attempt.equals(previous)) {

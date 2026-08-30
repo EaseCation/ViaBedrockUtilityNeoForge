@@ -1,18 +1,22 @@
 package org.oryxel.viabedrockutility.mixin.impl.render;
 
 import net.minecraft.client.model.geom.ModelPart;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.core.Direction;
 import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.util.RandomSource;
+import net.easecation.bedrockmotion.util.MathUtil;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
+import org.oryxel.viabedrockutility.renderer.BedrockModelPartTransform;
+import org.oryxel.viabedrockutility.renderer.BedrockPlayerArmorPose;
 import org.oryxel.viabedrockutility.renderer.VbuCompileScratch;
 import org.oryxel.viabedrockutility.renderer.VbuCuboidBatchRenderer;
 import org.oryxel.viabedrockutility.renderer.VbuRenderMetrics;
-import net.easecation.bedrockmotion.util.MathUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,7 +30,6 @@ import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
@@ -89,51 +92,18 @@ public abstract class ModelPartMixin implements IModelPart {
             0, 0, 0, false, 1, 1, java.util.Set.<Direction>of());
 
     @Unique
-    private static final float VBU_ABSOLUTE_ARM_X_THRESHOLD = 1.0F;
-    @Unique
     private static final boolean vbu$INDEXED_RENDER_ENABLED =
             !Boolean.getBoolean("viabedrockutility.disableIndexedRender");
 
     @Inject(method = "translateAndRotate", at = @At("HEAD"))
     public void render(PoseStack matrices, CallbackInfo ci) {
         if (!this.isVBUModel) {
+            BedrockPlayerArmorPose.apply((ModelPart) (Object) this, matrices);
             return;
         }
 
-        final boolean hasCustomRotation = this.rotation.x != 0.0F
-                || this.rotation.y != 0.0F || this.rotation.z != 0.0F;
-        if (hasCustomRotation) {
-            // Offset participates in the custom rotation, but the final offset is applied at TAIL so it
-            // remains unaffected by vanilla scale.
-            if (this.vbu$hasOffset()) {
-                matrices.translate(this.offset.x / 16.0F, this.offset.y / 16.0F, this.offset.z / 16.0F);
-            }
-            if (this.vbu$hasPivot()) {
-                matrices.translate(this.pivot.x / 16.0F, this.pivot.y / 16.0F, this.pivot.z / 16.0F);
-            }
-            matrices.mulPose(this.vbu$tempQuaternion.rotationZYX(
-                    this.rotation.z * MathUtil.DEGREES_TO_RADIANS,
-                    this.rotation.y * MathUtil.DEGREES_TO_RADIANS,
-                    this.rotation.x * MathUtil.DEGREES_TO_RADIANS));
-            if (this.vbu$hasPivot()) {
-                matrices.translate(-this.pivot.x / 16.0F, -this.pivot.y / 16.0F, -this.pivot.z / 16.0F);
-            }
-            if (this.vbu$hasOffset()) {
-                matrices.translate(-this.offset.x / 16.0F, -this.offset.y / 16.0F, -this.offset.z / 16.0F);
-            }
-        }
-
-        // Re-translate to the bone's Bedrock pivot so that vanilla's rotation/scale (applied next inside
-        // the original translateAndRotate body, about the part's setPos origin) pivots about the SAME
-        // point as our VBU rotation above. With the unified coordinate scheme setPos is always 0, so that
-        // origin sits at part-space (0,0,0) = Bedrock y=24.016 ≈ the top of the model; without this,
-        // vanilla setupAnim made plain (non-Bedrock-animated) player legs rotate from the head. Undone at
-        // TAIL, so net translation stays identity and absolute cube placement is unchanged. For
-        // Bedrock-animated bones vanilla rotation is cleared (PlayerAnimationManager.clearVanillaRotation)
-        // and for entities/non-VBU parts it is 0, so this only relocates the pivot where it actually matters.
-        if (this.vbu$needsVanillaPivotWrapper()) {
-            matrices.translate(this.pivot.x / 16.0F, this.pivot.y / 16.0F, this.pivot.z / 16.0F);
-        }
+        BedrockModelPartTransform.applyBeforeVanilla(
+                matrices, (ModelPart) (Object) this, this.vbu$tempQuaternion);
     }
 
     @Inject(method = "translateAndRotate", at = @At("TAIL"))
@@ -142,42 +112,7 @@ public abstract class ModelPartMixin implements IModelPart {
             return;
         }
 
-        // Undo the pivot translate added at HEAD's tail: it wrapped vanilla's rotation/scale so they pivot
-        // about the Bedrock pivot. Reverting it here keeps the bone's net translation identity.
-        if (this.vbu$needsVanillaPivotWrapper()) {
-            matrices.translate(-this.pivot.x / 16.0F, -this.pivot.y / 16.0F, -this.pivot.z / 16.0F);
-        }
-
-        // Do this after scale since well, this shouldn't be affected by scaling.
-        if (this.vbu$hasOffset()) {
-            matrices.translate(this.offset.x / 16.0F, this.offset.y / 16.0F, this.offset.z / 16.0F);
-        }
-
-        if (!this.neededOffset) {
-            return;
-        }
-
-        // Have to do this because of how java pivot point and bedrock pivot point system works, I think? ehhh whatever it works, just don't touch it.
-        if (this.x != 0.0F || this.z != 0.0F) {
-            matrices.translate(-this.x / 16.0F, 0, -this.z / 16.0F);
-        }
-    }
-
-    @Unique
-    private boolean vbu$hasPivot() {
-        return this.pivot.x != 0.0F || this.pivot.y != 0.0F || this.pivot.z != 0.0F;
-    }
-
-    @Unique
-    private boolean vbu$hasOffset() {
-        return this.offset.x != 0.0F || this.offset.y != 0.0F || this.offset.z != 0.0F;
-    }
-
-    @Unique
-    private boolean vbu$needsVanillaPivotWrapper() {
-        return this.vbu$hasPivot()
-                && (this.xRot != 0.0F || this.yRot != 0.0F || this.zRot != 0.0F
-                || this.xScale != 1.0F || this.yScale != 1.0F || this.zScale != 1.0F);
+        BedrockModelPartTransform.applyAfterVanilla(matrices, (ModelPart) (Object) this);
     }
 
     /**
@@ -218,16 +153,46 @@ public abstract class ModelPartMixin implements IModelPart {
         matrices.pushPose();
         try {
             ((ModelPart) (Object) this).translateAndRotate(matrices);
+            // A first-person arm is flattened into an owning ModelPart plus one or more
+            // cube-group children. Observe the actual cube-group pose immediately before
+            // vertex compilation so the diagnostic can distinguish a bad semantic matrix
+            // from a later submission-path discrepancy.
+            if (isFirstPersonArmName(this.name)) {
+                final net.minecraft.world.entity.HumanoidArm arm = isLeftArmName(this.name)
+                        ? net.minecraft.world.entity.HumanoidArm.LEFT
+                        : net.minecraft.world.entity.HumanoidArm.RIGHT;
+                org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.record(
+                        this.vbu$cubeGroup ? "arm_vertex" : "arm_modelpart",
+                        arm, matrices);
+                org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.recordMatrix(
+                        "global_modelview", arm, RenderSystem.getModelViewMatrix());
+                org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.recordMatrix(
+                        this.vbu$cubeGroup ? "final_vertex" : "final_modelpart",
+                        arm, new Matrix4f(RenderSystem.getModelViewMatrix()).mul(matrices.last().pose()));
+            }
             if (this.vbu$cubeGroup || !this.skipDraw) {
                 final PoseStack.Pose pose = matrices.last();
                 final ModelPart.Cube[] cubes = this.vbu$cubesArray;
-                if (cubes.length > 0 && (this.vbu$compiledBatch == null
-                        || !VbuCuboidBatchRenderer.tryRender(
-                        pose, vertices, this.vbu$compiledBatch,
-                        light, overlay, color, VbuCompileScratch.FLAT_NORMAL))) {
+                boolean bulkRendered = false;
+                if (cubes.length > 0 && this.vbu$compiledBatch != null) {
+                    bulkRendered = VbuCuboidBatchRenderer.tryRender(
+                            pose, vertices, this.vbu$compiledBatch,
+                            light, overlay, color, VbuCompileScratch.FLAT_NORMAL);
+                }
+                if (cubes.length > 0 && !bulkRendered) {
                     for (int i = 0; i < cubes.length; i++) {
                         cubes[i].compile(pose, vertices, light, overlay, color);
                     }
+                }
+                if (isFirstPersonArmName(this.name) && cubes.length > 0) {
+                    org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.record(
+                            this.vbu$cubeGroup
+                                    ? (bulkRendered ? "arm_writer" : "arm_compile")
+                                    : "arm_modelpart_submit",
+                            isLeftArmName(this.name)
+                                    ? net.minecraft.world.entity.HumanoidArm.LEFT
+                                    : net.minecraft.world.entity.HumanoidArm.RIGHT,
+                            matrices);
                 }
             }
 
@@ -247,6 +212,17 @@ public abstract class ModelPartMixin implements IModelPart {
         } finally {
             matrices.popPose();
         }
+    }
+
+    @Unique
+    private static boolean isFirstPersonArmName(String name) {
+        return "rightarm".equalsIgnoreCase(name) || "leftarm".equalsIgnoreCase(name)
+                || "right_arm".equalsIgnoreCase(name) || "left_arm".equalsIgnoreCase(name);
+    }
+
+    @Unique
+    private static boolean isLeftArmName(String name) {
+        return "leftarm".equalsIgnoreCase(name) || "left_arm".equalsIgnoreCase(name);
     }
 
     @Unique
@@ -399,43 +375,8 @@ public abstract class ModelPartMixin implements IModelPart {
             return;
         }
 
-        // Vanilla armor/cape models need their baked part offsets (legs at y=12, arms at +/-5,y=2),
-        // but must still inherit dynamic pose translations from crouching, swimming, etc.
-        PartPose targetInitialPose = this.getInitialPose();
-        PartPose sourceInitialPose = source.getInitialPose();
-        this.x = targetInitialPose.x() + (source.x - sourceInitialPose.x());
-        this.y = targetInitialPose.y() + (source.y - sourceInitialPose.y());
-        this.z = targetInitialPose.z() + (source.z - sourceInitialPose.z());
+        BedrockPlayerArmorPose.copy(source, (ModelPart) (Object) this);
 
-        // During the vanilla left-click swing, HumanoidModel writes the arm x/z positions as absolute
-        // vanilla arm origins. VBU player arms later cancel that dynamic X/Z offset after vanilla's ZYX
-        // rotation, so the armor origin has to keep only the residual that remains after the same rotation
-        // instead of inheriting the full offset (front drift) or dropping all of it (back drift).
-        if (this.vbu$usesAbsoluteSwingArmPosition(sourcePart, source, sourceInitialPose)) {
-            this.vbu$copyAbsoluteSwingArmPosition(source, targetInitialPose);
-        }
-    }
-
-    @Unique
-    private void vbu$copyAbsoluteSwingArmPosition(ModelPart source, PartPose targetInitialPose) {
-        final float swingOffsetX = source.x - targetInitialPose.x();
-        final float swingOffsetZ = source.z - targetInitialPose.z();
-        final Vector3f rotatedSwingOffset = new Vector3f(swingOffsetX, 0.0F, swingOffsetZ)
-                .rotate(this.vbu$tempQuaternion.rotationZYX(source.zRot, source.yRot, source.xRot));
-        this.x = targetInitialPose.x() + swingOffsetX - rotatedSwingOffset.x;
-        this.z = targetInitialPose.z() + swingOffsetZ - rotatedSwingOffset.z;
-    }
-
-    @Unique
-    private boolean vbu$usesAbsoluteSwingArmPosition(IModelPart sourcePart, ModelPart source, PartPose sourceInitialPose) {
-        final String partName = sourcePart.viaBedrockUtility$getName();
-        if (partName == null) {
-            return false;
-        }
-
-        final String normalizedName = partName.replace("_", "").toLowerCase(Locale.ROOT);
-        return ("leftarm".equals(normalizedName) || "rightarm".equals(normalizedName))
-                && Math.abs(source.x - sourceInitialPose.x()) >= VBU_ABSOLUTE_ARM_X_THRESHOLD;
     }
 
     @Override

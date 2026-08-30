@@ -24,6 +24,7 @@ import org.joml.Matrix4f;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
+import org.oryxel.viabedrockutility.mixin.interfaces.ICuboid;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
 import org.oryxel.viabedrockutility.util.GeometryUtil;
 import team.unnamed.mocha.runtime.Scope;
@@ -48,7 +49,7 @@ final class AttachableRuntimeInstance {
     private final AttachableScopeFactory.RuntimeActor actor = new AttachableScopeFactory.RuntimeActor(variables);
     private final Scope persistentScope = Scope.create();
     private final AttachableAnimationRuntime animation;
-    private final Map<String, ModelState> models = new HashMap<>();
+    private final Map<ModelKey, ModelState> models = new HashMap<>();
     private AttachableScopeFactory.RuntimeScope frame;
     private AttachableOwnerSnapshot owner = AttachableOwnerSnapshot.EMPTY;
     private Entity ownerEntity;
@@ -62,7 +63,10 @@ final class AttachableRuntimeInstance {
     volatile List<String> lastPresentationChain = List.of();
     volatile Map<String, String> lastControllerStates = Map.of();
     volatile List<String> lastRenderPasses = List.of();
-    volatile Matrix4f lastHostMatrix;
+    volatile Matrix4f lastPhysicalAnchorMatrix;
+    volatile Matrix4f lastGeometryInstallationMatrix;
+    volatile String lastGeometrySummary = "unbuilt";
+    volatile String lastRenderPath = "VBU_ATTACHABLE";
     volatile String lastFailure = "Runtime did not submit geometry";
     private final List<PendingParticleEvent> pendingParticleEvents = new ArrayList<>();
     private final List<PendingSoundEvent> pendingSoundEvents = new ArrayList<>();
@@ -70,6 +74,7 @@ final class AttachableRuntimeInstance {
 
     private record PendingParticleEvent(String alias, String locator, String preEffectExpression) {}
     private record PendingSoundEvent(String alias, String locator) {}
+    private record ModelKey(String geometry, String texture) {}
 
     AttachableRuntimeInstance(AttachableDefinitions.AttachableDefinition definition, PackManager packs) {
         this.definition = definition;
@@ -189,12 +194,18 @@ final class AttachableRuntimeInstance {
         int submittedPasses = 0;
         for (AttachableRenderPlanner.PlannedPass<BedrockPlayerModelMetadata.Bone> plannedPass : planned) {
             try {
-                final ModelState model = models.computeIfAbsent(plannedPass.pass().geometryValue(),
+                final ModelKey modelKey = new ModelKey(plannedPass.pass().geometryValue(),
+                        plannedPass.pass().textureValue());
+                final ModelState model = models.computeIfAbsent(modelKey,
                         ignored -> {
-                            final Model built = GeometryUtil.buildModel(plannedPass.geometry(),
-                                    false, false, plannedPass.pass().geometryValue());
+                            final Model built = GeometryUtil.buildAttachableModel(
+                                    plannedPass.geometry(), plannedPass.pass().geometryValue(),
+                                    alias -> AttachableTextureResolver.resolve(
+                                            packs, definition.data().getTextures(), alias,
+                                            plannedPass.pass().textureValue()));
                             return new ModelState(built, new McBoneModel(built));
                         });
+                lastGeometrySummary = geometrySummary(model.model());
                 animation.sample(model.bones(), partialTick, frame.scope(), frame.context());
                 boolean submittedPass = false;
                 for (AttachableRenderPlanner.HostGroup<BedrockPlayerModelMetadata.Bone> group
@@ -233,19 +244,24 @@ final class AttachableRuntimeInstance {
                                 PoseStack poses, MultiBufferSource buffers, int packedLight) {
         final boolean firstPerson = frame.view() == AttachableQueryContext.ViewContext.FIRST_PERSON;
         final BedrockPlayerModelMetadata.Bone hostBone = group.hostBone();
-        final Matrix4f hostMatrix = firstPerson
+        final Matrix4f physicalAnchor = firstPerson
                 ? host.firstPersonAttachmentMatrix(hostBone)
                 : host.attachmentMatrix(hostBone);
+        final AttachableAnimationRuntime.Scale scale = animation.rootScale();
+        final Matrix4f geometryInstallation = BedrockTransformConvention.geometryInstallation(
+                physicalAnchor, scale.x(), scale.y(), scale.z());
         lastHostProfile = firstPerson
-                ? BedrockFirstPersonView.PROFILE_NAME
+                ? AttachableHostContext.FIRST_PERSON_PROFILE
                 : "third_person_bone_deformation";
         lastSemanticChain = host.semanticChain(hostBone);
         lastPresentationChain = host.presentationChain(hostBone);
-        lastHostMatrix = new Matrix4f(hostMatrix);
-        dispatchPendingParticleEvents(hostMatrix);
-        poses.mulPose(hostMatrix);
-        final AttachableAnimationRuntime.Scale scale = animation.rootScale();
-        poses.scale(scale.x(), scale.y(), scale.z());
+        lastPhysicalAnchorMatrix = new Matrix4f(physicalAnchor);
+        lastGeometryInstallationMatrix = new Matrix4f(geometryInstallation);
+        dispatchPendingParticleEvents(physicalAnchor);
+        poses.mulPose(geometryInstallation);
+        if (firstPerson) {
+            FirstPersonRenderTrace.record("item_submit", arm, poses);
+        }
         // A single host group covers the whole geometry; with per-root bindings each group
         // renders only its own roots' subtrees under its own host bone.
         final List<ModelPart> roots = plannedPass.hostGroups().size() == 1
@@ -264,12 +280,12 @@ final class AttachableRuntimeInstance {
         return true;
     }
 
-    private void dispatchPendingParticleEvents(Matrix4f hostMatrix) {
+    private void dispatchPendingParticleEvents(Matrix4f physicalAnchor) {
         if (pendingEventsDispatched || (pendingParticleEvents.isEmpty() && pendingSoundEvents.isEmpty())) return;
         pendingEventsDispatched = true;
-        final float x = hostMatrix.m30();
-        final float y = hostMatrix.m31();
-        final float z = hostMatrix.m32();
+        final float x = physicalAnchor.m30();
+        final float y = physicalAnchor.m31();
+        final float z = physicalAnchor.m32();
         for (PendingParticleEvent event : List.copyOf(pendingParticleEvents)) {
             final String identifier = definition.data().getParticleEffects().get(event.alias());
             if (identifier == null || identifier.isBlank()) {
@@ -277,7 +293,7 @@ final class AttachableRuntimeInstance {
                         "[Attachable] Particle alias '" + event.alias + "' has no definition", null);
                 continue;
             }
-            // The host matrix is the attachable item anchor. A locator-specific offset is only
+            // The physical anchor is the attachable item anchor. A locator-specific offset is only
             // applied when the geometry exposes it. The locator resolver is intentionally a
             // separate pose-provider boundary; never silently substitute the item bone because
             // that would produce a plausible but incorrect muzzle/effect position.
@@ -423,5 +439,21 @@ final class AttachableRuntimeInstance {
     }
 
     private record ModelState(Model model, McBoneModel bones) {
+    }
+
+    private static String geometrySummary(Model model) {
+        int cuboids = 0;
+        int vertices = 0;
+        for (ModelPart part : model.allParts()) {
+            final IModelPart extension = (IModelPart) (Object) part;
+            for (ModelPart.Cube cube : extension.viaBedrockUtility$getCuboids()) {
+                cuboids++;
+                final ICuboid cuboid = (ICuboid) (Object) cube;
+                if (cuboid.viaBedrockUtility$getCompiledGeometry() != null) {
+                    vertices += cuboid.viaBedrockUtility$getCompiledGeometry().vertexCount();
+                }
+            }
+        }
+        return "modelKind=VBU_GEOMETRY,cuboids=" + cuboids + ",vertices=" + vertices;
     }
 }

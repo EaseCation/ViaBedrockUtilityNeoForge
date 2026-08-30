@@ -4,12 +4,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.model.PlayerModel;
-import net.minecraft.client.model.geom.builders.LayerDefinition;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.resources.PlayerSkin;
@@ -30,16 +28,16 @@ import org.oryxel.viabedrockutility.payload.impl.skin.SkinAnimationInfoPayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.SkinDataPayload;
 import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticlePayload;
 import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticleV2Payload;
-import org.oryxel.viabedrockutility.animation.PlayerAnimationManager;
-import org.oryxel.viabedrockutility.mixin.interfaces.IBedrockAnimatedModel;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import org.oryxel.viabedrockutility.renderer.AnimatedSkinOverlay;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
 import org.oryxel.viabedrockutility.util.EntityRendererContextUtil;
+import org.oryxel.viabedrockutility.util.BundledPlayerModelFactory;
 import org.oryxel.viabedrockutility.util.GeometryUtil;
 
 import org.oryxel.viabedrockutility.util.ImageUtil;
 import org.oryxel.viabedrockutility.util.PlayerSkinBuilder;
+import org.oryxel.viabedrockutility.util.PlayerSkinTextureCompat;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,6 +62,15 @@ public class PayloadHandler {
     /** Switches every pack-backed consumer to the newly published generation. */
     public void onPackManagerChanged(PackManager manager) {
         this.packManager = manager;
+        resetPlayerAnimationRuntimes();
+    }
+
+    /** Rebuilds controller and one-shot state after an ordinary client resource reload. */
+    public void resetPlayerAnimationRuntimes() {
+        final PackManager manager = this.packManager;
+        if (manager == null) {
+            return;
+        }
         for (Map.Entry<UUID, EntityRenderer<?, ?>> entry : cachedPlayerRenderers.entrySet()) {
             if (entry.getValue() instanceof CustomPlayerRenderer renderer) {
                 final CachedPlayerSkin skin = cachedPlayerSkins.get(entry.getKey());
@@ -278,7 +285,16 @@ public class PayloadHandler {
             return;
         }
 
-        final NativeImage skinImage = ImageUtil.toNativeImage(info.getData(), info.getWidth(), info.getHeight());
+        final byte[] skinData = info.getData();
+        final PlayerSkinTextureCompat.RepairResult skinRepair =
+                PlayerSkinTextureCompat.repairMissingLeftLimbs(skinData, info.getWidth(), info.getHeight());
+        if (skinRepair.repairedAny()) {
+            ViaBedrockUtilityNeoForge.LOGGER.debug(
+                    "[Skin] Mirrored missing legacy limbs for {} (leftArm={}, leftLeg={})",
+                    payload.getPlayerUuid(), skinRepair.leftArm(), skinRepair.leftLeg());
+        }
+
+        final NativeImage skinImage = ImageUtil.toNativeImage(skinData, info.getWidth(), info.getHeight());
         if (skinImage == null) {
             ViaBedrockUtilityNeoForge.LOGGER.error("[Skin] toNativeImage returned null for {}", payload.getPlayerUuid());
             return;
@@ -365,9 +381,17 @@ public class PayloadHandler {
         }
 
         if (model == null) {
-            // This is likely a classic skin with hardcoded identifier! TODO: 128x128
-            model = new PlayerModel(LayerDefinition.create(PlayerModel.createMesh(CubeDeformation.NONE, slim), 64, 64).bakeRoot(), slim);
-            ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Using default player model (slim={}) for {}", slim, payload.getPlayerUuid());
+            try {
+                model = BundledPlayerModelFactory.create(slim);
+                ViaBedrockUtilityNeoForge.LOGGER.debug(
+                        "[Skin] Using bundled Bedrock player geometry (slim={}) for {}",
+                        slim, payload.getPlayerUuid());
+            } catch (RuntimeException exception) {
+                ViaBedrockUtilityNeoForge.LOGGER.error(
+                        "[Skin] Failed to build bundled Bedrock player geometry for {}",
+                        payload.getPlayerUuid(), exception);
+                return;
+            }
         }
 
         final EntityRendererProvider.Context entityContext = EntityRendererContextUtil.build(client);
@@ -615,40 +639,26 @@ public class PayloadHandler {
 
     private static void applyAnimationOverrides(UUID playerUuid, CustomPlayerRenderer renderer,
                                                 String resourcePatch, PackManager manager) {
-        final IBedrockAnimatedModel animatedModel = (IBedrockAnimatedModel) (Object) renderer.getPlayerModel();
-        animatedModel.viaBedrockUtility$setAnimationManager(null);
-        if (manager == null || resourcePatch == null || resourcePatch.isBlank()) {
+        if (manager == null) {
             return;
         }
         try {
-            final JsonObject patch = JsonParser.parseString(resourcePatch).getAsJsonObject();
-            if (!patch.has("animations")) {
-                return;
-            }
-            final JsonObject anims = patch.getAsJsonObject("animations");
-            final PlayerAnimationManager animManager = new PlayerAnimationManager();
-            for (final var animEntry : anims.entrySet()) {
-                final String animIdentifier = animEntry.getValue().getAsString();
-                final AnimationDefinitions.AnimationData animData =
-                        manager.getAnimationDefinitions().getAnimations().get(animIdentifier);
-                if (animData != null) {
-                    animManager.addAnimation(animEntry.getKey(), animData);
-                } else {
-                    ViaBedrockUtilityNeoForge.LOGGER.warn(
-                            "[Skin] Animation '{}' ({}) not found in PackManager for {}",
-                            animEntry.getKey(), animIdentifier, playerUuid);
+            final Map<String, String> overrides = new LinkedHashMap<>();
+            if (resourcePatch != null && !resourcePatch.isBlank()) {
+                final JsonObject patch = JsonParser.parseString(resourcePatch).getAsJsonObject();
+                if (patch.has("animations")) {
+                    for (final var entry : patch.getAsJsonObject("animations").entrySet()) {
+                        overrides.put(entry.getKey(), entry.getValue().getAsString());
+                    }
                 }
             }
-            if (!animManager.isEmpty()) {
-                animatedModel.viaBedrockUtility$setAnimationManager(animManager);
-                ViaBedrockUtilityNeoForge.LOGGER.debug(
-                        "[Skin] Loaded {} animation override(s) for {}: {}",
-                        animManager.getRegisteredAnimationNames().size(), playerUuid,
-                        animManager.getRegisteredAnimationNames());
-            }
+            renderer.setPlayerAnimationRuntime(manager, overrides);
+            ViaBedrockUtilityNeoForge.LOGGER.debug(
+                    "[Skin] Created Bedrock player runtime with {} alias override(s) for {}: {}",
+                    overrides.size(), playerUuid, overrides.keySet());
         } catch (final Exception e) {
-            ViaBedrockUtilityNeoForge.LOGGER.warn(
-                    "[Skin] Failed to parse animation overrides for {}: {}", playerUuid, e.getMessage());
+            throw new IllegalStateException(
+                    "Failed to create Bedrock player runtime for " + playerUuid, e);
         }
     }
 
