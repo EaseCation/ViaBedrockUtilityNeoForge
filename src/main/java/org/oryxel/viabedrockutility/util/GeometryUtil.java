@@ -635,7 +635,7 @@ public final class GeometryUtil {
                             final float z = anchor * zScale;
                             positions = new float[][]{{min * xScale, 0, z}, {min * xScale, depth, z},
                                     {max * xScale, depth, z}, {max * xScale, 0, z}};
-                            normal = new float[]{0, 0, -1};
+                            normal = new float[]{0, 0, 1};
                             uvs = new float[]{min / texture.width(), anchor / texture.height(),
                                     min / texture.width(), (anchor + 1.0F) / texture.height(),
                                     max / texture.width(), (anchor + 1.0F) / texture.height(),
@@ -645,7 +645,7 @@ public final class GeometryUtil {
                             final float z = (anchor + 1.0F) * zScale;
                             positions = new float[][]{{min * xScale, depth, z}, {min * xScale, 0, z},
                                     {max * xScale, 0, z}, {max * xScale, depth, z}};
-                            normal = new float[]{0, 0, 1};
+                            normal = new float[]{0, 0, -1};
                             uvs = new float[]{min / texture.width(), (anchor + 1.0F) / texture.height(),
                                     min / texture.width(), anchor / texture.height(),
                                     max / texture.width(), anchor / texture.height(),
@@ -655,7 +655,7 @@ public final class GeometryUtil {
                             final float x = anchor * xScale;
                             positions = new float[][]{{x, 0, min * zScale}, {x, 0, max * zScale},
                                     {x, depth, max * zScale}, {x, depth, min * zScale}};
-                            normal = new float[]{-1, 0, 0};
+                            normal = new float[]{1, 0, 0};
                             uvs = new float[]{anchor / texture.width(), min / texture.height(),
                                     (anchor + 1.0F) / texture.width(), min / texture.height(),
                                     (anchor + 1.0F) / texture.width(), max / texture.height(),
@@ -665,7 +665,7 @@ public final class GeometryUtil {
                             final float x = (anchor + 1.0F) * xScale;
                             positions = new float[][]{{x, depth, min * zScale}, {x, depth, max * zScale},
                                     {x, 0, max * zScale}, {x, 0, min * zScale}};
-                            normal = new float[]{1, 0, 0};
+                            normal = new float[]{-1, 0, 0};
                             uvs = new float[]{(anchor + 1.0F) / texture.width(), max / texture.height(),
                                     anchor / texture.width(), max / texture.height(),
                                     anchor / texture.width(), min / texture.height(),
