@@ -136,7 +136,8 @@ public final class AttachableRuntimeManager {
                     runtime.lastPhysicalAnchorMatrix == null
                             ? null : runtime.lastPhysicalAnchorMatrix.get(new float[16]),
                     runtime.lastGeometryInstallationMatrix == null
-                            ? null : runtime.lastGeometryInstallationMatrix.get(new float[16]));
+                            ? null : runtime.lastGeometryInstallationMatrix.get(new float[16]),
+                    runtime.lastGeometrySummary);
         }).toList();
     }
 

@@ -24,6 +24,7 @@ import org.joml.Matrix4f;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
+import org.oryxel.viabedrockutility.mixin.interfaces.ICuboid;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
 import org.oryxel.viabedrockutility.util.GeometryUtil;
 import team.unnamed.mocha.runtime.Scope;
@@ -64,6 +65,7 @@ final class AttachableRuntimeInstance {
     volatile List<String> lastRenderPasses = List.of();
     volatile Matrix4f lastPhysicalAnchorMatrix;
     volatile Matrix4f lastGeometryInstallationMatrix;
+    volatile String lastGeometrySummary = "unbuilt";
     volatile String lastFailure = "Runtime did not submit geometry";
     private final List<PendingParticleEvent> pendingParticleEvents = new ArrayList<>();
     private final List<PendingSoundEvent> pendingSoundEvents = new ArrayList<>();
@@ -202,6 +204,7 @@ final class AttachableRuntimeInstance {
                                             plannedPass.pass().textureValue()));
                             return new ModelState(built, new McBoneModel(built));
                         });
+                lastGeometrySummary = geometrySummary(model.model());
                 animation.sample(model.bones(), partialTick, frame.scope(), frame.context());
                 boolean submittedPass = false;
                 for (AttachableRenderPlanner.HostGroup<BedrockPlayerModelMetadata.Bone> group
@@ -435,5 +438,21 @@ final class AttachableRuntimeInstance {
     }
 
     private record ModelState(Model model, McBoneModel bones) {
+    }
+
+    private static String geometrySummary(Model model) {
+        int cuboids = 0;
+        int vertices = 0;
+        for (ModelPart part : model.allParts()) {
+            final IModelPart extension = (IModelPart) (Object) part;
+            for (ModelPart.Cube cube : extension.viaBedrockUtility$getCuboids()) {
+                cuboids++;
+                final ICuboid cuboid = (ICuboid) (Object) cube;
+                if (cuboid.viaBedrockUtility$getCompiledGeometry() != null) {
+                    vertices += cuboid.viaBedrockUtility$getCompiledGeometry().vertexCount();
+                }
+            }
+        }
+        return "cuboids=" + cuboids + ",vertices=" + vertices;
     }
 }

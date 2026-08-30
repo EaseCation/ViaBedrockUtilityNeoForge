@@ -277,6 +277,7 @@ public class ViaBedrockUtility {
                     + ", presentationChain=" + snapshot.presentationChain()
                     + ", controllers=" + snapshot.controllerStates()
                     + ", passes=" + snapshot.renderPasses()
+                    + ", geometry=" + snapshot.geometrySummary()
                     + ", physicalAnchor=" + Arrays.toString(snapshot.physicalAnchorMatrix())
                     + ", geometryInstallation="
                     + Arrays.toString(snapshot.geometryInstallationMatrix()));

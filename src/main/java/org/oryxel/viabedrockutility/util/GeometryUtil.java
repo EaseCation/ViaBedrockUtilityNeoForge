@@ -596,31 +596,39 @@ public final class GeometryUtil {
                                                          List<CuboidGroup> cuboidGroups) {
         for (TextureMesh mesh : meshes) {
             final TextureAlpha texture = textureResolver.apply(mesh.getTexture());
-            if (texture == null) {
-                continue;
-            }
-            final float xScale = uvWidth / texture.width();
-            final float zScale = uvHeight / texture.height();
+            // Bedrock's texture_mesh always has a rectangular front/back sheet. Alpha data is
+            // only needed for the optional pixel-boundary extrusion; a missing image must not
+            // turn the whole attachable into an empty model (Java's item/generated path has the
+            // same rectangular geometry even before seam fixing).
+            final int textureWidth = texture == null ? Math.max(1, Math.round(uvWidth)) : texture.width();
+            final int textureHeight = texture == null ? Math.max(1, Math.round(uvHeight)) : texture.height();
+            final float xScale = uvWidth / textureWidth;
+            final float zScale = uvHeight / textureHeight;
             final float depth = mesh.getDepth();
             final List<BoundaryQuad> faces = new ArrayList<>();
 
-            // Bedrock texture_meshes are the Bedrock-space equivalent of Java's generated item
-            // model: two complete faces at depth 0..1 plus only alpha-boundary side spans.
+            // Bedrock texture_meshes are the Bedrock-space equivalent of Java's generated item:
+            // the sprite occupies X/Y and depth is along Z. Java's generated item uses
+            // z=7.5..8.5 for the same one-pixel thickness; this local mesh uses 0..depth.
             faces.add(new BoundaryQuad(
-                    new float[][]{{0, 0, 0}, {uvWidth, 0, 0}, {uvWidth, 0, uvHeight}, {0, 0, uvHeight}},
-                    new float[]{0, -1, 0},
+                    new float[][]{{0, uvHeight, depth}, {uvWidth, uvHeight, depth},
+                            {uvWidth, 0, depth}, {0, 0, depth}},
+                    new float[]{0, 0, 1},
                     // Java's generated-item SOUTH face: left/top -> right/top ->
-                    // right/bottom -> left/bottom. The previous implementation used
-                    // the NORTH ordering for both faces, mirroring the visible sprite.
-                    new float[]{0, 0, 1, 0, 1, 1, 0, 1}, mesh));
+                    // right/bottom -> left/bottom. Source Y is Bedrock-down, so the source
+                    // vertices are reversed before the shared Y reflection to retain this
+                    // Java winding in model space.
+                    new float[]{0, 1, 1, 1, 1, 0, 0, 0}, mesh));
             faces.add(new BoundaryQuad(
-                    new float[][]{{0, depth, 0}, {0, depth, uvHeight}, {uvWidth, depth, uvHeight}, {uvWidth, depth, 0}},
-                    new float[]{0, 1, 0},
+                    new float[][]{{uvWidth, 0, 0}, {uvWidth, uvHeight, 0},
+                            {0, uvHeight, 0}, {0, 0, 0}},
+                    new float[]{0, 0, -1},
                     // Java's generated-item NORTH face reverses U so the image has the
                     // same orientation when viewed from the back.
                     new float[]{1, 0, 1, 1, 0, 1, 0, 0}, mesh));
 
-            for (SpriteSpan span : spriteSpans(texture)) {
+            if (texture != null) {
+                for (SpriteSpan span : spriteSpans(texture)) {
                 final float min = span.min();
                 final float max = span.max() + 1.0F;
                 final float anchor = span.anchor();
@@ -631,20 +639,21 @@ public final class GeometryUtil {
                 final float[] uvs;
                 switch (span.facing()) {
                     case UP -> {
-                        float z = anchor * zScale;
-                        positions = new float[][]{{min * xScale, 0, z}, {min * xScale, depth, z},
-                                {max * xScale, depth, z}, {max * xScale, 0, z}};
-                        normal = new float[]{0, 0, -1};
+                        float y = anchor * zScale;
+                        positions = new float[][]{{min * xScale, y, 0}, {max * xScale, y, 0},
+                                {max * xScale, y, depth}, {min * xScale, y, depth}};
+                        // Bedrock -Y becomes Java +Y after the shared Y reflection.
+                        normal = new float[]{0, -1, 0};
                         uvs = new float[]{min / texture.width(), anchor / texture.height(),
-                                min / texture.width(), (anchor + 1.0F) / texture.height(),
+                                max / texture.width(), anchor / texture.height(),
                                 max / texture.width(), (anchor + 1.0F) / texture.height(),
-                                max / texture.width(), anchor / texture.height()};
+                                min / texture.width(), (anchor + 1.0F) / texture.height()};
                     }
                     case DOWN -> {
-                        float z = anchor * zScale;
-                        positions = new float[][]{{min * xScale, 0, z}, {max * xScale, 0, z},
-                                {max * xScale, depth, z}, {min * xScale, depth, z}};
-                        normal = new float[]{0, 0, 1};
+                        float y = (anchor + 1.0F) * zScale;
+                        positions = new float[][]{{min * xScale, y, depth}, {max * xScale, y, depth},
+                                {max * xScale, y, 0}, {min * xScale, y, 0}};
+                        normal = new float[]{0, 1, 0};
                         uvs = new float[]{min / texture.width(), (anchor + 1.0F) / texture.height(),
                                 max / texture.width(), (anchor + 1.0F) / texture.height(),
                                 max / texture.width(), anchor / texture.height(),
@@ -652,9 +661,9 @@ public final class GeometryUtil {
                     }
                     case LEFT -> {
                         float x = anchor * xScale;
-                        positions = new float[][]{{x, 0, min * zScale}, {x, depth, min * zScale},
-                                {x, depth, max * zScale}, {x, 0, max * zScale}};
-                        normal = new float[]{-1, 0, 0};
+                        positions = new float[][]{{x, min * zScale, depth}, {x, max * zScale, depth},
+                                {x, max * zScale, 0}, {x, min * zScale, 0}};
+                        normal = new float[]{1, 0, 0};
                         uvs = new float[]{anchor / texture.width(), max / texture.height(),
                                 anchor / texture.width(), min / texture.height(),
                                 (anchor + 1.0F) / texture.width(), min / texture.height(),
@@ -662,9 +671,9 @@ public final class GeometryUtil {
                     }
                     case RIGHT -> {
                         float x = anchor * xScale;
-                        positions = new float[][]{{x, 0, min * zScale}, {x, 0, max * zScale},
-                                {x, depth, max * zScale}, {x, depth, min * zScale}};
-                        normal = new float[]{1, 0, 0};
+                        positions = new float[][]{{x, min * zScale, 0}, {x, max * zScale, 0},
+                                {x, max * zScale, depth}, {x, min * zScale, depth}};
+                        normal = new float[]{-1, 0, 0};
                         uvs = new float[]{anchor / texture.width(), max / texture.height(),
                                 anchor / texture.width(), min / texture.height(),
                                 (anchor + 1.0F) / texture.width(), min / texture.height(),
@@ -672,7 +681,8 @@ public final class GeometryUtil {
                     }
                     default -> throw new AssertionError(span.facing());
                 }
-                faces.add(new BoundaryQuad(positions, normal, uvs, mesh));
+                    faces.add(new BoundaryQuad(positions, normal, uvs, mesh));
+                }
             }
 
             for (int batch = 0; batch < faces.size(); batch += 6) {
