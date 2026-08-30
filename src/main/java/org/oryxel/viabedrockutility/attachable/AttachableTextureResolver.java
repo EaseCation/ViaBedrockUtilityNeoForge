@@ -3,6 +3,7 @@ package org.oryxel.viabedrockutility.attachable;
 import net.easecation.bedrockmotion.pack.PackManager;
 import net.easecation.bedrockmotion.pack.content.Content;
 import org.oryxel.viabedrockutility.util.GeometryUtil;
+import org.oryxel.viabedrockutility.pack.processor.TextureProcessor;
 
 import java.util.Locale;
 import java.util.Map;
@@ -37,7 +38,10 @@ final class AttachableTextureResolver {
                 // retains its rectangular front/back mesh when alpha data is unavailable.
             }
         }
-        return null;
+        // TextureProcessor owns the same top-most resolved images after registration. This
+        // fallback keeps texture_mesh alpha available even when PackManager has released the
+        // source Content objects, while preserving the exact ResourceLocation precedence.
+        return TextureProcessor.resolveAlpha(normalized);
     }
 
     static String normalize(String raw) {
