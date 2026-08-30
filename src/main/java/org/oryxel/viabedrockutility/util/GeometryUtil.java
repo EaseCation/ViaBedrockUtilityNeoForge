@@ -636,40 +636,40 @@ public final class GeometryUtil {
                             positions = new float[][]{{min * xScale, 0, z}, {min * xScale, depth, z},
                                     {max * xScale, depth, z}, {max * xScale, 0, z}};
                             normal = new float[]{0, 0, -1};
-                            uvs = new float[]{min / texture.width(), 1.0F - anchor / texture.height(),
-                                    min / texture.width(), 1.0F - (anchor + 1.0F) / texture.height(),
-                                    max / texture.width(), 1.0F - (anchor + 1.0F) / texture.height(),
-                                    max / texture.width(), 1.0F - anchor / texture.height()};
+                            uvs = new float[]{min / texture.width(), anchor / texture.height(),
+                                    min / texture.width(), (anchor + 1.0F) / texture.height(),
+                                    max / texture.width(), (anchor + 1.0F) / texture.height(),
+                                    max / texture.width(), anchor / texture.height()};
                         }
                         case DOWN -> {
                             final float z = (anchor + 1.0F) * zScale;
                             positions = new float[][]{{min * xScale, depth, z}, {min * xScale, 0, z},
                                     {max * xScale, 0, z}, {max * xScale, depth, z}};
                             normal = new float[]{0, 0, 1};
-                            uvs = new float[]{min / texture.width(), 1.0F - (anchor + 1.0F) / texture.height(),
-                                    min / texture.width(), 1.0F - anchor / texture.height(),
-                                    max / texture.width(), 1.0F - anchor / texture.height(),
-                                    max / texture.width(), 1.0F - (anchor + 1.0F) / texture.height()};
+                            uvs = new float[]{min / texture.width(), (anchor + 1.0F) / texture.height(),
+                                    min / texture.width(), anchor / texture.height(),
+                                    max / texture.width(), anchor / texture.height(),
+                                    max / texture.width(), (anchor + 1.0F) / texture.height()};
                         }
                         case LEFT -> {
                             final float x = anchor * xScale;
                             positions = new float[][]{{x, 0, min * zScale}, {x, 0, max * zScale},
                                     {x, depth, max * zScale}, {x, depth, min * zScale}};
                             normal = new float[]{-1, 0, 0};
-                            uvs = new float[]{anchor / texture.width(), 1.0F - max / texture.height(),
-                                    (anchor + 1.0F) / texture.width(), 1.0F - max / texture.height(),
-                                    (anchor + 1.0F) / texture.width(), 1.0F - min / texture.height(),
-                                    anchor / texture.width(), 1.0F - min / texture.height()};
+                            uvs = new float[]{anchor / texture.width(), min / texture.height(),
+                                    (anchor + 1.0F) / texture.width(), min / texture.height(),
+                                    (anchor + 1.0F) / texture.width(), max / texture.height(),
+                                    anchor / texture.width(), max / texture.height()};
                         }
                         case RIGHT -> {
                             final float x = (anchor + 1.0F) * xScale;
                             positions = new float[][]{{x, depth, min * zScale}, {x, depth, max * zScale},
                                     {x, 0, max * zScale}, {x, 0, min * zScale}};
                             normal = new float[]{1, 0, 0};
-                            uvs = new float[]{(anchor + 1.0F) / texture.width(), 1.0F - min / texture.height(),
-                                    anchor / texture.width(), 1.0F - min / texture.height(),
-                                    anchor / texture.width(), 1.0F - max / texture.height(),
-                                    (anchor + 1.0F) / texture.width(), 1.0F - max / texture.height()};
+                            uvs = new float[]{(anchor + 1.0F) / texture.width(), max / texture.height(),
+                                    anchor / texture.width(), max / texture.height(),
+                                    anchor / texture.width(), min / texture.height(),
+                                    (anchor + 1.0F) / texture.width(), min / texture.height()};
                         }
                         default -> throw new AssertionError(span.facing());
                     }
