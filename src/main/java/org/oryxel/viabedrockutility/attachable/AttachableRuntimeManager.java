@@ -275,6 +275,9 @@ public final class AttachableRuntimeManager {
 
         final AttachableHostContext host = new AttachableHostContext(metadata);
         try {
+            // An item can change after the client tick has already advanced the old hand runtime.
+            // Prime the replacement with its current frame before submitting raw geometry.
+            runtime.advanceCurrentFrameTo(tick);
             final boolean rendered = runtime.render(host, poses, buffers, packedLight, partialTick, hostMeshRenderer);
             recordAttempt(key, tick, generation.generation(), item, view,
                     rendered ? AttemptStage.RENDERED : AttemptStage.RUNTIME_REJECTED,

@@ -134,7 +134,23 @@ final class AttachableRuntimeInstance {
         this.view = view;
         frame = AttachableScopeFactory.RuntimeScope.persistent(persistentScope, actor, owner, ownerEntity, item,
                 hand, arm, view, tick, 0.0F, definition.identifier());
-        animation.tick(tick, frame.scope(), frame.context());
+        advanceCurrentFrameTo(tick);
+    }
+
+    /**
+     * Advances a runtime created after the client tick before its first visible render. The current
+     * frame is retained so item, hand, view and partial-frame queries match the geometry being
+     * submitted. AttachableAnimationRuntime rejects duplicate advances for the same tick.
+     */
+    boolean advanceCurrentFrameTo(long tick) throws IOException {
+        if (frame == null) {
+            return false;
+        }
+        return animation.tick(tick, frame.scope(), frame.context());
+    }
+
+    boolean hasAnimator(String identifier) {
+        return animation.animators().containsKey(identifier);
     }
 
     boolean render(AttachableHostContext host, PoseStack poses,
