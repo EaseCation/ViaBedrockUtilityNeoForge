@@ -39,6 +39,7 @@ public final class PlayerAnimationRuntime {
     private final LongSupplier nowMillis;
     private final MovementDistance movementDistance = new MovementDistance();
     private McBoneModel cachedModel;
+    private volatile SampleDebugSnapshot lastSample;
 
     public PlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides) {
         this(packs, animationOverrides, System::currentTimeMillis);
@@ -67,7 +68,7 @@ public final class PlayerAnimationRuntime {
 
     /** Captures both view runtimes without mutating either runtime or the host model. */
     public DebugSnapshot debugSnapshot() {
-        return new DebugSnapshot(firstPerson.debugSnapshot(), thirdPerson.debugSnapshot());
+        return new DebugSnapshot(firstPerson.debugSnapshot(), thirdPerson.debugSnapshot(), lastSample);
     }
 
     void sampleFirstPerson(IBoneModel model, PlayerAnimationState state) {
@@ -104,6 +105,8 @@ public final class PlayerAnimationRuntime {
             throw new IllegalStateException("Unable to sample Bedrock player animation", exception);
         }
         applyOneShots(model, view.scope);
+        lastSample = new SampleDebugSnapshot(state.view(), state.tick(), state.partialTick(),
+                System.identityHashCode(model));
     }
 
     private void applyOneShots(IBoneModel model, Scope scope) {
@@ -354,7 +357,12 @@ public final class PlayerAnimationRuntime {
         }
     }
 
-    public record DebugSnapshot(ViewDebugSnapshot firstPerson, ViewDebugSnapshot thirdPerson) {
+    public record DebugSnapshot(ViewDebugSnapshot firstPerson, ViewDebugSnapshot thirdPerson,
+                                SampleDebugSnapshot lastSample) {
+    }
+
+    public record SampleDebugSnapshot(PlayerAnimationState.View view, long tick,
+                                      float partialTick, int boneModelIdentity) {
     }
 
     public record ViewDebugSnapshot(PlayerAnimationState state,

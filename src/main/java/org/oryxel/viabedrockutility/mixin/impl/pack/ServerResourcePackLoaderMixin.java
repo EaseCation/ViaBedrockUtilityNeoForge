@@ -8,6 +8,7 @@ import net.minecraft.server.packs.repository.Pack;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.pack.processor.TextureProcessor;
+import org.oryxel.viabedrockutility.diagnostics.BedrockPackDiagnostics;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -29,26 +30,56 @@ public class ServerResourcePackLoaderMixin {
         }
 
         ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack] Intercepting server resource packs, {} pack(s) received", packs.size());
-        final List<Path> packPaths = packs.stream().map(PackReloadConfig.IdAndPath::path).toList();
         final long connectionEpoch = ViaBedrockUtility.getInstance().getConnectionEpoch();
-        loadBedrockPacks(packPaths, connectionEpoch);
+        loadBedrockPacks(packs, connectionEpoch);
     }
 
-    private void loadBedrockPacks(List<Path> packs, long connectionEpoch) {
+    private void loadBedrockPacks(List<PackReloadConfig.IdAndPath> packs, long connectionEpoch) {
         final List<Content> contents = new ArrayList<>();
-        packs.forEach(pack -> {
+        final List<BedrockPackDiagnostics.PackInput> diagnosticInputs = new ArrayList<>();
+        boolean sawEmbeddedPack = false;
+        boolean allEmbeddedStacksManifestOrdered = true;
+        final List<String> orderingWarnings = new ArrayList<>();
+        if (packs.size() > 1) {
+            orderingWarnings.add("Multiple outer Java resource packs are active; applying Minecraft's reversed pack precedence");
+        }
+        // DownloadedPackSource.loadRequestedPacks() uses Lists.reverse(packs). Mirror that exact
+        // outer precedence before applying each inner bottom-to-top Bedrock stack.
+        for (int outerIndex = packs.size() - 1; outerIndex >= 0; outerIndex--) {
+            final PackReloadConfig.IdAndPath requested = packs.get(outerIndex);
+            final Path pack = requested.path();
             try {
                 final Content content = new Content(Files.readAllBytes(pack));
-                final List<String> mcpacks = content.getFilesDeep("bedrock/", ".mcpack");
+                final BedrockPackDiagnostics.StackOrder stackOrder =
+                        BedrockPackDiagnostics.resolveEmbeddedPackOrder(content);
+                final List<String> mcpacks = stackOrder.paths();
+                if (!mcpacks.isEmpty()) {
+                    sawEmbeddedPack = true;
+                    allEmbeddedStacksManifestOrdered &= stackOrder.manifestApplied();
+                }
+                if (!stackOrder.warning().isBlank()) {
+                    orderingWarnings.add("outer[" + outerIndex + "]: " + stackOrder.warning());
+                }
                 ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack] Found {} bedrock mcpack(s) in {}", mcpacks.size(), pack.getFileName());
                 for (final String path : mcpacks) {
                     ViaBedrockUtilityNeoForge.LOGGER.debug("[ResourcePack]   - {}", path);
-                    contents.add(new Content(content.get(path)));
+                    final byte[] archive = content.get(path);
+                    final Content embedded = new Content(archive);
+                    contents.add(embedded);
+                    diagnosticInputs.add(new BedrockPackDiagnostics.PackInput(
+                            outerIndex, requested.id().toString(), String.valueOf(pack.getFileName()),
+                            path, embedded, BedrockPackDiagnostics.hashBytes(archive),
+                            stackOrder.manifestApplied()));
                 }
             } catch (IOException e) {
                 ViaBedrockUtilityNeoForge.LOGGER.warn("[ResourcePack] Failed to read pack {}", pack);
             }
-        });
+        }
+
+        final String orderingWarning = String.join("; ", orderingWarnings);
+        final BedrockPackDiagnostics.Snapshot diagnostics = BedrockPackDiagnostics.inspect(
+                diagnosticInputs, sawEmbeddedPack && allEmbeddedStacksManifestOrdered,
+                orderingWarning);
 
         ViaBedrockUtilityNeoForge.LOGGER.info("[ResourcePack] Loaded {} bedrock pack(s) total, initializing PackManager", contents.size());
         final PackManager nextManager = new PackManager(contents);
@@ -81,7 +112,8 @@ public class ServerResourcePackLoaderMixin {
         // the client reload thread; render code can therefore observe only the complete old or
         // complete new generation, never a new PackManager with stale particle definitions.
         loadParticleDefinitions(contents);
-        if (!ViaBedrockUtility.getInstance().publishPackManager(nextManager, connectionEpoch)) {
+        if (!ViaBedrockUtility.getInstance().publishPackManager(
+                nextManager, diagnostics, connectionEpoch)) {
             return;
         }
 

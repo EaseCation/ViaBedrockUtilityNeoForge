@@ -31,6 +31,27 @@ class AttachableDebugAttemptStoreTest {
         assertEquals(List.of(refreshedLive), store.snapshot());
     }
 
+    @Test
+    void historyRecordsStateChangesButNotEveryTickRefresh() {
+        final AttachableDebugAttemptStore store = new AttachableDebugAttemptStore();
+        final var key = new AttachableRuntimeRegistry.RuntimeKey(
+                UUID.randomUUID(), AttachableQueryContext.LogicalHand.MAIN_HAND);
+        final DebugAttempt first = attempt(key, 10L);
+        final DebugAttempt refresh = attempt(key, 11L);
+        final DebugAttempt rendered = new DebugAttempt(key, 1L, 12L, "minecraft:stick",
+                AttachableQueryContext.ViewContext.THIRD_PERSON, AttemptStage.RENDERED,
+                1, "minecraft:stick.player", List.of("default"),
+                "rightitem->rightitem", "");
+
+        store.record(first, 10L);
+        store.record(refresh, 11L);
+        store.record(rendered, 12L);
+
+        assertEquals(List.of(first, rendered), store.historySnapshot());
+        store.clear();
+        assertEquals(List.of(), store.historySnapshot());
+    }
+
     private static DebugAttempt attempt(AttachableRuntimeRegistry.RuntimeKey key, long tick) {
         return new DebugAttempt(key, 1L, tick, "minecraft:stick",
                 AttachableQueryContext.ViewContext.THIRD_PERSON, AttemptStage.NO_CANDIDATES,

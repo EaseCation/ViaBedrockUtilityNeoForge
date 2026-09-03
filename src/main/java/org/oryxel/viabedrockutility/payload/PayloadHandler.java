@@ -38,6 +38,7 @@ import org.oryxel.viabedrockutility.util.GeometryUtil;
 import org.oryxel.viabedrockutility.util.ImageUtil;
 import org.oryxel.viabedrockutility.util.PlayerSkinBuilder;
 import org.oryxel.viabedrockutility.util.PlayerSkinTextureCompat;
+import org.oryxel.viabedrockutility.diagnostics.SkinDebugLog;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,6 +51,7 @@ public class PayloadHandler {
     protected final Map<UUID, SkinInfo> cachedSkinInfo = new ConcurrentHashMap<>();
     protected final Map<UUID, CachedPlayerSkin> cachedPlayerSkins = new ConcurrentHashMap<>();
     protected final Map<UUID, Map<Integer, PendingAnimation>> pendingAnimations = new ConcurrentHashMap<>();
+    protected final SkinDebugLog skinDebugLog = new SkinDebugLog();
     protected PackManager packManager;
 
     // Payloads that arrive before the resource pack (PackManager) is ready are queued here instead of being
@@ -91,6 +93,7 @@ public class PayloadHandler {
         cachedSkinInfo.clear();
         pendingAnimations.clear();
         pendingPayloads.clear();
+        skinDebugLog.clear();
         packManager = null;
     }
 
@@ -119,7 +122,13 @@ public class PayloadHandler {
             this.handle(modelRequest);
         } else if (payload instanceof BaseSkinPayload baseSkin) {
             ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] Received skin info for player {} ({}x{}, {} chunk(s))", baseSkin.getPlayerUuid(), baseSkin.getSkinWidth(), baseSkin.getSkinHeight(), baseSkin.getChunkCount());
-            this.cachedSkinInfo.put(baseSkin.getPlayerUuid(), new SkinInfo(baseSkin.getGeometry(), baseSkin.getResourcePatch(), baseSkin.getSkinWidth(), baseSkin.getSkinHeight(), baseSkin.getChunkCount()));
+            final long transfer = this.skinDebugLog.begin(baseSkin.getPlayerUuid(), clientTick(),
+                    baseSkin.getSkinWidth(), baseSkin.getSkinHeight(), baseSkin.getChunkCount(),
+                    geometryIdentifier(baseSkin.getResourcePatch()), baseSkin.getGeometry(),
+                    baseSkin.getResourcePatch());
+            this.cachedSkinInfo.put(baseSkin.getPlayerUuid(), new SkinInfo(
+                    baseSkin.getGeometry(), baseSkin.getResourcePatch(), baseSkin.getSkinWidth(),
+                    baseSkin.getSkinHeight(), baseSkin.getChunkCount(), transfer));
         } else if (payload instanceof SkinDataPayload skinData) {
             this.handle(skinData);
         } else if (payload instanceof CapeDataPayload capePayload) {
@@ -271,11 +280,16 @@ public class PayloadHandler {
     public void handle(final SkinDataPayload payload) {
         final SkinInfo info = this.cachedSkinInfo.get(payload.getPlayerUuid());
         if (info == null) {
+            this.skinDebugLog.rejected(payload.getPlayerUuid(), -1L, clientTick(),
+                    "SKIN_DATA arrived without active SKIN_INFORMATION, chunk="
+                            + payload.getChunkPosition());
             ViaBedrockUtilityNeoForge.LOGGER.error("Skin info was null!");
             return;
         }
 
         info.setData(payload.getSkinData(), payload.getChunkPosition());
+        this.skinDebugLog.chunk(payload.getPlayerUuid(), info.getTransferSequence(), clientTick(),
+                payload.getChunkPosition(), payload.getSkinData().length);
         ViaBedrockUtilityNeoForge.LOGGER.debug("Skin chunk {} received for {}", payload.getChunkPosition(), payload.getPlayerUuid());
 
         if (info.isComplete()) {
@@ -296,6 +310,8 @@ public class PayloadHandler {
 
         final NativeImage skinImage = ImageUtil.toNativeImage(skinData, info.getWidth(), info.getHeight());
         if (skinImage == null) {
+            this.skinDebugLog.rejected(payload.getPlayerUuid(), info.getTransferSequence(),
+                    clientTick(), "NativeImage conversion returned null");
             ViaBedrockUtilityNeoForge.LOGGER.error("[Skin] toNativeImage returned null for {}", payload.getPlayerUuid());
             return;
         }
@@ -361,6 +377,8 @@ public class PayloadHandler {
 
         if (model == null) {
             if (requiredGeometry == null) {
+                this.skinDebugLog.rejected(payload.getPlayerUuid(), info.getTransferSequence(),
+                        clientTick(), "resourcePatch has no default geometry");
                 ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] requiredGeometry is null, returning early for {}", payload.getPlayerUuid());
                 return;
             }
@@ -375,6 +393,8 @@ public class PayloadHandler {
             }
 
             if (!found) {
+                this.skinDebugLog.rejected(payload.getPlayerUuid(), info.getTransferSequence(),
+                        clientTick(), "Unsupported geometry: " + requiredGeometry);
                 ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] Geometry '{}' not in hardcoded list, returning early for {}", requiredGeometry, payload.getPlayerUuid());
                 return;
             }
@@ -387,6 +407,9 @@ public class PayloadHandler {
                         "[Skin] Using bundled Bedrock player geometry (slim={}) for {}",
                         slim, payload.getPlayerUuid());
             } catch (RuntimeException exception) {
+                this.skinDebugLog.rejected(payload.getPlayerUuid(), info.getTransferSequence(),
+                        clientTick(), "Bundled player geometry failed: "
+                                + exception.getClass().getSimpleName());
                 ViaBedrockUtilityNeoForge.LOGGER.error(
                         "[Skin] Failed to build bundled Bedrock player geometry for {}",
                         payload.getPlayerUuid(), exception);
@@ -398,6 +421,9 @@ public class PayloadHandler {
         final CustomPlayerRenderer customRenderer = new CustomPlayerRenderer(entityContext, model, slim, identifier);
         this.cachedPlayerRenderers.put(payload.getPlayerUuid(), customRenderer);
         this.cachedPlayerSkins.put(payload.getPlayerUuid(), new CachedPlayerSkin(identifier, slim, info.getGeometryRaw(), info.getResourcePatch()));
+        this.skinDebugLog.installed(payload.getPlayerUuid(), info.getTransferSequence(), clientTick(),
+                Objects.requireNonNullElse(requiredGeometry, ""), slim, customRenderer, model,
+                identifier.toString());
         ViaBedrockUtilityNeoForge.LOGGER.debug("[Skin] CustomPlayerRenderer created for {}", payload.getPlayerUuid());
 
         applyAnimationOverrides(payload.getPlayerUuid(), customRenderer, info.getResourcePatch(), this.packManager);
@@ -426,13 +452,16 @@ public class PayloadHandler {
         private final String geometryRaw, resourcePatch;
         private final int width, height;
         private final byte[][] skinData;
+        private final long transferSequence;
 
-        public SkinInfo(String geometryRaw, String resourcePatch, int width, int height, int chunkCount) {
+        public SkinInfo(String geometryRaw, String resourcePatch, int width, int height,
+                        int chunkCount, long transferSequence) {
             this.geometryRaw = geometryRaw;
             this.resourcePatch = resourcePatch;
             this.skinData = new byte[chunkCount][];
             this.width = width;
             this.height = height;
+            this.transferSequence = transferSequence;
         }
         /**
          * Should the skin data be sent to us through multiple plugin messages, assemble it.
@@ -472,6 +501,7 @@ public class PayloadHandler {
     }
 
     public void removePlayerCache(UUID uuid) {
+        skinDebugLog.removed(uuid, clientTick(), "removePlayerCache");
         cachedPlayerRenderers.remove(uuid);
         cachedPlayerCapes.remove(uuid);
         cachedPlayerSkins.remove(uuid);
@@ -664,6 +694,22 @@ public class PayloadHandler {
 
     public EntityRenderer<?, ?> cachedPlayerRenderer(UUID playerUuid) {
         return cachedPlayerRenderers.get(playerUuid);
+    }
+
+    private static long clientTick() {
+        final Minecraft minecraft = Minecraft.getInstance();
+        return minecraft.player == null ? -1L : minecraft.player.tickCount;
+    }
+
+    private static String geometryIdentifier(String resourcePatch) {
+        try {
+            final JsonObject patch = JsonParser.parseString(resourcePatch).getAsJsonObject();
+            final JsonObject geometries = patch.getAsJsonObject("geometry");
+            return geometries == null || !geometries.has("default")
+                    ? "" : geometries.get("default").getAsString();
+        } catch (Throwable ignored) {
+            return "";
+        }
     }
 
     @Getter

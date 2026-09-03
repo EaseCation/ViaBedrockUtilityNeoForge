@@ -33,6 +33,8 @@ import org.oryxel.viabedrockutility.pack.processor.TextureProcessor;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerPoseDemand;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
+import org.oryxel.viabedrockutility.diagnostics.BedrockPackDiagnostics;
+import org.oryxel.viabedrockutility.diagnostics.VbuDebugReports;
 import org.oryxel.viabedrockutility.animation.PlayerAnimationRuntime;
 import org.oryxel.viabedrockutility.animation.PlayerAnimationState;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
@@ -44,6 +46,7 @@ import java.util.Map;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.Arrays;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -63,6 +66,9 @@ public class ViaBedrockUtility {
     private CameraPayloadHandler cameraPayloadHandler;
     @Setter(AccessLevel.NONE)
     private volatile PackGeneration packGeneration = new PackGeneration(0L, null);
+    @Setter(AccessLevel.NONE)
+    private volatile BedrockPackDiagnostics.Snapshot packDiagnostics =
+            BedrockPackDiagnostics.Snapshot.empty();
     private final AtomicLong packGenerationCounter = new AtomicLong();
     private final AtomicLong connectionEpochCounter = new AtomicLong();
     private volatile long connectionEpoch;
@@ -136,8 +142,16 @@ public class ViaBedrockUtility {
 
     /** Publishes manager+generation atomically, then invalidates every mutable attachable instance. */
     public synchronized void setPackManager(PackManager manager) {
+        this.setPackManager(manager, BedrockPackDiagnostics.Snapshot.empty());
+    }
+
+    /** Publishes the runtime and the provenance snapshot produced from the exact same pack inputs. */
+    public synchronized void setPackManager(PackManager manager,
+                                            BedrockPackDiagnostics.Snapshot diagnostics) {
         final long generation = this.packGenerationCounter.incrementAndGet();
         this.packGeneration = new PackGeneration(generation, manager);
+        this.packDiagnostics = diagnostics == null
+                ? BedrockPackDiagnostics.Snapshot.empty() : diagnostics;
         if (this.payloadHandler != null) {
             this.payloadHandler.onPackManagerChanged(manager);
         }
@@ -155,13 +169,20 @@ public class ViaBedrockUtility {
 
     /** Publishes only if the resource reload still belongs to the active connection. */
     public synchronized boolean publishPackManager(PackManager manager, long expectedConnectionEpoch) {
+        return publishPackManager(manager, BedrockPackDiagnostics.Snapshot.empty(), expectedConnectionEpoch);
+    }
+
+    /** Publishes a runtime/provenance pair only while both still belong to the active connection. */
+    public synchronized boolean publishPackManager(PackManager manager,
+                                                   BedrockPackDiagnostics.Snapshot diagnostics,
+                                                   long expectedConnectionEpoch) {
         if (expectedConnectionEpoch != this.connectionEpoch) {
             ViaBedrockUtilityNeoForge.LOGGER.debug(
                     "[ResourcePack] Discarding retired connection generation {} (current={})",
                     expectedConnectionEpoch, this.connectionEpoch);
             return false;
         }
-        this.setPackManager(manager);
+        this.setPackManager(manager, diagnostics);
         return true;
     }
 
@@ -250,6 +271,22 @@ public class ViaBedrockUtility {
                             context.getSource().sendSuccess(() -> Component.literal("VBU attachable diagnostics cleared"), false);
                             return Command.SINGLE_SUCCESS;
                         }))
+                .then(net.minecraft.commands.Commands.literal("history")
+                        .executes(context -> sendDebugReport(context,
+                                VbuDebugReports.attachableHistory(this.attachableRuntimeManager), false,
+                                "AttachableHistory"))
+                        .then(net.minecraft.commands.Commands.literal("copy")
+                                .executes(context -> sendDebugReport(context,
+                                        VbuDebugReports.attachableHistory(this.attachableRuntimeManager), true,
+                                        "AttachableHistory")))
+                        .then(net.minecraft.commands.Commands.literal("compact")
+                                .executes(context -> sendDebugReport(context,
+                                        VbuDebugReports.attachableHistory(this.attachableRuntimeManager, 16), false,
+                                        "AttachableHistory"))
+                                .then(net.minecraft.commands.Commands.literal("copy")
+                                        .executes(context -> sendDebugReport(context,
+                                                VbuDebugReports.attachableHistory(this.attachableRuntimeManager, 16), true,
+                                                "AttachableHistory")))))
                 .then(net.minecraft.commands.Commands.literal("mode")
                         .then(net.minecraft.commands.Commands.literal("auto")
                                 .executes(context -> setAttachableDebugMode(context,
@@ -263,30 +300,251 @@ public class ViaBedrockUtility {
         event.getDispatcher().register(attachableDebug);
 
         final var playerDebug = net.minecraft.commands.Commands.literal("vbuplayerdebug")
-                .executes(context -> sendPlayerAnimationDebug(context, false))
+                .executes(context -> sendPlayerAnimationDebug(context, false, true))
                 .then(net.minecraft.commands.Commands.literal("copy")
-                        .executes(context -> sendPlayerAnimationDebug(context, true)));
+                        .executes(context -> sendPlayerAnimationDebug(context, true, true)))
+                .then(net.minecraft.commands.Commands.literal("compact")
+                        .executes(context -> sendPlayerAnimationDebug(context, false, false))
+                        .then(net.minecraft.commands.Commands.literal("copy")
+                                .executes(context -> sendPlayerAnimationDebug(context, true, false))));
         event.getDispatcher().register(playerDebug);
+
+        final var packDebug = net.minecraft.commands.Commands.literal("vbupackdebug")
+                .executes(context -> sendPackDebug(context, null, null, true, false))
+                .then(net.minecraft.commands.Commands.literal("copy")
+                        .executes(context -> sendPackDebug(context, null, null, true, true)))
+                .then(net.minecraft.commands.Commands.literal("compact")
+                        .executes(context -> sendPackDebug(context, null, null, false, false))
+                        .then(net.minecraft.commands.Commands.literal("copy")
+                                .executes(context -> sendPackDebug(context, null, null, false, true))))
+                .then(net.minecraft.commands.Commands.literal("lookup")
+                        .then(net.minecraft.commands.Commands.argument("type",
+                                        com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .then(net.minecraft.commands.Commands.argument("identifier",
+                                                com.mojang.brigadier.arguments.StringArgumentType.word())
+                                        .executes(context -> sendPackDebug(context,
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(context, "type"),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(context, "identifier"),
+                                                false, false))
+                                        .then(net.minecraft.commands.Commands.literal("copy")
+                                                .executes(context -> sendPackDebug(context,
+                                                        com.mojang.brigadier.arguments.StringArgumentType.getString(context, "type"),
+                                                        com.mojang.brigadier.arguments.StringArgumentType.getString(context, "identifier"),
+                                                        false, true))))));
+        event.getDispatcher().register(packDebug);
+
+        final var skinDebug = net.minecraft.commands.Commands.literal("vbuskindebug")
+                .executes(context -> sendSkinDebug(context, null, true, false))
+                .then(net.minecraft.commands.Commands.literal("copy")
+                        .executes(context -> sendSkinDebug(context, null, true, true)))
+                .then(net.minecraft.commands.Commands.literal("compact")
+                        .executes(context -> sendSkinDebug(context, null, false, false))
+                        .then(net.minecraft.commands.Commands.literal("copy")
+                                .executes(context -> sendSkinDebug(context, null, false, true))))
+                .then(net.minecraft.commands.Commands.literal("player")
+                        .then(net.minecraft.commands.Commands.argument("target",
+                                        com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .executes(context -> sendSkinDebug(context,
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(context, "target"), true, false))
+                                .then(net.minecraft.commands.Commands.literal("copy")
+                                        .executes(context -> sendSkinDebug(context,
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(context, "target"), true, true)))
+                                .then(net.minecraft.commands.Commands.literal("compact")
+                                        .executes(context -> sendSkinDebug(context,
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(context, "target"), false, false))
+                                        .then(net.minecraft.commands.Commands.literal("copy")
+                                                .executes(context -> sendSkinDebug(context,
+                                                        com.mojang.brigadier.arguments.StringArgumentType.getString(context, "target"), false, true))))));
+        event.getDispatcher().register(skinDebug);
+
+        final var localHostBone = net.minecraft.commands.Commands.argument("bone",
+                        com.mojang.brigadier.arguments.StringArgumentType.word())
+                .executes(context -> sendHostDebug(context, null,
+                        com.mojang.brigadier.arguments.StringArgumentType.getString(context, "bone"), true, false))
+                .then(net.minecraft.commands.Commands.literal("copy")
+                        .executes(context -> sendHostDebug(context, null,
+                                com.mojang.brigadier.arguments.StringArgumentType.getString(context, "bone"), true, true)));
+        final var remoteHostBone = net.minecraft.commands.Commands.argument("bone",
+                        com.mojang.brigadier.arguments.StringArgumentType.word())
+                .executes(context -> sendHostDebug(context,
+                        com.mojang.brigadier.arguments.StringArgumentType.getString(context, "target"),
+                        com.mojang.brigadier.arguments.StringArgumentType.getString(context, "bone"), true, false))
+                .then(net.minecraft.commands.Commands.literal("copy")
+                        .executes(context -> sendHostDebug(context,
+                                com.mojang.brigadier.arguments.StringArgumentType.getString(context, "target"),
+                                com.mojang.brigadier.arguments.StringArgumentType.getString(context, "bone"), true, true)));
+        final var remoteHost = net.minecraft.commands.Commands.argument("target",
+                        com.mojang.brigadier.arguments.StringArgumentType.word())
+                .executes(context -> sendHostDebug(context,
+                        com.mojang.brigadier.arguments.StringArgumentType.getString(context, "target"),
+                        "rightitem", true, false))
+                .then(net.minecraft.commands.Commands.literal("copy")
+                        .executes(context -> sendHostDebug(context,
+                                com.mojang.brigadier.arguments.StringArgumentType.getString(context, "target"),
+                                "rightitem", true, true)))
+                .then(net.minecraft.commands.Commands.literal("bone").then(remoteHostBone));
+        final var hostDebug = net.minecraft.commands.Commands.literal("vbuhostdebug")
+                .executes(context -> sendHostDebug(context, null, "rightitem", true, false))
+                .then(net.minecraft.commands.Commands.literal("copy")
+                        .executes(context -> sendHostDebug(context, null, "rightitem", true, true)))
+                .then(net.minecraft.commands.Commands.literal("compact")
+                        .executes(context -> sendHostDebug(context, null, "rightitem", false, false))
+                        .then(net.minecraft.commands.Commands.literal("copy")
+                                .executes(context -> sendHostDebug(context, null, "rightitem", false, true))))
+                .then(net.minecraft.commands.Commands.literal("bone").then(localHostBone))
+                .then(net.minecraft.commands.Commands.literal("player").then(remoteHost));
+        event.getDispatcher().register(hostDebug);
+
+        final var allDebug = net.minecraft.commands.Commands.literal("vbudebugall")
+                .executes(context -> sendAllDebug(context, true, false))
+                .then(net.minecraft.commands.Commands.literal("copy")
+                        .executes(context -> sendAllDebug(context, true, true)))
+                .then(net.minecraft.commands.Commands.literal("compact")
+                        .executes(context -> sendAllDebug(context, false, false))
+                        .then(net.minecraft.commands.Commands.literal("copy")
+                                .executes(context -> sendAllDebug(context, false, true))));
+        event.getDispatcher().register(allDebug);
 
     }
 
-    private int sendAttachableDebug(com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
-                                    boolean copyAll) {
+    private int sendPackDebug(
+            com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
+            String typeName, String identifier, boolean full, boolean copyAll) {
+        final BedrockPackDiagnostics.DefinitionType type = typeName == null
+                ? null : BedrockPackDiagnostics.DefinitionType.parse(typeName);
+        if (typeName != null && type == null) {
+            return sendDebugReport(context, List.of("Unknown definition type '" + typeName
+                    + "'; expected entity, attachable, animation, controller, render_controller, geometry, particle or texture"),
+                    copyAll, "PackDebug");
+        }
+        return sendDebugReport(context,
+                VbuDebugReports.pack(this, type, identifier, full), copyAll, "PackDebug");
+    }
+
+    private int sendSkinDebug(
+            com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
+            String target, boolean full, boolean copyAll) {
+        final UUID uuid = resolvePlayerUuid(target);
+        if (uuid == null) {
+            return sendDebugReport(context, List.of("VBU skin diagnostics: target player unavailable"),
+                    copyAll, "SkinDebug");
+        }
+        return sendDebugReport(context, VbuDebugReports.skin(this.payloadHandler, uuid, full),
+                copyAll, "SkinDebug");
+    }
+
+    private int sendHostDebug(
+            com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
+            String target, String bone, boolean full, boolean copyAll) {
+        final UUID uuid = resolvePlayerUuid(target);
+        if (uuid == null) {
+            return sendDebugReport(context, List.of("VBU host diagnostics: target player unavailable"),
+                    copyAll, "HostDebug");
+        }
+        return sendDebugReport(context, VbuDebugReports.host(this.payloadHandler, uuid, bone, full),
+                copyAll, "HostDebug");
+    }
+
+    private int sendAllDebug(
+            com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
+            boolean full, boolean copyAll) {
+        final List<String> lines = new java.util.ArrayList<>();
+        final UUID playerUuid = resolvePlayerUuid(null);
+        lines.add("VBU combined diagnostics: mode=" + (full ? "full" : "compact")
+                + ",generation=" + this.packGeneration.generation() + ",player=" + playerUuid);
+        lines.add("--- pack ---");
+        lines.addAll(VbuDebugReports.pack(this, null, null, full));
+        lines.add("--- skin ---");
+        if (playerUuid == null || this.payloadHandler == null) {
+            lines.add("VBU skin diagnostics: target player unavailable");
+        } else {
+            lines.addAll(VbuDebugReports.skin(this.payloadHandler, playerUuid, full));
+        }
+        lines.add("--- host ---");
+        if (playerUuid == null || this.payloadHandler == null) {
+            lines.add("VBU host diagnostics: target player unavailable");
+        } else {
+            lines.addAll(VbuDebugReports.host(this.payloadHandler, playerUuid, "rightitem", full));
+        }
+        lines.add("--- player animation ---");
+        lines.addAll(buildPlayerAnimationDebugLines(full));
+        lines.add("--- attachable ---");
+        lines.addAll(buildAttachableDebugLines());
+        lines.add("--- attachable history ---");
+        lines.addAll(full
+                ? VbuDebugReports.attachableHistory(this.attachableRuntimeManager)
+                : VbuDebugReports.attachableHistory(this.attachableRuntimeManager, 16));
+        return sendDebugReport(context, lines, copyAll, "CombinedDebug");
+    }
+
+    private static UUID resolvePlayerUuid(String target) {
+        final Minecraft minecraft = Minecraft.getInstance();
+        if (target == null || target.isBlank()) {
+            return minecraft.player == null ? null : minecraft.player.getUUID();
+        }
+        try {
+            return UUID.fromString(target);
+        } catch (IllegalArgumentException ignored) {
+            if (minecraft.level == null) return null;
+            return minecraft.level.players().stream()
+                    .filter(player -> player.getGameProfile().getName().equalsIgnoreCase(target))
+                    .map(player -> player.getUUID())
+                    .findFirst().orElse(null);
+        }
+    }
+
+    private static int sendDebugReport(
+            com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
+            List<String> lines, boolean copyAll, String logCategory) {
+        final List<String> safeLines = lines == null || lines.isEmpty()
+                ? List.of("VBU diagnostics: no data") : List.copyOf(lines);
+        final String report = String.join("\n", safeLines);
+        if (copyAll) {
+            context.getSource().sendSuccess(() -> Component.literal(
+                            "[复制完整 VBU " + debugDisplayName(logCategory) + "]")
+                    .withStyle(style -> style.withColor(ChatFormatting.AQUA)
+                            .withUnderlined(true)
+                            .withClickEvent(new ClickEvent.CopyToClipboard(report))), false);
+        } else {
+            context.getSource().sendSuccess(() -> Component.literal(safeLines.getFirst())
+                    .append(Component.literal(" ")).append(copyButton("[复制全部]", report)), false);
+            for (String line : safeLines.subList(1, safeLines.size())) {
+                context.getSource().sendSuccess(() -> Component.literal(line), false);
+            }
+        }
+        for (String line : safeLines) {
+            ViaBedrockUtilityNeoForge.LOGGER.info("[{}] {}", logCategory, line);
+        }
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static String debugDisplayName(String logCategory) {
+        return switch (logCategory) {
+            case "PackDebug" -> "资源包诊断";
+            case "SkinDebug" -> "皮肤诊断";
+            case "HostDebug" -> "宿主骨骼诊断";
+            case "AttachableHistory" -> "attachable 历史诊断";
+            case "CombinedDebug" -> "综合诊断";
+            default -> "诊断";
+        };
+    }
+
+    private List<String> buildAttachableDebugLines() {
         final var snapshots = this.attachableRuntimeManager.debugSnapshot();
         final var attempts = this.attachableRuntimeManager.debugAttempts();
         final LocalPlayer player = Minecraft.getInstance().player;
-        final String header = "VBU attachables: generation=" + this.packGeneration.generation()
+        final List<String> lines = new java.util.ArrayList<>();
+        lines.add("VBU attachables: generation=" + this.packGeneration.generation()
                 + ", runtimes=" + snapshots.size() + ", attempts=" + attempts.size()
                 + ", mode=" + this.attachableRuntimeManager.debugRenderMode()
                 + (player == null ? "" : ", main=" + player.getMainHandItem().getItem()
-                + ", off=" + player.getOffhandItem().getItem());
-        final java.util.List<String> lines = new java.util.ArrayList<>();
-        lines.add(header);
+                + ", off=" + player.getOffhandItem().getItem()));
         for (AttachableDebugLog.DebugAttempt attempt : attempts) {
-            lines.add("attempt=" + attempt);
+            lines.add("attempt=" + VbuDebugReports.formatAttempt(attempt));
         }
         for (AttachableDebugLog.DebugInfo snapshot : snapshots) {
-            lines.add(snapshot.runtimeKey() + " -> " + snapshot.identity()
+            lines.add("runtime=" + VbuDebugReports.formatRuntimeKey(snapshot.runtimeKey())
+                    + " -> identity=" + VbuDebugReports.formatRuntimeIdentity(snapshot.identity())
                     + ", lastSeenTick=" + snapshot.lastSeenTick()
                     + ", binding=" + snapshot.bindingBone()
                     + ", hostProfile=" + snapshot.hostProfile()
@@ -300,6 +558,13 @@ public class ViaBedrockUtility {
                     + ", geometryInstallation="
                     + Arrays.toString(snapshot.geometryInstallationMatrix()));
         }
+        return lines;
+    }
+
+    private int sendAttachableDebug(com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
+                                    boolean copyAll) {
+        final List<String> lines = buildAttachableDebugLines();
+        final String header = lines.getFirst();
 
         final String report = String.join("\n", lines);
         if (copyAll) {
@@ -334,7 +599,30 @@ public class ViaBedrockUtility {
 
     private int sendPlayerAnimationDebug(
             com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
-            boolean copyAll) {
+            boolean copyAll, boolean includeBones) {
+        final List<String> lines = buildPlayerAnimationDebugLines(includeBones);
+        final String report = String.join("\n", lines);
+        if (copyAll) {
+            context.getSource().sendSuccess(() -> Component.literal("[复制完整 VBU player animation 诊断]")
+                    .withStyle(style -> style.withColor(ChatFormatting.AQUA)
+                            .withUnderlined(true)
+                            .withClickEvent(new ClickEvent.CopyToClipboard(report))), false);
+        } else {
+            context.getSource().sendSuccess(() -> Component.literal("VBU player animation ")
+                    .append(copyButton("[复制全部]", report)), false);
+            for (String line : lines) {
+                context.getSource().sendSuccess(() -> Component.literal(line)
+                        .append(Component.literal(" "))
+                        .append(copyButton("[复制]", line)), false);
+            }
+        }
+        for (String line : lines) {
+            ViaBedrockUtilityNeoForge.LOGGER.info("[PlayerAnimationDebug] {}", line);
+        }
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private List<String> buildPlayerAnimationDebugLines(boolean includeBones) {
         final LocalPlayer player = Minecraft.getInstance().player;
         final java.util.List<String> lines = new java.util.ArrayList<>();
         if (player == null || this.payloadHandler == null) {
@@ -369,29 +657,12 @@ public class ViaBedrockUtility {
                             .map(entry -> entry.getKey() + ":" + java.util.Arrays.toString(entry.getValue().pose()))
                             .collect(java.util.stream.Collectors.joining(";")) + "}");
                 }
-                appendPlayerBones(lines, customRenderer.getPlayerModel());
+                if (includeBones) {
+                    appendPlayerBones(lines, customRenderer.getPlayerModel());
+                }
             }
         }
-
-        final String report = String.join("\n", lines);
-        if (copyAll) {
-            context.getSource().sendSuccess(() -> Component.literal("[复制完整 VBU player animation 诊断]")
-                    .withStyle(style -> style.withColor(ChatFormatting.AQUA)
-                            .withUnderlined(true)
-                            .withClickEvent(new ClickEvent.CopyToClipboard(report))), false);
-        } else {
-            context.getSource().sendSuccess(() -> Component.literal("VBU player animation ")
-                    .append(copyButton("[复制全部]", report)), false);
-            for (String line : lines) {
-                context.getSource().sendSuccess(() -> Component.literal(line)
-                        .append(Component.literal(" "))
-                        .append(copyButton("[复制]", line)), false);
-            }
-        }
-        for (String line : lines) {
-            ViaBedrockUtilityNeoForge.LOGGER.info("[PlayerAnimationDebug] {}", line);
-        }
-        return Command.SINGLE_SUCCESS;
+        return lines;
     }
 
     private static void appendPlayerViewDebug(List<String> lines, String name,

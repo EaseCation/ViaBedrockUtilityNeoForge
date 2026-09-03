@@ -164,6 +164,10 @@ public final class AttachableRuntimeManager {
         return debugAttempts.snapshot();
     }
 
+    public List<DebugAttempt> debugHistory() {
+        return debugAttempts.historySnapshot();
+    }
+
     /** Builds the immutable hot-path index once per pack generation. */
     public void onPackManagerChanged(PackManager packs) {
         if (packs == null || packs.getAttachableDefinitions() == null) {
@@ -330,7 +334,7 @@ public final class AttachableRuntimeManager {
                 item.itemIdentifier().toString(), view,
                 stage, candidates, attachableIdentifier, renderPasses, bindingBone, detail);
         final DebugAttempt previous = debugAttempts.record(attempt, tick);
-        if (!attempt.equals(previous)) {
+        if (previous == null || !AttachableDebugAttemptStore.sameState(previous, attempt)) {
             ViaBedrockUtilityNeoForge.LOGGER.debug("[Attachable] Attempt {}", attempt);
         }
     }
