@@ -39,6 +39,7 @@ public class ServerResourcePackLoaderMixin {
         final List<BedrockPackDiagnostics.PackInput> diagnosticInputs = new ArrayList<>();
         boolean sawEmbeddedPack = false;
         boolean allEmbeddedStacksManifestOrdered = true;
+        boolean outerPackReadFailed = false;
         final List<String> orderingWarnings = new ArrayList<>();
         if (packs.size() > 1) {
             orderingWarnings.add("Multiple outer Java resource packs are active; applying Minecraft's reversed pack precedence");
@@ -71,9 +72,14 @@ public class ServerResourcePackLoaderMixin {
                             path, embedded, BedrockPackDiagnostics.hashBytes(archive),
                             stackOrder.manifestApplied()));
                 }
-            } catch (IOException e) {
-                ViaBedrockUtilityNeoForge.LOGGER.warn("[ResourcePack] Failed to read pack {}", pack);
+            } catch (IOException | RuntimeException e) {
+                outerPackReadFailed = true;
+                ViaBedrockUtilityNeoForge.LOGGER.warn("[ResourcePack] Failed to read pack {}; retaining the previous VBU generation", pack, e);
             }
+        }
+
+        if (outerPackReadFailed) {
+            return;
         }
 
         final String orderingWarning = String.join("; ", orderingWarnings);
@@ -81,8 +87,10 @@ public class ServerResourcePackLoaderMixin {
                 diagnosticInputs, sawEmbeddedPack && allEmbeddedStacksManifestOrdered,
                 orderingWarning);
 
-        ViaBedrockUtilityNeoForge.LOGGER.info("[ResourcePack] Loaded {} bedrock pack(s) total, initializing PackManager", contents.size());
-        final PackManager nextManager = new PackManager(contents);
+        ViaBedrockUtilityNeoForge.LOGGER.info(
+                "[ResourcePack] Loaded {} bedrock pack(s) total, preparing VBU generation",
+                contents.size());
+        final PackManager nextManager = contents.isEmpty() ? null : new PackManager(contents);
         if (!ViaBedrockUtility.getInstance().isCurrentConnectionEpoch(connectionEpoch)) {
             ViaBedrockUtilityNeoForge.LOGGER.debug(
                     "[ResourcePack] Connection changed while preparing packs; discarding generation {}",
@@ -120,7 +128,7 @@ public class ServerResourcePackLoaderMixin {
         // Replay any payloads (notably the initial skin overrides) that arrived before PackManager was ready.
         // Deferred to the client thread so it runs after PackManager is set and safely touches render objects.
         final var handler = ViaBedrockUtility.getInstance().getPayloadHandler();
-        if (handler != null) {
+        if (handler != null && nextManager != null) {
             net.minecraft.client.Minecraft.getInstance().execute(handler::flushPendingPayloads);
         }
 

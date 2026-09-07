@@ -23,6 +23,11 @@ public final class PlayerAnimationRuntimeSlot<T> {
         owner = null;
     }
 
+    public void clear() {
+        runtime = null;
+        owner = null;
+    }
+
     public T current() {
         return runtime;
     }

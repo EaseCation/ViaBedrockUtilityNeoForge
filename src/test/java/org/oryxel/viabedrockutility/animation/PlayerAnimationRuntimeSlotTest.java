@@ -64,4 +64,20 @@ class PlayerAnimationRuntimeSlotTest {
         assertSame(afterReload, slot.bind(new PlayerAnimationOwner(player, level), Object::new));
         assertNotSame(beforeReload, slot.current());
     }
+
+    @Test
+    void clearDropsAnUnavailableGenerationAndAllowsRetry() {
+        final Object player = new Object();
+        final Object level = new Object();
+        final Object beforeReload = new Object();
+        final Object afterReload = new Object();
+        final PlayerAnimationRuntimeSlot<Object> slot = new PlayerAnimationRuntimeSlot<>();
+
+        slot.replace(beforeReload);
+        slot.clear();
+
+        assertSame(afterReload, slot.bind(
+                new PlayerAnimationOwner(player, level), () -> afterReload));
+        assertNotSame(beforeReload, slot.current());
+    }
 }

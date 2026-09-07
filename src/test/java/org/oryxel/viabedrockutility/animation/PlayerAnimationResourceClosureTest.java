@@ -42,6 +42,12 @@ class PlayerAnimationResourceClosureTest {
     private static final Object LEVEL_INSTANCE = new Object();
 
     @Test
+    void emptyPackGenerationHasNoPlayerRuntime() {
+        assertFalse(PlayerAnimationRuntime.isAvailable(new PackManager(List.of())));
+        assertFalse(PlayerAnimationRuntime.isAvailable(null));
+    }
+
+    @Test
     void downloadedZePacksAndBundledVanillaFormACompletePlayerRuntime() throws Exception {
         final Path packsRoot = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "bedrock-loader-packs");
@@ -71,6 +77,7 @@ class PlayerAnimationResourceClosureTest {
                 .containsKey("controller.animation.player.root"));
 
         final PackManager packs = new PackManager(downloaded);
+        assertTrue(PlayerAnimationRuntime.isAvailable(packs));
         final var player = packs.getEntityDefinitions().getEntities().get("minecraft:player");
         assertNotNull(player);
         assertEquals("controller.animation.player.root",

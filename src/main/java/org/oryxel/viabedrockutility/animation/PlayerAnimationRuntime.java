@@ -57,6 +57,11 @@ public final class PlayerAnimationRuntime {
         this.thirdPerson = new ViewInstance(definition.entityData(), animationOverrides, packs);
     }
 
+    public static boolean isAvailable(PackManager packs) {
+        return packs != null && packs.getEntityDefinitions() != null
+                && packs.getEntityDefinitions().getEntities().containsKey("minecraft:player");
+    }
+
     public void sampleFirstPerson(PlayerModel model, PlayerAnimationState state) {
         sample(model, state, firstPerson);
     }

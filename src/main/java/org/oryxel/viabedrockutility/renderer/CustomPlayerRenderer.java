@@ -160,10 +160,32 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         }
     }
 
-    public void setPlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides) {
+    public boolean setPlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides) {
+        final Map<String, String> nextOverrides = Map.copyOf(animationOverrides);
+        if (!PlayerAnimationRuntime.isAvailable(packs)) {
+            clearPlayerAnimationRuntime();
+            return false;
+        }
+        final PlayerAnimationRuntime nextRuntime;
+        try {
+            nextRuntime = new PlayerAnimationRuntime(packs, nextOverrides);
+        } catch (RuntimeException exception) {
+            clearPlayerAnimationRuntime();
+            org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge.LOGGER.warn(
+                    "[PlayerAnimation] Unable to install the current resource-pack runtime; using vanilla poses",
+                    exception);
+            return false;
+        }
         this.playerAnimationPacks = packs;
-        this.playerAnimationOverrides = Map.copyOf(animationOverrides);
-        this.playerAnimationRuntime.replace(new PlayerAnimationRuntime(packs, this.playerAnimationOverrides));
+        this.playerAnimationOverrides = nextOverrides;
+        this.playerAnimationRuntime.replace(nextRuntime);
+        return true;
+    }
+
+    public void clearPlayerAnimationRuntime() {
+        this.playerAnimationPacks = null;
+        this.playerAnimationOverrides = Map.of();
+        this.playerAnimationRuntime.clear();
     }
 
     public PlayerAnimationRuntime playerAnimationRuntime(PlayerAnimationState state) {

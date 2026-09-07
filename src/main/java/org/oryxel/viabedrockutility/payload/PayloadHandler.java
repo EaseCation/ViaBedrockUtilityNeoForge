@@ -71,6 +71,11 @@ public class PayloadHandler {
     public void resetPlayerAnimationRuntimes() {
         final PackManager manager = this.packManager;
         if (manager == null) {
+            cachedPlayerRenderers.values().forEach(renderer -> {
+                if (renderer instanceof CustomPlayerRenderer customRenderer) {
+                    customRenderer.clearPlayerAnimationRuntime();
+                }
+            });
             return;
         }
         for (Map.Entry<UUID, EntityRenderer<?, ?>> entry : cachedPlayerRenderers.entrySet()) {
@@ -682,13 +687,20 @@ public class PayloadHandler {
                     }
                 }
             }
-            renderer.setPlayerAnimationRuntime(manager, overrides);
-            ViaBedrockUtilityNeoForge.LOGGER.debug(
-                    "[Skin] Created Bedrock player runtime with {} alias override(s) for {}: {}",
-                    overrides.size(), playerUuid, overrides.keySet());
+            if (renderer.setPlayerAnimationRuntime(manager, overrides)) {
+                ViaBedrockUtilityNeoForge.LOGGER.debug(
+                        "[Skin] Created Bedrock player runtime with {} alias override(s) for {}: {}",
+                        overrides.size(), playerUuid, overrides.keySet());
+            } else {
+                ViaBedrockUtilityNeoForge.LOGGER.warn(
+                        "[Skin] Current resource-pack generation has no usable minecraft:player runtime for {}; using vanilla poses",
+                        playerUuid);
+            }
         } catch (final Exception e) {
-            throw new IllegalStateException(
-                    "Failed to create Bedrock player runtime for " + playerUuid, e);
+            renderer.clearPlayerAnimationRuntime();
+            ViaBedrockUtilityNeoForge.LOGGER.warn(
+                    "[Skin] Failed to create Bedrock player runtime for {}; using vanilla poses",
+                    playerUuid, e);
         }
     }
 
