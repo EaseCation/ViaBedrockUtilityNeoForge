@@ -54,11 +54,9 @@ public final class DeferredNameTag {
     // visit() each frame (visit re-emits vertices with the per-frame pose — that part is unavoidable). The
     // remaining transparency sort / Iris batching is NOT reclaimable and is intentionally left as-is.
     //
-    // Key uses text.getString() (String hashCode is cached) rather than the Component itself, to avoid
-    // Component.hashCode/equals walking the sibling tree on every lookup. x/y are folded in as raw int bits;
-    // for a name tag x = -width/2 so it also disambiguates width-affecting style changes (e.g. bold).
+    // 使用展开后的文字与继承样式快照，避免同名变色复用旧字形，也避免原组件修改后破坏缓存键。
     // Access is render-thread-only (enqueue during entity pass, flush during AfterEntities), no sync needed.
-    private record Key(String text, int color, int backgroundColor, int xBits, int yBits) {
+    private record Key(List<Component> text, int color, int backgroundColor, int xBits, int yBits) {
     }
 
     private static final int CACHE_CAP = 256;
@@ -152,7 +150,7 @@ public final class DeferredNameTag {
     }
 
     private static Font.PreparedText prepared(final Entry e) {
-        final Key key = new Key(e.text().getString(), e.color(), e.backgroundColor(),
+        final Key key = new Key(e.text().toFlatList(), e.color(), e.backgroundColor(),
                 Float.floatToRawIntBits(e.x()), Float.floatToRawIntBits(e.y()));
         Font.PreparedText cached = CACHE.get(key);
         if (cached == null) {
