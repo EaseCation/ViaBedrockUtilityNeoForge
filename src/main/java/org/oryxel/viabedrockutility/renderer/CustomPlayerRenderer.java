@@ -5,9 +5,12 @@ import net.minecraft.client.renderer.entity.layers.PlayerItemInHandLayer;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.chat.Component;
 import net.minecraft.core.registries.BuiltInRegistries;
 import com.mojang.blaze3d.vertex.PoseStack;
 import org.joml.Matrix4f;
@@ -72,6 +75,37 @@ public class CustomPlayerRenderer extends PlayerRenderer {
                         state.yRot));
         ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setPlayerAnimationState(
                 PlayerAnimationState.thirdPerson(player, state, partialTick));
+        ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setCustomSpectator(
+                ViaBedrockUtility.getInstance().getPayloadHandler().isPlayerTranslucent(player.getUUID()));
+    }
+
+    @Override
+    public void render(PlayerRenderState state, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
+        if (isCustomSpectator(state) && !state.isInvisible) {
+            super.render(state, poseStack, new PlayerTranslucencyBufferSource(bufferSource), packedLight);
+            return;
+        }
+        super.render(state, poseStack, bufferSource, packedLight);
+    }
+
+    @Override
+    protected RenderType getRenderType(PlayerRenderState state, boolean isVisible,
+                                       boolean renderTranslucent, boolean appearsGlowing) {
+        if (isCustomSpectator(state) && isVisible) {
+            return RenderType.entityTranslucent(this.getTextureLocation(state), true);
+        }
+        return super.getRenderType(state, isVisible, renderTranslucent, appearsGlowing);
+    }
+
+    @Override
+    protected void renderNameTag(PlayerRenderState state, Component displayName, PoseStack poseStack,
+                                 MultiBufferSource bufferSource, int packedLight) {
+        super.renderNameTag(state, displayName, poseStack,
+                PlayerTranslucencyBufferSource.unwrap(bufferSource), packedLight);
+    }
+
+    private static boolean isCustomSpectator(PlayerRenderState state) {
+        return ((ICustomPlayerRendererHolder) state).viaBedrockUtility$isCustomSpectator();
     }
 
     private static ResourceLocation itemIdentifier(net.minecraft.world.item.ItemStack stack) {

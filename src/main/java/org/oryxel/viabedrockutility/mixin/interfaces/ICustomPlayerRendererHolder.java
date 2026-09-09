@@ -19,4 +19,6 @@ public interface ICustomPlayerRendererHolder {
     void viaBedrockUtility$setOwnerSnapshot(AttachableOwnerSnapshot owner);
     PlayerAnimationState viaBedrockUtility$getPlayerAnimationState();
     void viaBedrockUtility$setPlayerAnimationState(PlayerAnimationState state);
+    boolean viaBedrockUtility$isCustomSpectator();
+    void viaBedrockUtility$setCustomSpectator(boolean customSpectator);
 }

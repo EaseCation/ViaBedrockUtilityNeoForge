@@ -28,6 +28,7 @@ import org.oryxel.viabedrockutility.payload.impl.skin.SkinAnimationInfoPayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.SkinDataPayload;
 import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticlePayload;
 import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticleV2Payload;
+import org.oryxel.viabedrockutility.payload.impl.player.PlayerVisualStatePayload;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import org.oryxel.viabedrockutility.renderer.AnimatedSkinOverlay;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
@@ -51,6 +52,7 @@ public class PayloadHandler {
     protected final Map<UUID, SkinInfo> cachedSkinInfo = new ConcurrentHashMap<>();
     protected final Map<UUID, CachedPlayerSkin> cachedPlayerSkins = new ConcurrentHashMap<>();
     protected final Map<UUID, Map<Integer, PendingAnimation>> pendingAnimations = new ConcurrentHashMap<>();
+    protected final Map<UUID, Integer> playerVisualStates = new ConcurrentHashMap<>();
     protected final SkinDebugLog skinDebugLog = new SkinDebugLog();
     protected PackManager packManager;
 
@@ -97,12 +99,14 @@ public class PayloadHandler {
         cachedPlayerSkins.clear();
         cachedSkinInfo.clear();
         pendingAnimations.clear();
+        playerVisualStates.clear();
         pendingPayloads.clear();
         skinDebugLog.clear();
         packManager = null;
     }
 
     public void removeCustomEntity(UUID uuid) {
+        playerVisualStates.remove(uuid);
         final CustomEntityTicker ticker = cachedCustomEntities.remove(uuid);
         if (ticker != null) {
             ticker.getRenderer().invalidateFrozenMeshes("entity_removed");
@@ -110,6 +114,11 @@ public class PayloadHandler {
     }
 
     public void handle(final BasePayload payload) {
+        if (payload instanceof PlayerVisualStatePayload visualState) {
+            this.handle(visualState);
+            return;
+        }
+
         if (this.packManager != ViaBedrockUtility.getInstance().getPackManager()) {
             this.packManager = ViaBedrockUtility.getInstance().getPackManager();
         }
@@ -150,6 +159,19 @@ public class PayloadHandler {
         } else if (payload instanceof AnimatePayload animatePayload) {
             this.handle(animatePayload);
         }
+    }
+
+    public void handle(final PlayerVisualStatePayload payload) {
+        if (payload.getFlags() == 0) {
+            this.playerVisualStates.remove(payload.getPlayerUuid());
+        } else {
+            this.playerVisualStates.put(payload.getPlayerUuid(), payload.getFlags());
+        }
+    }
+
+    public boolean isPlayerTranslucent(final UUID playerUuid) {
+        return (this.playerVisualStates.getOrDefault(playerUuid, 0)
+                & PlayerVisualStatePayload.CUSTOM_SPECTATOR) != 0;
     }
 
     /**

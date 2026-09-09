@@ -26,6 +26,8 @@ public abstract class PlayerEntityRenderStateMixin implements ICustomPlayerRende
     private AttachableOwnerSnapshot viabedrockutility$owner = AttachableOwnerSnapshot.EMPTY;
     @Unique
     private PlayerAnimationState viabedrockutility$playerAnimationState;
+    @Unique
+    private boolean viabedrockutility$customSpectator;
 
     @Override
     public EntityRenderer<?, ?> viaBedrockUtility$getCustomPlayerRenderer() {
@@ -87,5 +89,15 @@ public abstract class PlayerEntityRenderStateMixin implements ICustomPlayerRende
     @Override
     public void viaBedrockUtility$setPlayerAnimationState(PlayerAnimationState state) {
         viabedrockutility$playerAnimationState = state;
+    }
+
+    @Override
+    public boolean viaBedrockUtility$isCustomSpectator() {
+        return viabedrockutility$customSpectator;
+    }
+
+    @Override
+    public void viaBedrockUtility$setCustomSpectator(boolean customSpectator) {
+        viabedrockutility$customSpectator = customSpectator;
     }
 }

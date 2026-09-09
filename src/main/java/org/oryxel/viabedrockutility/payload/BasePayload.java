@@ -13,6 +13,7 @@ import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.payload.enums.PayloadType;
 import org.oryxel.viabedrockutility.payload.impl.entity.*;
 import org.oryxel.viabedrockutility.payload.impl.particle.*;
+import org.oryxel.viabedrockutility.payload.impl.player.PlayerVisualStatePayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.*;
 import org.oryxel.viabedrockutility.util.EnumUtil;
 
@@ -127,6 +128,18 @@ public class BasePayload implements CustomPacketPayload {
                     throw new DecoderException("Trailing bytes in SPAWN_PARTICLE_V2 payload: " + buf.readableBytes());
                 }
                 return new SpawnParticleV2Payload(identifier, anchorKind, ownerUuid, x, y, z, molangVarsJson);
+            }
+
+            case PLAYER_VISUAL_STATE -> {
+                final java.util.UUID playerUuid = buf.readUUID();
+                final int flags = buf.readUnsignedByte();
+                if ((flags & ~PlayerVisualStatePayload.KNOWN_FLAGS) != 0) {
+                    throw new DecoderException("Unknown player visual state flags: " + flags);
+                }
+                if (buf.isReadable()) {
+                    throw new DecoderException("Trailing bytes in PLAYER_VISUAL_STATE payload: " + buf.readableBytes());
+                }
+                return new PlayerVisualStatePayload(playerUuid, flags);
             }
 
             default -> throw new IllegalStateException("Unexpected value: " + PayloadType.values()[type]);
