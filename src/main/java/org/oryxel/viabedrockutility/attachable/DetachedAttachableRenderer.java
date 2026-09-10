@@ -63,7 +63,7 @@ final class DetachedAttachableRenderer {
 
         final DetachedKey key = new DetachedKey(generation.generation(), definition.identifier(), geometryName, textureName);
         final DetachedModel detached = detachedModels.computeIfAbsent(key, ignored -> new DetachedModel(
-                GeometryUtil.buildAttachableModel(geometry, geometryName,
+                GeometryUtil.buildDetachedAttachableModel(geometry, geometryName,
                         alias -> AttachableTextureResolver.resolve(
                                 packs, definition.data().getTextures(), alias, textureName)),
                 detachedBounds(packs, geometryName, geometry)));

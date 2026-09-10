@@ -50,13 +50,17 @@ public final class GeometryUtil {
      */
     public static Model buildAttachableModel(final BedrockGeometryModel geometry, final String geometryName,
                                              final Function<String, TextureAlpha> textureResolver) {
-        // Ordinary cubes/poly_meshes keep the long-standing absolute Bedrock geometry contract.
-        // Only texture_meshes are local sprite sheets installed below the resolved hand anchor.
+        return buildModel(geometry, false, false, geometryName, true, textureResolver);
+    }
+
+    /** Ground/fixed models are centered by entity-space bounds and have no host bone origin. */
+    public static Model buildDetachedAttachableModel(final BedrockGeometryModel geometry, final String geometryName,
+                                                     final Function<String, TextureAlpha> textureResolver) {
         return buildModel(geometry, false, false, geometryName, false, textureResolver);
     }
 
     private static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim,
-                                    final String geometryName, final boolean localGeometry,
+                                    final String geometryName, final boolean attachable,
                                     final Function<String, TextureAlpha> textureResolver) {
         // There are some times when the skin image file is larger than the geometry UV points.
         // In this case, we need to scale UV calls
@@ -66,7 +70,10 @@ public final class GeometryUtil {
 
         final BedrockPlayerModelMetadata playerMetadata = player ? new BedrockPlayerModelMetadata(slim) : null;
         final Map<String, PartInfo> stringToPart = new LinkedHashMap<>();
+        final Map<String, Parent> sourceBones = new HashMap<>();
+        geometry.getParents().forEach(bone -> sourceBones.put(bone.getName(), bone));
         for (final Parent bone : geometry.getParents()) {
+            final Vector3f localOrigin = attachable ? legacyAttachableOrigin(bone, sourceBones) : null;
             // ModelPart renders children in map iteration order. Keep cube transform groups in source order
             // so translucent geometry retains the same vertex submission order as the ungrouped model.
             final Map<String, ModelPart> children = new LinkedHashMap<>();
@@ -106,32 +113,32 @@ public final class GeometryUtil {
                 }
 
                 final Vector3f javaPos = toJavaGeometry(
-                        new Vector3f(pos.getX(), pos.getY(), pos.getZ()), localGeometry);
+                        new Vector3f(pos.getX(), pos.getY(), pos.getZ()), localOrigin);
                 final ModelPart.Cube cuboid = new ModelPart.Cube(0, 0, javaPos.x,
                         javaPos.y - sizeY,
                         javaPos.z, sizeX, sizeY, sizeZ, inflate, inflate, inflate,
                         cube.isMirror(), uvWidth, uvHeight, set);
                 correctUv(cuboid, set, uvMap, uvWidth, uvHeight, cube.getInflate(), cube.isMirror());
                 markAsVbuBox(cuboid, inflate, cube.isMirror());
-                appendCuboid(cuboidGroups, CuboidTransform.from(cube, localGeometry), cuboid);
+                appendCuboid(cuboidGroups, CuboidTransform.from(cube), cuboid);
             }
 
             // poly_mesh vertices are already absolute and use the identity transform. Appending them after
             // boxes preserves their previous relative submission position; an adjacent identity box group
             // may absorb them without changing order.
             if (bone.getPolyMesh() != null) {
-                buildPolyMeshCuboids(bone.getPolyMesh(), uvWidth, uvHeight, cuboidGroups, localGeometry);
+                buildPolyMeshCuboids(bone.getPolyMesh(), uvWidth, uvHeight, cuboidGroups, localOrigin);
             }
             if (textureResolver != null && !bone.getTextureMeshes().isEmpty()) {
                 buildTextureMeshBoundaryCuboids(bone.getTextureMeshes(), uvWidth, uvHeight,
-                        textureResolver, cuboidGroups);
+                        textureResolver, cuboidGroups, localOrigin);
             }
 
             int groupIndex = 0;
             for (CuboidGroup group : cuboidGroups) {
                 final ModelPart cubePart = new ModelPart(List.copyOf(group.cuboids), Map.of());
                 final IModelPart cubePartExtension = (IModelPart) (Object) cubePart;
-                cubePartExtension.viaBedrockUtility$setPivot(group.transform.javaPivot(localGeometry));
+                cubePartExtension.viaBedrockUtility$setPivot(group.transform.javaPivot(localOrigin));
                 cubePartExtension.viaBedrockUtility$setAngles(group.transform.rotation());
                 cubePartExtension.viaBedrockUtility$setVBUModel();
                 cubePartExtension.viaBedrockUtility$setCubeGroup();
@@ -150,10 +157,10 @@ public final class GeometryUtil {
             partExtension.viaBedrockUtility$setNeededOffset(neededOffset);
             partExtension.viaBedrockUtility$setAngles(new Vector3f(bone.getRotation().getX(), bone.getRotation().getY(), bone.getRotation().getZ()));
 
-            // Entity/player geometry uses the absolute presentation origin. An attachable is local
-            // to its resolved host bone and therefore only reflects Bedrock's Y axis here.
+            // All vertices and pivots in a legacy attachable subtree share its root's local origin.
+            // Explicit bindings retain Bedrock's separate presentation-origin convention.
             partExtension.viaBedrockUtility$setPivot(toJavaGeometry(new Vector3f(
-                    bone.getPivot().getX(), bone.getPivot().getY(), bone.getPivot().getZ()), localGeometry));
+                    bone.getPivot().getX(), bone.getPivot().getY(), bone.getPivot().getZ()), localOrigin));
 
             final String semanticParent = bone.getParent();
             String name = bone.getName();
@@ -282,10 +289,35 @@ public final class GeometryUtil {
         return BedrockTransformConvention.toJavaModel(new Vector3f(pivot.getX(), pivot.getY(), pivot.getZ()));
     }
 
-    private static Vector3f toJavaGeometry(Vector3f bedrock, boolean localGeometry) {
-        return localGeometry
-                ? BedrockTransformConvention.toJavaLocalModel(bedrock)
-                : BedrockTransformConvention.toJavaModel(bedrock);
+    /**
+     * Legacy name-based attachment places the geometry root at its host bone, so the subtree is
+     * relative to the root pivot. Explicit binding instead retains the presentation origin (as in
+     * Bedrock/Blockbench's root position minus 24). Resolve per root so mixed geometries work too.
+     */
+    private static Vector3f legacyAttachableOrigin(Parent bone, Map<String, Parent> sourceBones) {
+        final Set<String> visited = new HashSet<>();
+        Parent root = bone;
+        while (!root.getParent().isBlank()) {
+            if (!visited.add(root.getName())) {
+                return null; // The hierarchy validator below owns malformed parent cycles.
+            }
+            final Parent parent = sourceBones.get(root.getParent());
+            if (parent == null) {
+                return null;
+            }
+            root = parent;
+        }
+        if (!root.getBinding().isBlank()) {
+            return null;
+        }
+        final Position3V pivot = root.getPivot();
+        return new Vector3f(pivot.getX(), pivot.getY(), pivot.getZ());
+    }
+
+    private static Vector3f toJavaGeometry(Vector3f bedrock, Vector3f localOrigin) {
+        return localOrigin == null
+                ? BedrockTransformConvention.toJavaModel(bedrock)
+                : BedrockTransformConvention.toJavaLocalModel(new Vector3f(bedrock).sub(localOrigin));
     }
 
     /** CPU-side alpha snapshot used only while constructing a cached attachable model. */
@@ -488,7 +520,7 @@ public final class GeometryUtil {
     }
 
     private static void buildPolyMeshCuboids(PolyMesh polyMesh, float uvWidth, float uvHeight,
-                                              List<CuboidGroup> cuboidGroups, boolean localGeometry) {
+                                              List<CuboidGroup> cuboidGroups, Vector3f localOrigin) {
         final float[][] pmPositions = polyMesh.getPositions();
         final float[][] pmNormals = polyMesh.getNormals();
         final float[][] pmUvs = polyMesh.getUvs();
@@ -512,7 +544,7 @@ public final class GeometryUtil {
                 float pz = pmPositions[posIdx][2];
 
                 // Coordinate transform: Bedrock -> Java model space (Y inverted + presentation origin)
-                final Vector3f javaPos = toJavaGeometry(new Vector3f(px, py, pz), localGeometry);
+                final Vector3f javaPos = toJavaGeometry(new Vector3f(px, py, pz), localOrigin);
                 px = javaPos.x;
                 py = javaPos.y;
                 pz = javaPos.z;
@@ -593,7 +625,7 @@ public final class GeometryUtil {
     private static void buildTextureMeshBoundaryCuboids(List<TextureMesh> meshes, float uvWidth,
                                                          float uvHeight,
                                                          Function<String, TextureAlpha> textureResolver,
-                                                         List<CuboidGroup> cuboidGroups) {
+                                                         List<CuboidGroup> cuboidGroups, Vector3f localOrigin) {
         for (TextureMesh mesh : meshes) {
             final TextureAlpha texture = textureResolver.apply(mesh.getTexture());
             // Bedrock's texture_mesh always has a rectangular front/back sheet. Alpha data is
@@ -674,7 +706,8 @@ public final class GeometryUtil {
                         final float[] p = transformTextureMeshPoint(face.positions()[v], face.mesh());
                         final float[] uv = face.uvs();
                         vertices[v] = new ModelPart.Vertex(
-                                toJavaGeometry(new Vector3f(p[0], p[1], p[2]), true),
+                                BedrockTransformConvention.toJavaLocalModel(new Vector3f(p[0], p[1], p[2])
+                                        .sub(localOrigin == null ? new Vector3f() : localOrigin)),
                                 uv[v * 2], uv[v * 2 + 1]);
                     }
                     final float[] n = transformTextureMeshNormal(face.normal(), face.mesh());
@@ -855,7 +888,7 @@ public final class GeometryUtil {
                                    int rotationX, int rotationY, int rotationZ) {
         private static final CuboidTransform IDENTITY = new CuboidTransform(0, 0, 0, 0, 0, 0);
 
-        static CuboidTransform from(Cube cube, boolean localGeometry) {
+        static CuboidTransform from(Cube cube) {
             final Position3V rotation = cube.getRotation();
             if (rotation.getX() == 0.0F && rotation.getY() == 0.0F && rotation.getZ() == 0.0F) {
                 // With no rotation the pivot translations cancel, so all such cubes share one transform.
@@ -872,7 +905,7 @@ public final class GeometryUtil {
             );
         }
 
-        Vector3f javaPivot(boolean localGeometry) {
+        Vector3f javaPivot(Vector3f localOrigin) {
             if (this == IDENTITY) {
                 return new Vector3f();
             }
@@ -880,7 +913,7 @@ public final class GeometryUtil {
                     Float.intBitsToFloat(this.pivotX),
                     Float.intBitsToFloat(this.pivotY),
                     Float.intBitsToFloat(this.pivotZ));
-            return toJavaGeometry(pivot, localGeometry);
+            return toJavaGeometry(pivot, localOrigin);
         }
 
         Vector3f rotation() {

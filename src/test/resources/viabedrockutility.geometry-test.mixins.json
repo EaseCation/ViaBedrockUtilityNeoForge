@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.oryxel.viabedrockutility.mixin.impl.render",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["CuboidMixin", "ModelPartMixin"],
+  "injectors": {"defaultRequire": 1}
+}

@@ -1,0 +1,91 @@
+{
+	"format_version": "1.10.0",
+	"animations": {
+		"animation.player.3rdtrident": {
+			"loop": true,
+			"bones": {
+				"rightitem": {
+					"rotation": [0, 45, -90],
+					"position": [0, -13.5, -7.5]
+				}
+			}
+		},
+		"animation.player.1stbase_trident": {
+			"loop": true,
+			"bones": {
+				"rightitem": {
+					"rotation": [-60, 5, 200],
+					"position": [0.87391, -11.15222, -3.14751]
+				}
+			}
+		},
+		"animation.player.1stwave_trident": {
+			"animation_length": 0.4,
+			"anim_time_update": "(v.attack_time * 0.3)",
+			"bones": {
+				"rightitem": {
+					"rotation": {
+						"0.0": [0, 0, 0],
+						"0.03": [-6, 43.5, -68.5],
+						"0.06": [-8.5, 51, -71],
+						"0.1": [-11, 46, -71],
+						"0.13": [-8.5, 38.5, -66],
+						"0.16": [-3.5, 41, -38.5],
+						"0.2": [-11.5, 35.5, -41],
+						"0.23": [-9, 28, -41],
+						"0.26": [6, 10.5, -16],
+						"0.3": [0, 0, 0],
+						"0.4": [0, 0, 0]
+					},
+					"position": {
+						"0.0": [0, 0, 0],
+						"0.03": [14.26459, 5.02965, -4.21573],
+						"0.06": [15.84514, 6.6095, -4.13881],
+						"0.1": [17.42569, 8.18936, -4.0619],
+						"0.13": [18.7074, 9.39253, -3.10817],
+						"0.16": [14.58396, 5.1551, -1.03131],
+						"0.2": [13.68745, 4.02503, 1.59913],
+						"0.23": [13.68745, 4.02503, 1.59913],
+						"0.26": [10.25058, -0.66558, -0.44687],
+						"0.3": [0, 0, 0],
+						"0.4": [0, 0, 0]
+					}
+				}
+			}
+		},
+		"animation.player.1stpulling_trident": {
+			"loop": "hold_on_last_frame",
+			"animation_length": 0.20,
+			"bones": {
+				"rightitem": {
+					"rotation": {
+						"0.0": [-42.5, 22.5, -107.5],
+						"0.20": [-42.5, 22.5, -107.5]
+					},
+					"position": {
+						"0.0": [3.13803, 4.31392, 2.92281],
+						"0.20": [-1.10461, 8.54042, 3.29259]
+					}
+				}
+			}
+		},
+		"animation.player.3rdpulling_trident": {
+			"loop": true,
+			"bones": {
+				"rightitem": {
+					"rotation": [0, -135, -90],
+					"position": [0, 8.5, 6.5]
+				}
+			}
+		},
+		"animation.player.default_trident": {
+			"loop": true,
+			"bones": {
+				"pole": {
+					"rotation": [90, -45, 0],
+					"position": [5, -31.5, 23.5]
+				}
+			}
+		}
+	}
+}

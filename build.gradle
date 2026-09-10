@@ -139,6 +139,12 @@ tasks.named('processTestResources').configure {
     dependsOn tasks.named('jarJar')
 }
 
+// NeoForge's JUnit target uses DEDICATED_SERVER and skips the production client mixin list.
+// Load only the model/cuboid bridges to verify real geometry without starting a game client.
+tasks.named('prepareNeoForgeTestFiles').configure {
+    programArguments.addAll('--mixin.config', 'viabedrockutility.geometry-test.mixins.json')
+}
+
 tasks.withType(ProcessResources).configureEach {
     var replaceProperties = [
             minecraft_version      : minecraft_version,

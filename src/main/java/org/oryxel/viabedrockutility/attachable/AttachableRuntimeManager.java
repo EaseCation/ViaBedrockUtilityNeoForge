@@ -201,7 +201,8 @@ public final class AttachableRuntimeManager {
     public boolean renderDetached(AttachableItemSnapshot item, ItemDisplayContext displayContext,
                                   PoseStack poses, MultiBufferSource buffers,
                                   int packedLight, int packedOverlay) {
-        return detached.render(item, displayContext, poses, buffers, packedLight, packedOverlay);
+        return debugRenderMode != DebugRenderMode.JAVA_ITEM
+                && detached.render(item, displayContext, poses, buffers, packedLight, packedOverlay);
     }
 
     private AttachableRenderResult render(AttachableOwnerSnapshot owner, AttachableItemSnapshot item,
@@ -248,10 +249,9 @@ public final class AttachableRuntimeManager {
         // Java's ItemRenderer already owns the exact item/generated extrusion, hand transforms,
         // use animation and left/right mirroring. Let it render these meshes directly instead of
         // applying a second attachable bone transform, while retaining VBU for real 3D geometry.
-        if (debugRenderMode != DebugRenderMode.VBU
-                && (view == AttachableQueryContext.ViewContext.FIRST_PERSON
-                || view == AttachableQueryContext.ViewContext.THIRD_PERSON)) {
-            final String detail = textureMeshOnlyDetail(packs, candidate.definition());
+        if (view == AttachableQueryContext.ViewContext.FIRST_PERSON
+                || view == AttachableQueryContext.ViewContext.THIRD_PERSON) {
+            final String detail = javaItemFallbackDetail(debugRenderMode, packs, candidate.definition());
             if (detail != null) {
                 recordAttempt(key, tick, generation.generation(), item, view,
                         AttemptStage.JAVA_ITEM_FALLBACK, candidateCount,
@@ -296,6 +296,17 @@ public final class AttachableRuntimeManager {
                     "[Attachable] Runtime failed for " + candidate.definition().identifier(), throwable);
             return AttachableRenderResult.SUPPRESSED;
         }
+    }
+
+    static String javaItemFallbackDetail(DebugRenderMode mode, PackManager packs,
+                                         AttachableDefinitions.AttachableDefinition definition) {
+        return switch (mode) {
+            case JAVA_ITEM -> "renderPath=JAVA_ITEM_FALLBACK,geometry="
+                    + String.join("|", definition.data().getGeometries().values())
+                    + ",reason=Debug JAVA_ITEM mode forces Java ItemRenderer";
+            case VBU -> null;
+            case AUTO -> textureMeshOnlyDetail(packs, definition);
+        };
     }
 
     private static String textureMeshOnlyDetail(PackManager packs,
