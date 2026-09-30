@@ -188,8 +188,18 @@ test {
     }
     systemProperty 'vbu.testSodium', sodiumTestEnabled.toString()
     systemProperty 'vbu.workspaceRoot', projectDir.parentFile.absolutePath
+    inputs.files(fileTree(new File(projectDir.parentFile, 'ec-deploy-assets/resource-packs/CodeFunCore')) {
+        include '*.zip'
+    })
+    inputs.files(fileTree(new File(projectDir.parentFile, 'ec-deploy-assets/resource-packs/ECProEntity')) {
+        include '*.zip'
+    })
+    inputs.files(fileTree(new File(projectDir.parentFile, 'ec-deploy-assets/bedrock-loader-packs')) {
+        include '*.zip', '*.mcpack', '*.mcaddon'
+    })
     if (playerPackStack.isPresent()) {
         systemProperty 'vbu.playerPackStack', playerPackStack.get()
+        inputs.files(playerPackStack.map { value -> value.split(java.util.regex.Pattern.quote(File.pathSeparator)).toList() })
     }
     // Legacy parser utilities are executable main classes in src/test, not JUnit tests. Their default-package
     // classes are also intentionally outside the tested mod's named module.

@@ -22,7 +22,7 @@ class AttachableFirstFrameAnimationTest {
     @Test
     void replacementRuntimeAdvancesBeforeFirstRenderInTheSameTick() throws Exception {
         final Path gunPack = Path.of(System.getProperty("vbu.workspaceRoot"),
-                "ec-deploy-assets", "bedrock-loader-packs", "ec_gun_r.zip");
+                "ec-deploy-assets", "resource-packs", "CodeFunCore", "ec_gun_res.zip");
         final PackManager packs = new PackManager(List.of(new Content(Files.readAllBytes(gunPack))));
         final String firstId = "easecation:gun_rifle_javelin_default";
         final String secondId = "easecation:gun_lmg_fury_default";

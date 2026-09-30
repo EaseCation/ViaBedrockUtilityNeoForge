@@ -49,11 +49,9 @@ class PlayerAnimationResourceClosureTest {
 
     @Test
     void downloadedZePacksAndBundledVanillaFormACompletePlayerRuntime() throws Exception {
-        final Path packsRoot = Path.of(System.getProperty("vbu.workspaceRoot"),
-                "ec-deploy-assets", "bedrock-loader-packs");
         final Path codeFunPacks = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "resource-packs", "CodeFunCore");
-        final Path gun = packsRoot.resolve("ec_gun_r.zip");
+        final Path gun = codeFunPacks.resolve("ec_gun_res.zip");
         final String configuredStack = System.getProperty("vbu.playerPackStack", "");
         final List<Path> stack = configuredStack.isBlank()
                 ? List.of(codeFunPacks.resolve("ec_hub.zip"),
@@ -310,12 +308,11 @@ class PlayerAnimationResourceClosureTest {
     @Test
     void bedrockMovementQueriesKeepWalkPhaseSeparateFromGroundDistance() throws Exception {
         final Path workspace = Path.of(System.getProperty("vbu.workspaceRoot"));
-        final Path loaderPacks = workspace.resolve("ec-deploy-assets/bedrock-loader-packs");
         final Path codeFunPacks = workspace.resolve("ec-deploy-assets/resource-packs/CodeFunCore");
         final PackManager packs = new PackManager(List.of(
                 content(codeFunPacks.resolve("ec_hub.zip")),
                 content(codeFunPacks.resolve("ec_ze.zip")),
-                content(loaderPacks.resolve("ec_gun_r.zip"))));
+                content(codeFunPacks.resolve("ec_gun_res.zip"))));
 
         final TestBoneModel phaseZeroModel = new TestBoneModel();
         final TestBoneModel phaseOneModel = new TestBoneModel();
