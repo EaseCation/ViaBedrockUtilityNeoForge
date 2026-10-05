@@ -3,6 +3,8 @@ package org.oryxel.viabedrockutility.attachable;
 import net.easecation.bedrockmotion.mocha.MoLangEvaluationContext;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.util.Mth;
+import org.oryxel.viabedrockutility.animation.BedrockFrameTime;
 import team.unnamed.mocha.runtime.Scope;
 import team.unnamed.mocha.runtime.value.Function;
 import team.unnamed.mocha.runtime.value.MutableObjectBinding;
@@ -84,6 +86,8 @@ final class AttachableScopeFactory {
             scope.set("c", contextBinding);
 
             final AttachableQueryBinding query = new AttachableQueryBinding(queryContext);
+            query.set("frame_alpha", Value.of(Mth.clamp(partialTick, 0.0F, 1.0F)));
+            query.set("delta_time", Value.of(BedrockFrameTime.INSTANCE.deltaSeconds()));
             query.set("model_scale", Value.of(1.0D));
             query.set("variant", NumberValue.zero());
             query.set("owner_identifier", Value.of(owner.identifier() == null ? "" : owner.identifier()));

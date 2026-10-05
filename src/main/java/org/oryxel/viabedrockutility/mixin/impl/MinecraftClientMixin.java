@@ -4,6 +4,7 @@ import nakern.be_camera.camera.CameraManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
+import org.oryxel.viabedrockutility.animation.BedrockFrameTime;
 import org.oryxel.viabedrockutility.renderer.FrozenEntityMeshCache;
 import org.oryxel.viabedrockutility.renderer.FrozenMeshDrawQueue;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,6 +14,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Minecraft.class)
 public class MinecraftClientMixin {
+    @Inject(method = "runTick", at = @At("HEAD"))
+    private void vbu$beginMolangFrame(boolean renderLevel, CallbackInfo ci) {
+        BedrockFrameTime.INSTANCE.beginFrame(System.nanoTime());
+    }
+
     @Inject(method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;Z)V", at = @At("HEAD"))
     private void disconnect(Screen disconnectionScreen, boolean transferring, CallbackInfo ci) {
         FrozenMeshDrawQueue.clear();

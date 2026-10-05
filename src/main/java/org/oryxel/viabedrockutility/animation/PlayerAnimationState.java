@@ -3,6 +3,7 @@ package org.oryxel.viabedrockutility.animation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
+import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -16,6 +17,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ChargedProjectiles;
 import net.minecraft.world.phys.Vec3;
+import org.oryxel.viabedrockutility.ViaBedrockUtility;
+import org.oryxel.viabedrockutility.entity.BedrockEntityMotion;
+import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
 
 import java.util.Locale;
 import java.util.Set;
@@ -70,7 +74,9 @@ public record PlayerAnimationState(
         double positionZ,
         double deltaX,
         double deltaY,
-        double deltaZ) {
+        double deltaZ,
+        float groundSpeed,
+        float verticalSpeed) {
 
     public static PlayerAnimationState thirdPerson(AbstractClientPlayer player,
                                                    PlayerRenderState renderState,
@@ -110,10 +116,21 @@ public record PlayerAnimationState(
         final float headYaw = Mth.wrapDegrees(Mth.rotLerp(partialTick, player.yHeadRotO, player.yHeadRot)
                 - bodyYaw);
         final float pitch = player.getXRot(partialTick);
-        final float walkPosition = renderState == null
+        float walkPosition = renderState == null
                 ? player.walkAnimation.position(partialTick) : renderState.walkAnimationPos;
-        final float walkSpeed = renderState == null
+        float walkSpeed = renderState == null
                 ? player.walkAnimation.speed(partialTick) : renderState.walkAnimationSpeed;
+        float groundSpeed = (float) movement.length() * 20.0F;
+        float verticalSpeed = (float) movement.y * 20.0F;
+        final EntityRenderer<?, ?> renderer = ViaBedrockUtility.getInstance().getPayloadHandler()
+                .cachedPlayerRenderer(player.getUUID());
+        if (renderer instanceof CustomPlayerRenderer customRenderer) {
+            final BedrockEntityMotion motion = customRenderer.motionState(player);
+            walkPosition = motion.modifiedDistanceMoved(partialTick);
+            walkSpeed = motion.modifiedMoveSpeed(partialTick, player.isBaby());
+            groundSpeed = motion.groundSpeed();
+            verticalSpeed = motion.verticalSpeed();
+        }
         final float swimAmount = renderState == null
                 ? player.getSwimAmount(partialTick) : renderState.swimAmount;
         final double distance = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition()
@@ -140,7 +157,7 @@ public record PlayerAnimationState(
                 usingMainHand ? Mth.clamp(useElapsedTicks / 5.0F, 0.0F, 1.0F) : 0.0F,
                 useItemIntervalProgress(useAnimation, useElapsedTicks),
                 position.x, position.z,
-                movement.x, movement.y, movement.z);
+                movement.x, movement.y, movement.z, groundSpeed, verticalSpeed);
     }
 
     public String equippedItemName(boolean offHand) {

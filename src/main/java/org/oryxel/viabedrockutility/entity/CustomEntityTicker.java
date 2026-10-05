@@ -50,6 +50,8 @@ public class CustomEntityTicker implements AnimationEventListener {
 
     private final CustomEntityPayloadHandler payloadHandler = ViaBedrockUtility.getInstance().getPayloadHandler();
     private final PackManager packManager;
+    @Getter
+    private final BedrockEntityMotion motion = new BedrockEntityMotion();
     private final org.oryxel.viabedrockutility.pack.definitions.MaterialDefinitions vbuMaterialDefinitions;
 
     @Getter
@@ -133,10 +135,8 @@ public class CustomEntityTicker implements AnimationEventListener {
         this.soundEffects = se != null ? se : Map.of();
 
         final MutableObjectBinding variableBinding = new MutableObjectBinding();
-        // Bedrock engine provides gliding_speed_value based on entity movement attribute.
-        // Default to typical player walking speed in blocks/second (~4.317),
-        // matching the unit used by query.modified_move_speed (blocks/second).
-        variableBinding.set("gliding_speed_value", Value.of(4.317));
+        // 原生玩家宿主初始化为 1；该变量的单位不应与物理速度混用。
+        variableBinding.set("gliding_speed_value", Value.of(1.0));
         this.entityScope.set("variable", variableBinding);
         this.entityScope.set("v", variableBinding);
 

@@ -1,0 +1,37 @@
+{
+  "format_version": "1.19.0",
+  "animation_controllers": {
+    "controller.animation.ghosarea_hunter_elite.move": {
+      "initial_state": "default",
+      "states": {
+        "default": {
+          "animations": [
+            "idle"
+          ],
+          "transitions": [
+            {
+              "move": "q.ground_speed>=0.1"
+            }
+          ],
+          "blend_transition": 0.2
+        },
+        "move": {
+          "animations": [
+            {
+              "move_arm": "query.modified_move_speed*2.5"
+            },
+            {
+              "move_leg": "query.modified_move_speed*2.5"
+            }
+          ],
+          "transitions": [
+            {
+              "default": "q.ground_speed<=0.1"
+            }
+          ],
+          "blend_transition": 0.2
+        }
+      }
+    }
+  }
+}

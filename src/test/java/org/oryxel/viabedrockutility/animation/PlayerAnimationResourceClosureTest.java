@@ -482,7 +482,7 @@ class PlayerAnimationResourceClosureTest {
                 tick, 0.0F, 0.0F, 0.0F, pitch, relativeHeadYaw, 0.0F, 0.0F,
                 1.0F, 1.0F, false, true, true, false, false, false, false,
                 false, false, false, true, false, false, true, false, false, false,
-                1, 19, 20, 0.0F, 0.0F, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
+                1, 19, 20, 0.0F, 0.0F, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0F, 0.0F);
     }
 
     private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
@@ -572,7 +572,7 @@ class PlayerAnimationResourceClosureTest {
                 true, true, false, false, false, swimming, false,
                 false, false, false, false, false, false, false, false, bobAnimation,
                 0, 0, 0, 0.0F, 0.0F,
-                positionX, 0.0D, deltaX, 0.0D, 0.0D);
+                positionX, 0.0D, deltaX, 0.0D, 0.0D, 0.0F, 0.0F);
     }
 
     private static PlayerAnimationState movementState(PlayerAnimationState.View view, long tick,
@@ -588,7 +588,7 @@ class PlayerAnimationResourceClosureTest {
                 true, onGround, false, crouching, false, false, false,
                 false, false, false, false, false, false, false, false, true,
                 0, 0, 0, 0.0F, 0.0F,
-                positionX, 0.0D, 0.1D, 0.0D, 0.0D);
+                positionX, 0.0D, 0.1D, 0.0D, 0.0D, 0.0F, 0.0F);
     }
 
     private static void assertPoseEquals(TestBoneModel expected, TestBoneModel actual) {

@@ -77,6 +77,6 @@ class PlayerAnimationStateTest {
                 0.0F, 1.0F, false, true, true, false, false, false, false, false,
                 false, false, false, false, false, false, false, false, false,
                 0, 0, 0, 0.0F, 0.0F,
-                0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
+                0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0F, 0.0F);
     }
 }

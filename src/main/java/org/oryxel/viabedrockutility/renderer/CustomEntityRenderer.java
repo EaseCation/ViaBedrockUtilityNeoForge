@@ -28,8 +28,11 @@ import net.minecraft.world.phys.Vec3;
 import org.cube.converter.data.bedrock.controller.BedrockRenderController;
 import org.joml.Matrix4f;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
+import org.oryxel.viabedrockutility.animation.BedrockFrameTime;
 import org.oryxel.viabedrockutility.config.LodConfig;
+import org.oryxel.viabedrockutility.entity.BedrockEntityMotion;
 import org.oryxel.viabedrockutility.entity.CustomEntityTicker;
+import org.oryxel.viabedrockutility.enums.bedrock.ActorFlags;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.material.data.Material;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
@@ -104,15 +107,6 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     private float lastSignificantHeadYaw;  // last head yaw that triggered delay reset
     private long headStableStartMs;         // when head last became "stable"
     private boolean rotationInitialized;
-
-    // LimbAnimator-style movement tracking (per-frame accumulation + per-tick smoothing)
-    private double lastPosX, lastPosY, lastPosZ;
-    private float tickHorizDist;
-    private float tickVertDist;
-    private int lastAge = -1;
-    private float limbSpeed;
-    private float limbDistance;
-    private float limbVerticalSpeed;
 
     public CustomEntityRenderer(final CustomEntityTicker ticker, final List<Model> models, EntityRendererProvider.Context context) {
         super(context);
@@ -627,45 +621,22 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         state.setEntityOnGround(entity.onGround());
         state.setEntityAlive(entity.isAlive());
         state.setEntityLifeTime(entity.tickCount / 20.0f);
+        state.setFrameAlpha(tickDelta);
 
-        // LimbAnimator-style movement tracking.
-        // getPosition(float) returns interpolated positions using previous/current entity position.
-        final Vec3 pos = entity.getPosition(tickDelta);
+        // 运动状态只由客户端 tick 推进；多次绘制、LOD 和视锥剔除均不改变动画运动量。
+        final BedrockEntityMotion motion = this.ticker.getMotion();
+        motion.initialize(entity.tickCount, entity.getX(), entity.getY(), entity.getZ(), entity.getYRot());
+        state.distanceTraveled = motion.modifiedDistanceMoved(tickDelta);
+        state.setModifiedMoveSpeed(motion.modifiedMoveSpeed(tickDelta,
+                this.ticker.entityFlags().contains(ActorFlags.BABY)));
+        state.setGroundSpeed(motion.groundSpeed());
+        state.setVerticalSpeed(motion.verticalSpeed());
 
-        if (this.lastAge < 0) {
-            this.lastPosX = pos.x;
-            this.lastPosY = pos.y;
-            this.lastPosZ = pos.z;
-            this.lastAge = entity.tickCount;
-        }
-
-        final double mx = pos.x - this.lastPosX;
-        final double my = pos.y - this.lastPosY;
-        final double mz = pos.z - this.lastPosZ;
-        this.tickHorizDist += (float) Math.sqrt(mx * mx + mz * mz);
-        this.tickVertDist += (float) my;
-
-        this.lastPosX = pos.x;
-        this.lastPosY = pos.y;
-        this.lastPosZ = pos.z;
-
-        // Per-tick: LimbAnimator 0.4 exponential smoothing
-        if (entity.tickCount != this.lastAge) {
-            this.limbSpeed += (this.tickHorizDist - this.limbSpeed) * 0.4f;
-            this.limbDistance += this.limbSpeed;
-            this.limbVerticalSpeed += (this.tickVertDist - this.limbVerticalSpeed) * 0.4f;
-
-            this.tickHorizDist = 0;
-            this.tickVertDist = 0;
-            this.lastAge = entity.tickCount;
-        }
-
-        state.distanceTraveled = this.limbDistance;
-        state.setPositionDeltaX(mx);
-        state.setPositionDeltaY(my);
-        state.setPositionDeltaZ(mz);
-        state.setGroundSpeed(this.limbSpeed * 20.0f);
-        state.setVerticalSpeed(this.limbVerticalSpeed * 20.0f);
+        // position_delta 读取实体运动向量；它不是相邻渲染帧的位置差，也不乘每秒 tick 数。
+        final Vec3 movement = entity.getDeltaMovement();
+        state.setPositionDeltaX(movement.x);
+        state.setPositionDeltaY(movement.y);
+        state.setPositionDeltaZ(movement.z);
 
         // Calculate rotation_to_camera for billboard effect
         final var camera = Minecraft.getInstance().gameRenderer.getMainCamera();
@@ -701,7 +672,9 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
         // Per-frame movement and state queries
         queryBinding.set("modified_distance_moved", Value.of(state.getDistanceTraveled()));
-        queryBinding.set("modified_move_speed", Value.of(state.getGroundSpeed()));
+        queryBinding.set("modified_move_speed", Value.of(state.getModifiedMoveSpeed()));
+        queryBinding.set("frame_alpha", Value.of(state.getFrameAlpha()));
+        queryBinding.set("delta_time", Value.of(BedrockFrameTime.INSTANCE.deltaSeconds()));
         queryBinding.set("is_on_ground", state.isEntityOnGround() ? VAL_TRUE : VAL_FALSE);
         queryBinding.set("is_alive", state.isEntityAlive() ? VAL_TRUE : VAL_FALSE);
         queryBinding.set("life_time", Value.of(state.getEntityLifeTime()));
@@ -798,6 +771,8 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         @Setter private double positionDeltaY;
         @Setter private double positionDeltaZ;
         @Setter private float groundSpeed;
+        @Setter private float modifiedMoveSpeed;
+        @Setter private float frameAlpha;
         @Setter private float verticalSpeed;
         @Setter private double distanceFromCamera;
     }

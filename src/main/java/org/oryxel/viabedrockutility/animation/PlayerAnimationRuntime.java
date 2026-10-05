@@ -188,10 +188,12 @@ public final class PlayerAnimationRuntime {
             query.set("life_time", Value.of(value.ageInTicks() / 20.0F));
             query.set("frame_alpha", Value.of(value.partialTick()));
             query.set("modified_distance_moved", Value.of(value.walkPosition()));
-            query.set("walk_distance", Value.of(distanceMoved));
+            // 原生 walk_distance 查询对步行距离应用 0.6 的单位换算。
+            query.set("walk_distance", Value.of(distanceMoved * 0.6D));
             query.set("modified_move_speed", Value.of(value.walkSpeed()));
-            query.set("ground_speed", Value.of(value.walkSpeed()));
-            query.set("vertical_speed", Value.of(value.deltaY()));
+            query.set("ground_speed", Value.of(value.groundSpeed()));
+            query.set("vertical_speed", Value.of(value.verticalSpeed()));
+            query.set("delta_time", Value.of(BedrockFrameTime.INSTANCE.deltaSeconds()));
             query.set("distance_from_camera", Value.of(value.distanceFromCamera()));
             query.set("model_scale", Value.of(0.0625D));
             query.set("is_alive", Value.of(value.alive()));

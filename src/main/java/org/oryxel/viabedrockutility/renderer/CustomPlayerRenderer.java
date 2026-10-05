@@ -23,12 +23,15 @@ import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder
 import org.oryxel.viabedrockutility.attachable.AttachableItemSnapshot;
 import org.oryxel.viabedrockutility.attachable.AttachableOwnerSnapshot;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
+import org.oryxel.viabedrockutility.entity.BedrockEntityMotion;
+import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.Map;
+import java.lang.ref.WeakReference;
 
 public class CustomPlayerRenderer extends PlayerRenderer {
     private final ResourceLocation texture;
@@ -38,6 +41,19 @@ public class CustomPlayerRenderer extends PlayerRenderer {
             new PlayerAnimationRuntimeSlot<>();
     private PackManager playerAnimationPacks;
     private Map<String, String> playerAnimationOverrides = Map.of();
+    private WeakReference<AbstractClientPlayer> motionOwner = new WeakReference<>(null);
+    private WeakReference<Level> motionLevel = new WeakReference<>(null);
+    private BedrockEntityMotion motion = new BedrockEntityMotion();
+
+    public BedrockEntityMotion motionState(AbstractClientPlayer player) {
+        if (motionOwner.get() != player || motionLevel.get() != player.level()) {
+            motionOwner = new WeakReference<>(player);
+            motionLevel = new WeakReference<>(player.level());
+            motion = new BedrockEntityMotion();
+        }
+        motion.initialize(player.tickCount, player.getX(), player.getY(), player.getZ(), player.yBodyRot);
+        return motion;
+    }
 
     public CustomPlayerRenderer(final EntityRendererProvider.Context ctx, final PlayerModel model, final boolean slim, ResourceLocation texture) {
         super(ctx, slim);
