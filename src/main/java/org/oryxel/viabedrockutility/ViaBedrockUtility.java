@@ -113,6 +113,7 @@ public class ViaBedrockUtility {
         this.playerPoseDemand.prune(level == null ? Long.MIN_VALUE : level.getGameTime());
         // Tick animation overlays on all cached player renderers
         if (this.payloadHandler != null) {
+            this.payloadHandler.getCustomEntityHurtTracker().advanceTick(level, Minecraft.getInstance().isPaused());
             this.payloadHandler.tickAnimationOverlays();
         }
 

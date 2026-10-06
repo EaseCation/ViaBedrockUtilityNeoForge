@@ -15,6 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.cube.converter.model.impl.bedrock.BedrockGeometryModel;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.entity.CustomEntityTicker;
+import org.oryxel.viabedrockutility.entity.CustomEntityHurtTracker;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mixin.impl.accessor.PlayerSkinFieldAccessor;
 import net.easecation.bedrockmotion.pack.PackManager;
@@ -47,6 +48,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Getter
 public class PayloadHandler {
     protected final Map<UUID, CustomEntityTicker> cachedCustomEntities = new ConcurrentHashMap<>();
+    private final CustomEntityHurtTracker customEntityHurtTracker = new CustomEntityHurtTracker();
     protected final Map<UUID, EntityRenderer<?, ?>> cachedPlayerRenderers = new ConcurrentHashMap<>();
     protected final Map<UUID, ResourceLocation> cachedPlayerCapes = new ConcurrentHashMap<>();
     protected final Map<UUID, SkinInfo> cachedSkinInfo = new ConcurrentHashMap<>();
@@ -91,6 +93,7 @@ public class PayloadHandler {
 
     /** Clears all state whose identity belongs to the retired network connection. */
     public void resetConnectionState() {
+        customEntityHurtTracker.clearAll();
         cachedCustomEntities.values().forEach(ticker ->
                 ticker.getRenderer().invalidateFrozenMeshes("connection_reset"));
         cachedCustomEntities.clear();
@@ -106,10 +109,18 @@ public class PayloadHandler {
     }
 
     public void removeCustomEntity(UUID uuid) {
+        customEntityHurtTracker.clear(uuid);
         playerVisualStates.remove(uuid);
         final CustomEntityTicker ticker = cachedCustomEntities.remove(uuid);
         if (ticker != null) {
             ticker.getRenderer().invalidateFrozenMeshes("entity_removed");
+        }
+    }
+
+    /** 只有已经绑定 VBU 自定义模型的实体才记录受击，原版实体继续使用原版逻辑。 */
+    public void markCustomEntityHurt(UUID uuid, long currentTick) {
+        if (cachedCustomEntities.containsKey(uuid)) {
+            customEntityHurtTracker.markHurt(uuid, currentTick);
         }
     }
 

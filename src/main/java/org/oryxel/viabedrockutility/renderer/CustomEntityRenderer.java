@@ -28,10 +28,12 @@ import net.minecraft.world.phys.Vec3;
 import org.cube.converter.data.bedrock.controller.BedrockRenderController;
 import org.joml.Matrix4f;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
+import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.animation.BedrockFrameTime;
 import org.oryxel.viabedrockutility.config.LodConfig;
 import org.oryxel.viabedrockutility.entity.BedrockEntityMotion;
 import org.oryxel.viabedrockutility.entity.CustomEntityTicker;
+import org.oryxel.viabedrockutility.entity.CustomEntityHurtTracker;
 import org.oryxel.viabedrockutility.enums.bedrock.ActorFlags;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.material.data.Material;
@@ -241,7 +243,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                     boolean queuedCachedMesh = false;
                     if (config.isFrozenMeshEnabled()) {
                         queuedCachedMesh = this.tryQueuePoseMesh(
-                                model, renderType, vertexConsumers, effectiveLight, flatLight,
+                                state, model, renderType, vertexConsumers, effectiveLight, flatLight,
                                 matrices.last().pose());
                     }
                     if (useFrozenPose) {
@@ -252,7 +254,7 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                         // Signal flat normals without wrapping the consumer, preserving Sodium's writer.
                         VbuCompileScratch.FLAT_NORMAL = flatLight;
                         model.model.renderToBuffer(
-                                matrices, vertexConsumer, effectiveLight, OverlayTexture.pack(0, 10));
+                                matrices, vertexConsumer, effectiveLight, state.packedOverlay());
                     }
                 }
             } catch (StackOverflowError soe) {
@@ -338,8 +340,12 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         return false;
     }
 
-    private boolean tryQueuePoseMesh(Model model, RenderType renderType, MultiBufferSource vertexConsumers,
+    boolean tryQueuePoseMesh(CustomEntityRenderState state, Model model, RenderType renderType, MultiBufferSource vertexConsumers,
                                      int effectiveLight, boolean flatLight, Matrix4f rootPose) {
+        // 受击只切换本帧 overlay；必须在读取、烘焙或失效任何姿态网格之前退出。
+        if (!state.canUsePoseMesh(true)) {
+            return false;
+        }
         FrozenMeshEntry entry = this.frozenEntries.get(model);
         if (!FrozenMeshEligibility.isRenderContextEligible(
                         renderType, model.texture(), vertexConsumers)
@@ -570,6 +576,9 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     public void extractRenderState(T entity, CustomEntityRenderState state, float tickDelta) {
         super.extractRenderState(entity, state, tickDelta);
         state.setCustomRenderer(this);
+        final CustomEntityHurtTracker hurtTracker = ViaBedrockUtility.getInstance().getPayloadHandler()
+                .getCustomEntityHurtTracker();
+        state.setHasRedOverlay(hurtTracker.isHurt(entity.getUUID(), hurtTracker.currentTick(entity.level())));
         // Update entity position for particle spawning
         this.ticker.setEntityPosition(new org.joml.Vector3f((float) entity.getX(), (float) entity.getY(), (float) entity.getZ()));
         float serverYaw = entity.getYRot(tickDelta);
@@ -751,6 +760,18 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
     @Getter
     public static class CustomEntityRenderState extends EntityRenderState {
+        @Setter private boolean hasRedOverlay;
+
+        int packedOverlay() {
+            return hasRedOverlay
+                    ? OverlayTexture.pack(OverlayTexture.NO_WHITE_U, OverlayTexture.v(true))
+                    : OverlayTexture.NO_OVERLAY;
+        }
+
+        boolean canUsePoseMesh(boolean enabled) {
+            return enabled && !hasRedOverlay;
+        }
+
         private float yaw, bodyYaw, bodyPitch;
         private float distanceTraveled;
         @Setter
