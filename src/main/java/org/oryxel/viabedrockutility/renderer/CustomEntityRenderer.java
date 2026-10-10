@@ -526,6 +526,12 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     }
 
     @Override
+    protected boolean affectedByCulling(T entity) {
+        // 模型尺寸由资源定义；按 Interaction 碰撞箱裁剪会跳过 tick 并冻结网络插值。
+        return false;
+    }
+
+    @Override
     public boolean shouldRender(T entity, Frustum frustum, double x, double y, double z) {
         if (!frustum.isVisible(getVisualBoundingBox(entity))) return false;
         double d = 64.0F * Entity.getViewScale();
