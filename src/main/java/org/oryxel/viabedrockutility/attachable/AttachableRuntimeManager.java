@@ -8,7 +8,6 @@ import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.HumanoidArm;
@@ -191,8 +190,8 @@ public final class AttachableRuntimeManager {
         if (stack == null || stack.isEmpty()) {
             return AttachableItemSnapshot.EMPTY;
         }
-        final ResourceLocation identifier = BuiltInRegistries.ITEM.getKey(stack.getItem());
-        if (!candidateItemIdentifiers.contains(identifier)) {
+        final ResourceLocation identifier = AttachableItemSnapshot.itemIdentifier(stack);
+        if (identifier == null || !candidateItemIdentifiers.contains(identifier)) {
             return AttachableItemSnapshot.EMPTY;
         }
         return AttachableItemSnapshot.of(identifier, stack);

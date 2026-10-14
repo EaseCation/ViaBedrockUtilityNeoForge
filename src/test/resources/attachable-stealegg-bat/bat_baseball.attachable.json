@@ -1,0 +1,37 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:attachable": {
+    "description": {
+      "identifier": "ec:stealegg_item_bat_baseball",
+      "item": {
+        "ec:stealegg_item_bat_baseball": "1.0"
+      },
+      "materials": {
+        "default": "entity_alphatest"
+      },
+      "textures": {
+        "default": "textures/entity/stealegg/bat_baseball"
+      },
+      "geometry": {
+        "default": "geometry.stealegg.bat_baseball_held"
+      },
+      "animations": {
+        "first": "animation.stealegg.bat_baseball.first_person",
+        "third": "animation.stealegg.bat_baseball.third_person"
+      },
+      "scripts": {
+        "animate": [
+          {
+            "first": "context.is_first_person"
+          },
+          {
+            "third": "!context.is_first_person"
+          }
+        ]
+      },
+      "render_controllers": [
+        "controller.render.stealegg_model"
+      ]
+    }
+  }
+}
