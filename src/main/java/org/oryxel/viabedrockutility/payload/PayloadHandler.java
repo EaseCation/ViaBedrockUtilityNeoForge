@@ -35,6 +35,7 @@ import org.oryxel.viabedrockutility.mixin.impl.accessor.ClientInputAccessor;
 import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.phys.Vec2;
 import net.neoforged.neoforge.client.event.MovementInputUpdateEvent;
+import org.oryxel.viabedrockutility.payload.impl.player.PlayerAnimatePayload;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import org.oryxel.viabedrockutility.renderer.AnimatedSkinOverlay;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
@@ -199,6 +200,8 @@ public class PayloadHandler {
             this.handle(particlePayload);
         } else if (payload instanceof AnimatePayload animatePayload) {
             this.handle(animatePayload);
+        } else if (payload instanceof PlayerAnimatePayload animatePayload) {
+            this.handle(animatePayload);
         }
     }
 
@@ -243,6 +246,8 @@ public class PayloadHandler {
     public void handle(final ModelRequestPayload payload) {}
 
     public void handle(final AnimatePayload payload) {}
+
+    public void handle(final PlayerAnimatePayload payload) {}
 
     public void handle(final SpawnParticlePayload payload) {
         ViaBedrockUtilityNeoForge.LOGGER.debug("[Particle:L4] Handling SpawnParticlePayload: {} at ({}, {}, {}), molang={}", payload.getIdentifier(), payload.getX(), payload.getY(), payload.getZ(), payload.getMolangVarsJson());

@@ -15,6 +15,7 @@ import org.oryxel.viabedrockutility.payload.impl.entity.*;
 import org.oryxel.viabedrockutility.payload.impl.particle.*;
 import org.oryxel.viabedrockutility.payload.impl.player.PlayerVisualStatePayload;
 import org.oryxel.viabedrockutility.payload.impl.player.InputLocksPayload;
+import org.oryxel.viabedrockutility.payload.impl.player.PlayerAnimatePayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.*;
 import org.oryxel.viabedrockutility.util.EnumUtil;
 
@@ -78,6 +79,24 @@ public class BasePayload implements CustomPacketPayload {
                 final java.util.UUID uuid = buf.readUUID();
                 final String animationName = readString(buf);
                 return new AnimatePayload(uuid, animationName);
+            }
+
+            case PLAYER_ANIMATE -> {
+                final java.util.UUID uuid = buf.readUUID();
+                final String animation = readString(buf);
+                final String nextState = readString(buf);
+                final String stopExpression = readString(buf);
+                final int stopExpressionVersion = buf.readInt();
+                final String controller = readString(buf);
+                final float blendOutTime = buf.readFloat();
+                if (!Float.isFinite(blendOutTime) || blendOutTime < 0.0F) {
+                    throw new DecoderException("Invalid player animation blend-out time: " + blendOutTime);
+                }
+                if (buf.isReadable()) {
+                    throw new DecoderException("Trailing bytes in PLAYER_ANIMATE payload: " + buf.readableBytes());
+                }
+                return new PlayerAnimatePayload(uuid, animation, nextState, stopExpression,
+                        stopExpressionVersion, controller, blendOutTime);
             }
 
             case CAPE -> {

@@ -1,6 +1,5 @@
 package org.oryxel.viabedrockutility.animation;
 
-import net.easecation.bedrockmotion.animation.vanilla.AnimationHelper;
 import net.easecation.bedrockmotion.animator.AnimationClock;
 import net.easecation.bedrockmotion.entity.ClientEntityAnimationRuntime;
 import net.easecation.bedrockmotion.model.AnimationEventListener;
@@ -9,9 +8,7 @@ import net.easecation.bedrockmotion.mocha.LayeredScope;
 import net.easecation.bedrockmotion.mocha.DebugBinding;
 import net.easecation.bedrockmotion.mocha.MoLangEvaluationContext;
 import net.easecation.bedrockmotion.pack.PackManager;
-import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import net.minecraft.client.model.PlayerModel;
-import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
 import team.unnamed.mocha.runtime.ExecutionContext;
@@ -21,34 +18,21 @@ import team.unnamed.mocha.runtime.value.NumberValue;
 import team.unnamed.mocha.runtime.value.Value;
 
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.LongSupplier;
 
 /** Owns the independent first/third-person Bedrock player-host runtimes for one renderer. */
 public final class PlayerAnimationRuntime {
     private final ViewInstance firstPerson;
     private final ViewInstance thirdPerson;
-    private final Map<String, AnimationDefinitions.AnimationData> onceAnimations = new LinkedHashMap<>();
-    private final Map<String, Long> onceStartMillis = new LinkedHashMap<>();
-    private final Vector3f animationScratch = new Vector3f();
-    private final LongSupplier nowMillis;
     private final MovementDistance movementDistance = new MovementDistance();
     private McBoneModel cachedModel;
     private volatile SampleDebugSnapshot lastSample;
 
     public PlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides) {
-        this(packs, animationOverrides, System::currentTimeMillis);
-    }
-
-    PlayerAnimationRuntime(PackManager packs, Map<String, String> animationOverrides,
-                           LongSupplier nowMillis) {
         Objects.requireNonNull(packs, "packs");
-        this.nowMillis = Objects.requireNonNull(nowMillis, "nowMillis");
         final var definition = packs.getEntityDefinitions().getEntities().get("minecraft:player");
         if (definition == null) {
             throw new IllegalArgumentException("PackManager is missing minecraft:player");
@@ -84,12 +68,10 @@ public final class PlayerAnimationRuntime {
         sample(model, state, thirdPerson);
     }
 
-    public void playOnce(String identifier, AnimationDefinitions.AnimationData animation) {
-        if (animation == null || animation.compiled() == null) {
-            return;
-        }
-        onceAnimations.put(identifier, animation);
-        onceStartMillis.put(identifier, nowMillis.getAsLong());
+    public void playAnimation(String animation, String nextState, String stopExpression,
+                              String controller, float blendOutTime) {
+        firstPerson.runtime.playAnimation(animation, nextState, stopExpression, controller, blendOutTime);
+        thirdPerson.runtime.playAnimation(animation, nextState, stopExpression, controller, blendOutTime);
     }
 
     private void sample(PlayerModel model, PlayerAnimationState state, ViewInstance view) {
@@ -109,27 +91,8 @@ public final class PlayerAnimationRuntime {
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to sample Bedrock player animation", exception);
         }
-        applyOneShots(model, view.scope);
         lastSample = new SampleDebugSnapshot(state.view(), state.tick(), state.partialTick(),
                 System.identityHashCode(model));
-    }
-
-    private void applyOneShots(IBoneModel model, Scope scope) {
-        final long now = nowMillis.getAsLong();
-        final Iterator<Map.Entry<String, AnimationDefinitions.AnimationData>> iterator =
-                onceAnimations.entrySet().iterator();
-        while (iterator.hasNext()) {
-            final Map.Entry<String, AnimationDefinitions.AnimationData> entry = iterator.next();
-            final long elapsed = now - onceStartMillis.getOrDefault(entry.getKey(), now);
-            final float length = entry.getValue().compiled().lengthInSeconds();
-            if (length > 0.0F && elapsed / 1000.0F >= length) {
-                iterator.remove();
-                onceStartMillis.remove(entry.getKey());
-                continue;
-            }
-            AnimationHelper.animate(scope, model, entry.getValue().compiled(), elapsed,
-                    1.0F, animationScratch, null);
-        }
     }
 
     /**

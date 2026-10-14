@@ -20,7 +20,7 @@ class InputLocksPayloadTest {
     @Test
     void movementLockClearsKeysAndAxesWhileCameraRemainsAvailable() {
         final PayloadHandler handler = new PayloadHandler();
-        // INPUT_LOCKS is wire type 11; movement and camera are independent Bedrock bits 4 and 2.
+        // 输入锁使用协议编号 12；移动和相机分别由基岩版标志 4、2 控制。
         decode(4, false).handle(handler);
         final ClientInput input = movingInput();
         handler.onMovementInputUpdate(new MovementInputUpdateEvent(null, input));
@@ -102,7 +102,7 @@ class InputLocksPayloadTest {
     private static BasePayload decode(final int flags, final boolean trailing) {
         final FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {
-            buffer.writeInt(11);
+            buffer.writeInt(12);
             buffer.writeInt(flags);
             if (trailing) {
                 buffer.writeByte(1);
