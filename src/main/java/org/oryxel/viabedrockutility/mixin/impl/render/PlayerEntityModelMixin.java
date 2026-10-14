@@ -17,6 +17,7 @@ public abstract class PlayerEntityModelMixin {
     @Inject(method = "<init>", at = @At("TAIL"))
     private void viaBedrockUtility$nameVanillaPlayerBones(ModelPart root, boolean slim, CallbackInfo ci) {
         final PlayerModel model = (PlayerModel) (Object) this;
+        viaBedrockUtility$nameVanillaBone(root, "root");
         viaBedrockUtility$nameVanillaBone(model.head, "head");
         viaBedrockUtility$nameVanillaBone(model.body, "body");
         viaBedrockUtility$nameVanillaBone(model.rightArm, "rightarm");

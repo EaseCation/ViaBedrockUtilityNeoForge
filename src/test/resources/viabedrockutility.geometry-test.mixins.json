@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "org.oryxel.viabedrockutility.mixin.impl",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["render.CuboidMixin", "render.ModelPartMixin", "entity.InteractionEntityMixin"],
+  "mixins": ["render.CuboidMixin", "render.ModelPartMixin", "entity.InteractionEntityMixin", "accessor.ClientInputAccessor", "ClientInputMixin"],
   "injectors": {"defaultRequire": 1}
 }

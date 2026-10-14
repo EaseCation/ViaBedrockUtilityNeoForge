@@ -43,6 +43,7 @@ public class ViaBedrockUtilityNeoForge {
 					}
 				}));
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::onClientTick);
+		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance().getPayloadHandler()::onMovementInputUpdate);
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::registerClientCommands);
 		NeoForge.EVENT_BUS.addListener(FirstPersonAttachableRenderer::onRenderHand);
 		// Reset the per-frame animation budget before entities render (AfterOpaqueBlocks fires before

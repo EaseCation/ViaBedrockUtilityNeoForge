@@ -180,6 +180,7 @@ public final class GeometryUtil {
             final Map<String, ModelPart> rootParts = new LinkedHashMap<>();
             final ModelPart rootPart = new ModelPart(List.of(), rootParts);
             ((IModelPart)((Object)rootPart)).viaBedrockUtility$setVBUModel();
+            ((IModelPart) (Object) rootPart).viaBedrockUtility$setName("root");
             stringToPart.put("root", root = new PartInfo("", rootPart, rootParts));
         } else if (!player) {
             final Map<String, ModelPart> rootParts = new LinkedHashMap<>();
