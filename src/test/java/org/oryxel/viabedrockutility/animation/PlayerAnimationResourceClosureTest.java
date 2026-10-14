@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -281,28 +280,155 @@ class PlayerAnimationResourceClosureTest {
         assertTrue(Math.abs(swimmingModel.rotationX("root")
                 - standingModel.rotationX("root")) > 80.0F);
 
-        final AtomicLong now = new AtomicLong();
-        final PlayerAnimationRuntime oneShotRuntime = new PlayerAnimationRuntime(
-                packs, Map.of(), now::get);
+        final PlayerAnimationRuntime oneShotRuntime = new PlayerAnimationRuntime(packs, Map.of());
         final PlayerAnimationRuntime baselineRuntime = new PlayerAnimationRuntime(packs, Map.of());
         final TestBoneModel baseline = new TestBoneModel();
         final Animation oneShot = Animation.parse(JsonParser.parseString("""
                 {"animations":{"animation.test.once":{"loop":false,"animation_length":0.1,
                   "bones":{"rightarm":{"rotation":[20,0,0]}}}}}
                 """).getAsJsonObject()).getFirst();
-        oneShotRuntime.playOnce("animation.test.once",
+        packs.getAnimationDefinitions().getAnimations().put("animation.test.once",
                 new AnimationDefinitions.AnimationData(oneShot, AnimateBuilder.build(oneShot)));
+        oneShotRuntime.playAnimation("animation.test.once", "default",
+                "query.any_animation_finished", "__runtime_controller", 0.0F);
         oneShotRuntime.sampleThirdPerson(model,
                 state(PlayerAnimationState.View.THIRD_PERSON, 7L, "", 0.0F, 0.0F, 0.0F));
         baselineRuntime.sampleThirdPerson(baseline,
                 state(PlayerAnimationState.View.THIRD_PERSON, 7L, "", 0.0F, 0.0F, 0.0F));
         assertEquals(20.0F, model.rotationX("rightarm"), 1.0e-3F);
-        now.set(101L);
         oneShotRuntime.sampleThirdPerson(model,
-                state(PlayerAnimationState.View.THIRD_PERSON, 8L, "", 0.0F, 0.0F, 0.0F));
+                state(PlayerAnimationState.View.THIRD_PERSON, 9L, "", 0.0F, 0.0F, 0.0F));
+        oneShotRuntime.sampleThirdPerson(model,
+                state(PlayerAnimationState.View.THIRD_PERSON, 10L, "", 0.0F, 0.0F, 0.0F));
         baselineRuntime.sampleThirdPerson(baseline,
-                state(PlayerAnimationState.View.THIRD_PERSON, 8L, "", 0.0F, 0.0F, 0.0F));
+                state(PlayerAnimationState.View.THIRD_PERSON, 10L, "", 0.0F, 0.0F, 0.0F));
         assertEquals(baseline.rotationX("rightarm"), model.rotationX("rightarm"), 1.0e-3F);
+    }
+
+    @Test
+    void runeLegendOpeningResetRestoresBothViewsBeforeTheCutsceneEnds() {
+        final Path codeFunPacks = Path.of(System.getProperty("vbu.workspaceRoot"),
+                "ec-deploy-assets", "resource-packs", "CodeFunCore");
+        final PackManager packs = new PackManager(List.of(
+                content(codeFunPacks.resolve("ec_hub.zip")),
+                content(codeFunPacks.resolve("ec_rl.zip"))));
+        final var reset = packs.getAnimationDefinitions().getAnimations()
+                .get("animation.humanoid.base_pose");
+        assertNotNull(reset);
+
+        for (int actor = 1; actor <= 4; actor++) {
+            final String openingName = "animation.rl_s3_scene1.player" + actor;
+            final String followingName = "animation.rl_s3_scene2.player" + actor;
+            final var opening = packs.getAnimationDefinitions().getAnimations().get(openingName);
+            final var following = packs.getAnimationDefinitions().getAnimations().get(followingName);
+            assertNotNull(opening);
+            assertNotNull(following);
+            assertEquals("hold_on_last_frame", opening.animation().getLoop().getValue());
+            assertEquals(36.0F, opening.compiled().lengthInSeconds());
+
+            final PlayerAnimationRuntime runtime = new PlayerAnimationRuntime(packs, Map.of());
+            final PlayerAnimationRuntime baseline = new PlayerAnimationRuntime(packs, Map.of());
+            final TestBoneModel actual = new TestBoneModel();
+            final TestBoneModel expected = new TestBoneModel();
+            runtime.playAnimation(openingName, "default", "",
+                    "__runtime_controller", 0.0F);
+            for (PlayerAnimationState.View view : PlayerAnimationState.View.values()) {
+                final var state = state(view, 0L, "", 0.0F, 0.0F, 0.0F);
+                sampleView(runtime, actual, state);
+                sampleView(baseline, expected, state);
+            }
+            for (PlayerAnimationState.View view : PlayerAnimationState.View.values()) {
+                final var state = state(view, 20L, "", 0.0F, 0.0F, 0.0F);
+                sampleView(runtime, actual, state);
+                sampleView(baseline, expected, state);
+                assertFalse(expected.rotation("rightarm").equals(actual.rotation("rightarm")),
+                        openingName + " must affect " + view + " before reset");
+            }
+
+            // 跳过时原剧情还有 35 秒，复位必须立即恢复两种视角，不能等待原动画自然结束。
+            runtime.playAnimation("animation.humanoid.base_pose", "default",
+                    "", "__runtime_controller", 0.0F);
+            for (long tick : new long[]{21L, 40L}) {
+                for (PlayerAnimationState.View view : PlayerAnimationState.View.values()) {
+                    final var state = state(view, tick, "", 0.0F, 0.0F, 0.0F);
+                    sampleView(runtime, actual, state);
+                    sampleView(baseline, expected, state);
+                    assertCompletePoseEquals(expected, actual);
+                }
+            }
+
+            // 同一控制器的新动画替换旧动画；重复发包也必须恢复两种视角。
+            runtime.playAnimation(openingName, "default", "",
+                    "__runtime_controller", 0.0F);
+            runtime.playAnimation(followingName, "default", "",
+                    "__runtime_controller", 0.0F);
+            final var nextState = state(PlayerAnimationState.View.THIRD_PERSON,
+                    41L, "", 0.0F, 0.0F, 0.0F);
+            sampleView(runtime, actual, nextState);
+            sampleView(baseline, expected, nextState);
+            assertFalse(expected.rotation("rightarm").equals(actual.rotation("rightarm")));
+            runtime.playAnimation("animation.humanoid.base_pose", "default",
+                    "", "__runtime_controller", 0.0F);
+            runtime.playAnimation("animation.humanoid.base_pose", "default",
+                    "", "__runtime_controller", 0.0F);
+            for (PlayerAnimationState.View view : PlayerAnimationState.View.values()) {
+                final var state = state(view, 42L, "", 0.0F, 0.0F, 0.0F);
+                sampleView(runtime, actual, state);
+                sampleView(baseline, expected, state);
+                assertCompletePoseEquals(expected, actual);
+            }
+        }
+    }
+
+    private static void sampleView(PlayerAnimationRuntime runtime, TestBoneModel model,
+                                   PlayerAnimationState state) {
+        if (state.view() == PlayerAnimationState.View.FIRST_PERSON) {
+            runtime.sampleFirstPerson(model, state);
+        } else {
+            runtime.sampleThirdPerson(model, state);
+        }
+    }
+
+    @Test
+    void skippedRuneLegendAnimationDoesNotRemainWhenTheOtherViewFirstRenders() {
+        final Path codeFunPacks = Path.of(System.getProperty("vbu.workspaceRoot"),
+                "ec-deploy-assets", "resource-packs", "CodeFunCore");
+        final PackManager packs = new PackManager(List.of(
+                content(codeFunPacks.resolve("ec_hub.zip")),
+                content(codeFunPacks.resolve("ec_rl.zip"))));
+        for (PlayerAnimationState.View initialView : PlayerAnimationState.View.values()) {
+            final PlayerAnimationRuntime runtime = new PlayerAnimationRuntime(packs, Map.of());
+            final PlayerAnimationRuntime baseline = new PlayerAnimationRuntime(packs, Map.of());
+            final TestBoneModel actual = new TestBoneModel();
+            final TestBoneModel expected = new TestBoneModel();
+            runtime.playAnimation("animation.rl_s3_scene1.player1", "default", "",
+                    "__runtime_controller", 0.0F);
+            sampleView(runtime, actual, state(initialView, 500L, "", 0.0F, 0.0F, 0.0F));
+            // 普通物品待机动画也有播放时钟，基线必须拥有相同的首次显示时刻。
+            sampleView(baseline, expected, state(initialView, 500L, "", 0.0F, 0.0F, 0.0F));
+            runtime.playAnimation("animation.humanoid.base_pose", "default", "",
+                    "__runtime_controller", 0.0F);
+            final PlayerAnimationState.View lateView = initialView == PlayerAnimationState.View.FIRST_PERSON
+                    ? PlayerAnimationState.View.THIRD_PERSON : PlayerAnimationState.View.FIRST_PERSON;
+            // 未显示的视角会同时消费剧情与复位，最终只能保留同控制器的最后状态。
+            for (PlayerAnimationState.View view : List.of(lateView, initialView)) {
+                final var state = state(view, 520L, "", 0.0F, 0.0F, 0.0F);
+                sampleView(runtime, actual, state);
+                sampleView(baseline, expected, state);
+                assertCompletePoseEquals(expected, actual);
+            }
+        }
+    }
+
+    private static void assertCompletePoseEquals(TestBoneModel expected, TestBoneModel actual) {
+        assertPoseEquals(expected, actual);
+        for (String name : expected.bones.keySet()) {
+            final IBoneTarget expectedBone = expected.bones.get(name);
+            final IBoneTarget actualBone = actual.bones.get(name);
+            assertEquals(expectedBone.getScaleX(), actualBone.getScaleX(), name + " scale X");
+            assertEquals(expectedBone.getScaleY(), actualBone.getScaleY(), name + " scale Y");
+            assertEquals(expectedBone.getScaleZ(), actualBone.getScaleZ(), name + " scale Z");
+        }
     }
 
     @Test

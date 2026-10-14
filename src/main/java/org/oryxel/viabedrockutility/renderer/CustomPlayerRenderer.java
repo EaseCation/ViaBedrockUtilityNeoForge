@@ -14,7 +14,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.core.registries.BuiltInRegistries;
 import com.mojang.blaze3d.vertex.PoseStack;
 import org.joml.Matrix4f;
-import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import net.easecation.bedrockmotion.pack.PackManager;
 import org.oryxel.viabedrockutility.animation.PlayerAnimationRuntime;
 import org.oryxel.viabedrockutility.animation.PlayerAnimationRuntimeSlot;
@@ -203,10 +202,11 @@ public class CustomPlayerRenderer extends PlayerRenderer {
         }
     }
 
-    public void playAnimationOnce(final String name, final AnimationDefinitions.AnimationData data) {
+    public void playAnimation(String animation, String nextState, String stopExpression,
+                              String controller, float blendOutTime) {
         final PlayerAnimationRuntime runtime = this.playerAnimationRuntime.current();
         if (runtime != null) {
-            runtime.playOnce(name, data);
+            runtime.playAnimation(animation, nextState, stopExpression, controller, blendOutTime);
         }
     }
 

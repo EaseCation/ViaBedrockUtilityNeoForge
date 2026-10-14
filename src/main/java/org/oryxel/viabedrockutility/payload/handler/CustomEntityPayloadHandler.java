@@ -11,6 +11,7 @@ import net.easecation.bedrockmotion.pack.definitions.EntityDefinitions;
 import org.oryxel.viabedrockutility.payload.PayloadHandler;
 import org.oryxel.viabedrockutility.payload.impl.entity.AnimatePayload;
 import org.oryxel.viabedrockutility.payload.impl.entity.ModelRequestPayload;
+import org.oryxel.viabedrockutility.payload.impl.player.PlayerAnimatePayload;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
 import team.unnamed.mocha.runtime.Scope;
 import team.unnamed.mocha.runtime.binding.JavaObjectBinding;
@@ -115,27 +116,53 @@ public class CustomEntityPayloadHandler extends PayloadHandler {
         if (this.packManager == null) {
             return;
         }
-        final var animData = this.packManager.getAnimationDefinitions().getAnimations().get(payload.getAnimationName());
-        if (animData == null) {
-            ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] ANIMATE: animation '{}' not found in PackManager (uuid={})", payload.getAnimationName(), payload.getEntityUuid());
-            return;
-        }
-
         // 1) Custom model entity (MODEL_REQUEST path).
         final CustomEntityTicker ticker = this.cachedCustomEntities.get(payload.getEntityUuid());
         if (ticker != null) {
+            final var animData = this.packManager.getAnimationDefinitions().getAnimations().get(payload.getAnimationName());
+            if (animData == null) {
+                ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] ANIMATE: animation '{}' not found in PackManager (uuid={})", payload.getAnimationName(), payload.getEntityUuid());
+                return;
+            }
             ticker.getRenderer().playExplicit(animData);
             return;
         }
 
-        // 2) Player / humanoid NPC (player render path): play it as a one-shot on the player's animation manager.
+        // 旧协议没有控制器参数，使用默认运行时控制器及动画结束条件。
         final var renderer = this.cachedPlayerRenderers.get(payload.getEntityUuid());
         if (renderer instanceof CustomPlayerRenderer customPlayerRenderer) {
-            customPlayerRenderer.playAnimationOnce(payload.getAnimationName(), animData);
+            playPlayerAnimation(customPlayerRenderer, payload.getEntityUuid(), payload.getAnimationName(), "default",
+                    "query.any_animation_finished", "__runtime_controller", 0.0F);
             return;
         }
 
         ViaBedrockUtilityNeoForge.LOGGER.debug("[Entity] ANIMATE: no custom-entity/player renderer for uuid={} (animation '{}')", payload.getEntityUuid(), payload.getAnimationName());
+    }
+
+    @Override
+    public void handle(PlayerAnimatePayload payload) {
+        final var renderer = this.cachedPlayerRenderers.get(payload.getPlayerUuid());
+        if (renderer instanceof CustomPlayerRenderer customPlayerRenderer) {
+            playPlayerAnimation(customPlayerRenderer, payload.getPlayerUuid(), payload.getAnimation(), payload.getNextState(),
+                    payload.getStopExpression(), payload.getController(), payload.getBlendOutTime());
+        } else {
+            ViaBedrockUtilityNeoForge.LOGGER.debug(
+                    "[Entity] PLAYER_ANIMATE: no player renderer for uuid={} (animation '{}')",
+                    payload.getPlayerUuid(), payload.getAnimation());
+        }
+    }
+
+    private void playPlayerAnimation(CustomPlayerRenderer renderer, UUID playerUuid, String animation,
+                                     String nextState, String stopExpression, String controller,
+                                     float blendOutTime) {
+        try {
+            renderer.playAnimation(animation, nextState, stopExpression, controller, blendOutTime);
+        } catch (IllegalArgumentException exception) {
+            // 校验在入队之前完成；无效指令保留原状态并报告资源或表达式错误。
+            ViaBedrockUtilityNeoForge.LOGGER.warn(
+                    "[Entity] Invalid player animation '{}' for uuid={} (controller '{}')",
+                    animation, playerUuid, controller, exception);
+        }
     }
 
     private record ModelRequestState(String identifier, Set<ActorFlags> flags, Integer variant,
