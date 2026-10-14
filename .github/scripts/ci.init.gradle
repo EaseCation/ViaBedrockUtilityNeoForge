@@ -1,0 +1,57 @@
+def ciRoot = new File(System.getProperty('vbu.ciRoot')).canonicalFile
+def dependencies = new File(ciRoot, 'build/ci-dependencies')
+
+allprojects {
+    repositories {
+        maven { url = 'https://repo.viaversion.com' }
+    }
+}
+
+settingsEvaluated { settings ->
+    settings.includeBuild(new File(dependencies, 'Mocha')) {
+        dependencySubstitution {
+            substitute module('team.unnamed:mocha') using project(':')
+        }
+    }
+    if (settings.settingsDir.canonicalFile != ciRoot) {
+        return
+    }
+    settings.includeBuild(new File(dependencies, 'BedrockMotion')) {
+        dependencySubstitution {
+            substitute module('com.github.EaseCation:BedrockMotion') using project(':')
+        }
+    }
+    settings.includeBuild(new File(dependencies, 'CubeConverter')) {
+        dependencySubstitution {
+            substitute module('com.github.EaseCation:CubeConverter') using project(':')
+        }
+    }
+    settings.includeBuild(new File(dependencies, 'BECameraNeoForge')) {
+        dependencySubstitution {
+            substitute module('nakern.be_camera:bedrockcameralib') using project(':')
+        }
+    }
+    settings.includeBuild(new File(dependencies, 'BEParticleNeoForge')) {
+        dependencySubstitution {
+            substitute module('net.easecation.beparticle:beparticle') using project(':')
+        }
+    }
+}
+
+gradle.projectsEvaluated {
+    if (gradle.rootProject.projectDir.canonicalFile != ciRoot) {
+        return
+    }
+    gradle.rootProject.tasks.named('test').configure {
+        systemProperty 'vbu.workspaceRoot', dependencies.absolutePath
+        inputs.files([
+            'resource-packs/CodeFunCore/ec_hub.zip',
+            'resource-packs/CodeFunCore/ec_ze.zip',
+            'resource-packs/CodeFunCore/rl_defense.zip',
+            'resource-packs/CodeFunCore/rl_defense_ec_entity.zip',
+            'resource-packs/CodeFunCore/ec_gun_res.zip',
+            'resource-packs/CodeFunCore/ec_rl.zip',
+            'bedrock-loader-packs/vanilla.zip'
+        ].collect { new File(dependencies, 'ec-deploy-assets/' + it) })
+    }
+}

@@ -2,6 +2,9 @@ name: Build
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -11,20 +14,56 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
 
-      - name: Setup JDK 21
+      - name: Setup Microsoft JDK 17.0.12 for Mocha
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: '17.0.12'
+          distribution: 'microsoft'
+
+      - name: Setup Microsoft JDK 21.0.11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21.0.11'
+          distribution: 'microsoft'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # This is needed to be able to run ./gradlew below
-      # You can run `git update-index --chmod +x gradlew` then remove this step.
+      - name: Checkout pinned build dependencies and test packs
+        env:
+          GH_CODING_SSH_KEY: ${{ secrets.GH_CODING_SSH_KEY }}
+        run: |
+          if [ -z "$GH_CODING_SSH_KEY" ]; then
+            echo '::error::GH_CODING_SSH_KEY is required for the pinned camera, particle, and test-pack repositories.'
+            exit 1
+          fi
+          key_file="$RUNNER_TEMP/vbu-ci-key"
+          hosts_file="$RUNNER_TEMP/vbu-ci-known-hosts"
+          trap 'rm -f "$key_file" "$hosts_file"' EXIT
+          printf '%s\n' "$GH_CODING_SSH_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          ssh-keyscan -H github.com > "$hosts_file"
+          export GIT_SSH_COMMAND="ssh -i $key_file -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$hosts_file"
+          bash .github/scripts/prepare-ci-dependencies.sh
+
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
       - name: Build with Gradle
-        run: ./gradlew build
+        run: >-
+          ./gradlew build --no-daemon --no-configuration-cache --max-workers=2
+          -Dorg.gradle.jvmargs=-Xmx2G "-Dvbu.ciRoot=$PWD"
+          -I .github/scripts/ci.init.gradle
+
+      - name: Upload build and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vbu-build-${{ github.sha }}
+          path: |
+            build/libs/*.jar
+            build/test-results/test/
+            build/reports/tests/test/
+            build/ci-dependencies/revisions.txt
