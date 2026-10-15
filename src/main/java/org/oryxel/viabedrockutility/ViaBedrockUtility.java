@@ -11,6 +11,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
@@ -47,6 +48,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -104,6 +106,18 @@ public class ViaBedrockUtility {
         registrar.playToClient(CameraPayload.ID, CameraPayload.STREAM_CODEC, (payload, context) -> payload.handle(this.cameraPayloadHandler));
         registrar.playToServer(PlayerStatePayload.TYPE, PlayerStatePayload.STREAM_CODEC, (payload, context) -> {
         });
+    }
+
+    /** Capability advertisement used by the login hook; these markers do not register a new codec. */
+    public static Set<ResourceLocation> registrationChannels() {
+        return Set.of(
+                ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "confirm"),
+                ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "particle_runtime_v2"),
+                ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "player_visual_state_v1"),
+                ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "player_animation_v1"),
+                ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "input_locks_v1"),
+                ResourceLocation.fromNamespaceAndPath(CameraPayload.CONFIRM_CHANNEL_ID, CameraPayload.CONFIRM_CHANNEL_PATH),
+                PlayerStatePayload.TYPE.id());
     }
 
     public void onClientTick(ClientTickEvent.Post event) {

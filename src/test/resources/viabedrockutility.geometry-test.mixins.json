@@ -1,8 +1,8 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "org.oryxel.viabedrockutility.mixin.impl.render",
+  "package": "org.oryxel.viabedrockutility.mixin.impl",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["CuboidMixin", "ModelPartMixin"],
+  "mixins": ["render.CuboidMixin", "render.ModelPartMixin", "accessor.ClientInputAccessor", "ClientInputMixin", "MouseHandlerMixin"],
   "injectors": {"defaultRequire": 1}
 }

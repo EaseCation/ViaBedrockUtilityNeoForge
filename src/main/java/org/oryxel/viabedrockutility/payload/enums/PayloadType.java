@@ -8,5 +8,6 @@ public enum PayloadType {
     /** V2 keeps SPAWN_PARTICLE wire compatibility and adds a host UUID/anchor kind. */
     SPAWN_PARTICLE_V2,
     PLAYER_VISUAL_STATE,
-    PLAYER_ANIMATE
+    PLAYER_ANIMATE,
+    INPUT_LOCKS
 }

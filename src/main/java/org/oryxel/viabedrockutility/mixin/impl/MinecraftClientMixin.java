@@ -23,6 +23,7 @@ public class MinecraftClientMixin {
             final PayloadHandler handler = ViaBedrockUtility.getInstance().getPayloadHandler();
             if (handler != null) {
                 handler.getCustomEntityHurtTracker().clearAll();
+                handler.clearInputLocks();
             }
         }
     }

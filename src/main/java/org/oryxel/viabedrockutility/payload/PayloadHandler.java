@@ -31,6 +31,11 @@ import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticlePayload;
 import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticleV2Payload;
 import org.oryxel.viabedrockutility.payload.impl.player.PlayerVisualStatePayload;
 import org.oryxel.viabedrockutility.payload.impl.player.PlayerAnimatePayload;
+import org.oryxel.viabedrockutility.payload.impl.player.InputLocksPayload;
+import org.oryxel.viabedrockutility.mixin.impl.accessor.ClientInputAccessor;
+import net.minecraft.world.entity.player.Input;
+import net.minecraft.world.phys.Vec2;
+import net.neoforged.neoforge.client.event.MovementInputUpdateEvent;
 import net.easecation.bedrockmotion.pack.definitions.AnimationDefinitions;
 import org.oryxel.viabedrockutility.renderer.AnimatedSkinOverlay;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
@@ -48,6 +53,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Getter
 public class PayloadHandler {
+    private int inputLockFlags;
     protected final Map<UUID, CustomEntityTicker> cachedCustomEntities = new ConcurrentHashMap<>();
     private final CustomEntityHurtTracker customEntityHurtTracker = new CustomEntityHurtTracker();
     protected final Map<UUID, EntityRenderer<?, ?>> cachedPlayerRenderers = new ConcurrentHashMap<>();
@@ -94,6 +100,7 @@ public class PayloadHandler {
 
     /** Clears all state whose identity belongs to the retired network connection. */
     public void resetConnectionState() {
+        clearInputLocks();
         customEntityHurtTracker.clearAll();
         cachedCustomEntities.values().forEach(ticker ->
                 ticker.getRenderer().invalidateFrozenMeshes("connection_reset"));
@@ -107,6 +114,25 @@ public class PayloadHandler {
         pendingPayloads.clear();
         skinDebugLog.clear();
         packManager = null;
+    }
+
+    public void clearInputLocks() {
+        this.inputLockFlags = 0;
+    }
+
+    public boolean isMovementInputLocked() {
+        return (this.inputLockFlags & InputLocksPayload.MOVEMENT) != 0;
+    }
+
+    public boolean isCameraInputLocked() {
+        return (this.inputLockFlags & InputLocksPayload.CAMERA) != 0;
+    }
+
+    public void onMovementInputUpdate(final MovementInputUpdateEvent event) {
+        if (this.isMovementInputLocked()) {
+            event.getInput().keyPresses = Input.EMPTY;
+            ((ClientInputAccessor) event.getInput()).vbu$setMoveVector(Vec2.ZERO);
+        }
     }
 
     public void removeCustomEntity(UUID uuid) {
@@ -132,6 +158,11 @@ public class PayloadHandler {
     }
 
     public void handle(final BasePayload payload) {
+        // Input permission changes must take effect even while resource packs are still loading.
+        if (payload instanceof InputLocksPayload inputLocks) {
+            this.inputLockFlags = inputLocks.getFlags();
+            return;
+        }
         if (payload instanceof PlayerVisualStatePayload visualState) {
             this.handle(visualState);
             return;

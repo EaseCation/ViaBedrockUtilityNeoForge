@@ -10,6 +10,9 @@
   },
   "client": [
     "MinecraftClientMixin",
+    "ClientInputMixin",
+    "MouseHandlerMixin",
+    "accessor.ClientInputAccessor",
     "accessor.CompositeRenderTypeAccessor",
     "accessor.CompositeStateAccessor",
     "accessor.EntityRenderDispatcherAccessor",
