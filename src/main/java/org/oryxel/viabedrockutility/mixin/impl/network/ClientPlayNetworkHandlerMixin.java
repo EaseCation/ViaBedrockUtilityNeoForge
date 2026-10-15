@@ -4,7 +4,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.game.ClientboundDamageEventPacket;
+import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityEvent;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
@@ -31,6 +33,25 @@ public class ClientPlayNetworkHandlerMixin {
         if (entity != null && !entity.isRemoved()) {
             final CustomEntityPayloadHandler handler = utility.getPayloadHandler();
             handler.markCustomEntityHurt(entity.getUUID(), handler.getCustomEntityHurtTracker().currentTick(client.level));
+        }
+    }
+
+    @Inject(method = "handleEntityEvent", at = @At("RETURN"), require = 1)
+    private void recordCustomEntityDeath(ClientboundEntityEventPacket packet, CallbackInfo ci) {
+        if (packet.getEventId() != EntityEvent.DEATH) {
+            return;
+        }
+        final ViaBedrockUtility utility = ViaBedrockUtility.getInstance();
+        final Minecraft client = Minecraft.getInstance();
+        if (!utility.isViaBedrockPresent() || client.level == null || utility.getPayloadHandler() == null) {
+            return;
+        }
+        final Entity entity = packet.getEntity(client.level);
+        if (entity != null && !entity.isRemoved()) {
+            final CustomEntityPayloadHandler handler = utility.getPayloadHandler();
+            // 致死一击可能没有先收到 DAMAGE_EVENT；先绑定当前世界，避免首帧提取清掉死亡状态。
+            handler.getCustomEntityHurtTracker().currentTick(client.level);
+            handler.markCustomEntityDead(entity.getUUID());
         }
     }
 

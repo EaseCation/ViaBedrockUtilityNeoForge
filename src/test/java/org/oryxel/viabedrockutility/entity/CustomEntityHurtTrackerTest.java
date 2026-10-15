@@ -10,6 +10,50 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CustomEntityHurtTrackerTest {
     @Test
+    void deathSurvivesHurtExpirationAndRepeatedEventsUntilRemoval() {
+        final CustomEntityHurtTracker tracker = new CustomEntityHurtTracker();
+        final Object level = new Object();
+        final UUID uuid = UUID.randomUUID();
+        final UUID other = UUID.randomUUID();
+        tracker.currentTick(level);
+        tracker.markDead(uuid);
+        tracker.markDead(uuid);
+        tracker.markHurt(uuid, tracker.currentTick(level));
+        for (int i = 0; i < 30; i++) {
+            tracker.advanceTick(level, false);
+        }
+        assertFalse(tracker.isHurt(uuid, tracker.currentTick(level)));
+        assertTrue(tracker.isDead(uuid));
+        assertFalse(tracker.isDead(other));
+        tracker.clear(uuid);
+        assertFalse(tracker.isDead(uuid));
+        tracker.markHurt(uuid, tracker.currentTick(level));
+        assertTrue(tracker.isHurt(uuid, tracker.currentTick(level)));
+        assertFalse(tracker.isDead(uuid));
+    }
+
+    @Test
+    void worldReplacementAndResetClearDeathWithoutDamageOrRendering() {
+        final CustomEntityHurtTracker tracker = new CustomEntityHurtTracker();
+        final Object firstLevel = new Object();
+        final Object secondLevel = new Object();
+        final UUID uuid = UUID.randomUUID();
+        tracker.currentTick(firstLevel);
+        tracker.markDead(uuid);
+        tracker.advanceTick(firstLevel, true);
+        assertTrue(tracker.isDead(uuid));
+        tracker.currentTick(secondLevel);
+        assertFalse(tracker.isDead(uuid));
+        tracker.markDead(uuid);
+        tracker.clearAll();
+        assertFalse(tracker.isDead(uuid));
+        tracker.currentTick(firstLevel);
+        tracker.markDead(uuid);
+        tracker.advanceTick(null, false);
+        assertFalse(tracker.isDead(uuid));
+    }
+
+    @Test
     void localTicksExpireEvenWhenServerWorldTimeIsResetOrFrozen() {
         final CustomEntityHurtTracker tracker = new CustomEntityHurtTracker();
         final Object level = new Object();

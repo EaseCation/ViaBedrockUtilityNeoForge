@@ -3,12 +3,15 @@ package org.oryxel.viabedrockutility.entity;
 import it.unimi.dsi.fastutil.objects.Object2LongMap;
 import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
-/** 保存客户端 tick 驱动的短时受击状态；服务器世界时间同步不参与计时。 */
+/** 保存短时受击和持续到实体移除的死亡状态；服务器世界时间同步不参与计时。 */
 public final class CustomEntityHurtTracker {
     private static final int HURT_DURATION_TICKS = 10;
     private final Object2LongMap<UUID> hurtStartedAt = new Object2LongOpenHashMap<>();
+    private final Set<UUID> deadEntities = new HashSet<>();
     private Object levelIdentity;
     private long tick;
 
@@ -33,6 +36,14 @@ public final class CustomEntityHurtTracker {
         hurtStartedAt.put(uuid, currentTick);
     }
 
+    public synchronized void markDead(UUID uuid) {
+        deadEntities.add(uuid);
+    }
+
+    public synchronized boolean isDead(UUID uuid) {
+        return deadEntities.contains(uuid);
+    }
+
     public synchronized boolean isHurt(UUID uuid, long currentTick) {
         if (!hurtStartedAt.containsKey(uuid)) {
             return false;
@@ -51,10 +62,12 @@ public final class CustomEntityHurtTracker {
 
     public synchronized void clear(UUID uuid) {
         hurtStartedAt.removeLong(uuid);
+        deadEntities.remove(uuid);
     }
 
     public synchronized void clearAll() {
         hurtStartedAt.clear();
+        deadEntities.clear();
         levelIdentity = null;
         tick = 0L;
     }

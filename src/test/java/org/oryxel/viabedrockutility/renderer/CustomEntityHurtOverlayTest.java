@@ -21,14 +21,39 @@ class CustomEntityHurtOverlayTest {
         assertEquals(OverlayTexture.NO_OVERLAY, state.packedOverlay());
         assertTrue(state.canUsePoseMesh(true));
         tracker.markHurt(uuid, 100L);
-        state.setHasRedOverlay(tracker.isHurt(uuid, 100L));
+        state.extractHealthState(uuid, true, tracker, 100L);
+        assertTrue(state.isEntityAlive());
         assertEquals(OverlayTexture.pack(OverlayTexture.NO_WHITE_U, OverlayTexture.RED_OVERLAY_V), state.packedOverlay());
         assertFalse(state.canUsePoseMesh(true));
         assertFalse(state.canUsePoseMesh(false));
-        state.setHasRedOverlay(tracker.isHurt(uuid, 110L));
+        state.extractHealthState(uuid, true, tracker, 110L);
+        assertTrue(state.isEntityAlive());
         assertEquals(OverlayTexture.NO_OVERLAY, state.packedOverlay());
         assertTrue(state.canUsePoseMesh(true));
         assertFalse(state.canUsePoseMesh(false));
+    }
+
+    @Test
+    void deathWithoutDamageStaysRedAndDeadWhileInteractionHostRemainsAlive() {
+        final CustomEntityHurtTracker tracker = new CustomEntityHurtTracker();
+        final CustomEntityRenderer.CustomEntityRenderState state = new CustomEntityRenderer.CustomEntityRenderState();
+        final CustomEntityRenderer<Entity> renderer = new ObjenesisStd().newInstance(CustomEntityRenderer.class);
+        final UUID uuid = UUID.randomUUID();
+        tracker.markDead(uuid);
+        for (long tick : new long[]{100L, 110L, 130L}) {
+            state.extractHealthState(uuid, true, tracker, tick);
+            assertFalse(state.isEntityAlive());
+            assertEquals(OverlayTexture.pack(OverlayTexture.NO_WHITE_U, OverlayTexture.RED_OVERLAY_V), state.packedOverlay());
+            assertFalse(state.canUsePoseMesh(true));
+            assertFalse(renderer.tryQueuePoseMesh(state, null, null, null, 0, false, null));
+        }
+        tracker.clear(uuid);
+        state.extractHealthState(uuid, true, tracker, 131L);
+        assertTrue(state.isEntityAlive());
+        assertEquals(OverlayTexture.NO_OVERLAY, state.packedOverlay());
+        assertTrue(state.canUsePoseMesh(true));
+        state.extractHealthState(uuid, false, tracker, 131L);
+        assertFalse(state.isEntityAlive());
     }
 
     @Test

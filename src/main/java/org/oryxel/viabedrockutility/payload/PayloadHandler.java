@@ -125,6 +125,12 @@ public class PayloadHandler {
         }
     }
 
+    public void markCustomEntityDead(UUID uuid) {
+        if (cachedCustomEntities.containsKey(uuid)) {
+            customEntityHurtTracker.markDead(uuid);
+        }
+    }
+
     public void handle(final BasePayload payload) {
         if (payload instanceof PlayerVisualStatePayload visualState) {
             this.handle(visualState);

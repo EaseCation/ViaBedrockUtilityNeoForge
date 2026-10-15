@@ -48,6 +48,7 @@ import java.io.IOException;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Getter
@@ -578,7 +579,8 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
         state.setCustomRenderer(this);
         final CustomEntityHurtTracker hurtTracker = ViaBedrockUtility.getInstance().getPayloadHandler()
                 .getCustomEntityHurtTracker();
-        state.setHasRedOverlay(hurtTracker.isHurt(entity.getUUID(), hurtTracker.currentTick(entity.level())));
+        state.extractHealthState(entity.getUUID(), entity.isAlive(), hurtTracker,
+                hurtTracker.currentTick(entity.level()));
         // Update entity position for particle spawning
         this.ticker.setEntityPosition(new org.joml.Vector3f((float) entity.getX(), (float) entity.getY(), (float) entity.getZ()));
         float serverYaw = entity.getYRot(tickDelta);
@@ -628,7 +630,6 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
         // Per-frame entity state for MoLang queries
         state.setEntityOnGround(entity.onGround());
-        state.setEntityAlive(entity.isAlive());
         state.setEntityLifeTime(entity.tickCount / 20.0f);
         state.setFrameAlpha(tickDelta);
 
@@ -761,6 +762,13 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     @Getter
     public static class CustomEntityRenderState extends EntityRenderState {
         @Setter private boolean hasRedOverlay;
+
+        void extractHealthState(UUID uuid, boolean hostAlive, CustomEntityHurtTracker tracker, long currentTick) {
+            final boolean dead = tracker.isDead(uuid);
+            this.hasRedOverlay = dead || tracker.isHurt(uuid, currentTick);
+            // Interaction 宿主在移除前始终存活，死亡事实来自服务端的实体事件。
+            this.entityAlive = hostAlive && !dead;
+        }
 
         int packedOverlay() {
             return hasRedOverlay

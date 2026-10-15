@@ -23,16 +23,34 @@ class CustomEntityHurtLifecycleTest {
     }
 
     @Test
-    void removalAndResetClearHurtEvenWithoutACachedRenderer() {
+    void deathTargetsOnlyCachedCustomModelsWithoutRequiringDamage() {
+        final PayloadHandler handler = new PayloadHandler();
+        final UUID custom = UUID.randomUUID();
+        final UUID ordinary = UUID.randomUUID();
+        handler.getCachedCustomEntities().put(custom, new ObjenesisStd().newInstance(CustomEntityTicker.class));
+        handler.markCustomEntityDead(custom);
+        handler.markCustomEntityDead(ordinary);
+        assertTrue(handler.getCustomEntityHurtTracker().isDead(custom));
+        assertFalse(handler.getCustomEntityHurtTracker().isHurt(custom, 100L));
+        assertFalse(handler.getCustomEntityHurtTracker().isDead(ordinary));
+    }
+
+    @Test
+    void removalAndResetClearHurtAndDeathEvenWithoutACachedRenderer() {
         final PayloadHandler handler = new PayloadHandler();
         final UUID removed = UUID.randomUUID();
         final UUID remaining = UUID.randomUUID();
         handler.getCustomEntityHurtTracker().markHurt(removed, 100L);
         handler.getCustomEntityHurtTracker().markHurt(remaining, 100L);
+        handler.getCustomEntityHurtTracker().markDead(removed);
+        handler.getCustomEntityHurtTracker().markDead(remaining);
         handler.removeCustomEntity(removed);
         assertFalse(handler.getCustomEntityHurtTracker().isHurt(removed, 100L));
         assertTrue(handler.getCustomEntityHurtTracker().isHurt(remaining, 100L));
+        assertFalse(handler.getCustomEntityHurtTracker().isDead(removed));
+        assertTrue(handler.getCustomEntityHurtTracker().isDead(remaining));
         handler.resetConnectionState();
         assertFalse(handler.getCustomEntityHurtTracker().isHurt(remaining, 100L));
+        assertFalse(handler.getCustomEntityHurtTracker().isDead(remaining));
     }
 }
