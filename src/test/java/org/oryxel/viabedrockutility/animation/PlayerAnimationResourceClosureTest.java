@@ -14,6 +14,7 @@ import net.easecation.bedrockmotion.render.RenderControllerEvaluator;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
 import org.joml.Vector3f;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import team.unnamed.mocha.runtime.Scope;
 import team.unnamed.mocha.runtime.value.MutableObjectBinding;
@@ -47,6 +48,7 @@ class PlayerAnimationResourceClosureTest {
     }
 
     @Test
+    @Tag("workspace-resources")
     void downloadedZePacksAndBundledVanillaFormACompletePlayerRuntime() throws Exception {
         final Path codeFunPacks = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "resource-packs", "CodeFunCore");
@@ -306,6 +308,7 @@ class PlayerAnimationResourceClosureTest {
     }
 
     @Test
+    @Tag("workspace-resources")
     void runeLegendOpeningResetRestoresBothViewsBeforeTheCutsceneEnds() {
         final Path codeFunPacks = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "resource-packs", "CodeFunCore");
@@ -390,6 +393,7 @@ class PlayerAnimationResourceClosureTest {
     }
 
     @Test
+    @Tag("workspace-resources")
     void skippedRuneLegendAnimationDoesNotRemainWhenTheOtherViewFirstRenders() {
         final Path codeFunPacks = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "resource-packs", "CodeFunCore");
@@ -432,6 +436,7 @@ class PlayerAnimationResourceClosureTest {
     }
 
     @Test
+    @Tag("workspace-resources")
     void bedrockMovementQueriesKeepWalkPhaseSeparateFromGroundDistance() throws Exception {
         final Path workspace = Path.of(System.getProperty("vbu.workspaceRoot"));
         final Path codeFunPacks = workspace.resolve("ec-deploy-assets/resource-packs/CodeFunCore");
@@ -482,6 +487,7 @@ class PlayerAnimationResourceClosureTest {
     }
 
     @Test
+    @Tag("workspace-resources")
     void thirdPersonBowUseAppliesBedrockBowPose() throws Exception {
         final Path packsRoot = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "bedrock-loader-packs");
@@ -518,6 +524,7 @@ class PlayerAnimationResourceClosureTest {
     }
 
     @Test
+    @Tag("workspace-resources")
     void thirdPersonBowKeepsBothArmsAlignedWhenCameraTurns() throws Exception {
         final Path workspace = Path.of(System.getProperty("vbu.workspaceRoot"));
         final Path packsRoot = workspace.resolve("ec-deploy-assets/bedrock-loader-packs");
@@ -540,6 +547,7 @@ class PlayerAnimationResourceClosureTest {
     }
 
     @Test
+    @Tag("workspace-resources")
     void woodenSwordAttachableResolvesToNonEmptyTextureMeshGeometry() throws Exception {
         final Path packPath = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "resource-packs", "CodeFunCore", "rl_defense.zip");
@@ -561,6 +569,7 @@ class PlayerAnimationResourceClosureTest {
     }
 
     @Test
+    @Tag("workspace-resources")
     void woodenSwordAttachableEvaluatesBedrockAlphaTestAsDoubleSided() throws Exception {
         final Path packPath = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "resource-packs", "CodeFunCore", "rl_defense.zip");
