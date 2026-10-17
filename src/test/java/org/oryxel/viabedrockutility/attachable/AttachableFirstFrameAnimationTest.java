@@ -6,6 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -20,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AttachableFirstFrameAnimationTest {
 
     @Test
+    @Tag("workspace-resources")
     void replacementRuntimeAdvancesBeforeFirstRenderInTheSameTick() throws Exception {
         final Path gunPack = Path.of(System.getProperty("vbu.workspaceRoot"),
                 "ec-deploy-assets", "resource-packs", "CodeFunCore", "ec_gun_res.zip");

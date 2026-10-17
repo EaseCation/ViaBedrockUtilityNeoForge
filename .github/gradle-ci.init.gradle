@@ -1,0 +1,63 @@
+// Run from the VBU checkout; dependencies are pinned by .github/workflows/build.yml.
+def vbuDirectory = new File(System.getProperty('user.dir'))
+def dependencyDirectory = new File(vbuDirectory.parentFile, 'dependencies')
+
+gradle.settingsEvaluated { settings ->
+    if (settings.rootDir == vbuDirectory) {
+        settings.includeBuild(new File(dependencyDirectory, 'Mocha')) {
+            dependencySubstitution {
+                substitute module('team.unnamed:mocha') using project(':')
+            }
+        }
+        settings.includeBuild(new File(dependencyDirectory, 'BedrockMotion')) {
+            dependencySubstitution {
+                substitute module('com.github.EaseCation:BedrockMotion') using project(':')
+            }
+        }
+        settings.includeBuild(new File(dependencyDirectory, 'CubeConverter')) {
+            dependencySubstitution {
+                substitute module('com.github.EaseCation:CubeConverter') using project(':')
+                substitute module('org.oryxel.cube:cubeconverter') using project(':')
+            }
+        }
+    }
+}
+
+gradle.beforeProject { project ->
+    if (project.rootDir == vbuDirectory) {
+        project.repositories {
+            exclusiveContent {
+                forRepository {
+                    ivy {
+                        url = new File(vbuDirectory, 'libs/ci').toURI()
+                        patternLayout {
+                            artifact('[artifact]-[revision]-obf.[ext]')
+                        }
+                        metadataSources { artifact() }
+                    }
+                }
+                filter {
+                    includeModule('nakern.be_camera', 'bedrockcameralib')
+                    includeModule('net.easecation.beparticle', 'beparticle')
+                }
+            }
+        }
+        project.configurations.configureEach {
+            resolutionStrategy.dependencySubstitution {
+                substitute module('nakern.be_camera:bedrockcameralib') using module('nakern.be_camera:bedrockcameralib:1.2.1')
+            }
+        }
+    }
+}
+
+// These methods read private ec-deploy-assets ZIPs. Workspace builds keep running them.
+gradle.afterProject { project ->
+    if (project.rootDir == vbuDirectory) {
+        project.tasks.withType(Test).configureEach {
+            useJUnitPlatform { excludeTags 'workspace-resources' }
+            doFirst {
+                logger.lifecycle('Public-fixture CI: workspace-resources integration tests are excluded; run them in NeoForgeWorkspace with its resource ZIPs.')
+            }
+        }
+    }
+}
