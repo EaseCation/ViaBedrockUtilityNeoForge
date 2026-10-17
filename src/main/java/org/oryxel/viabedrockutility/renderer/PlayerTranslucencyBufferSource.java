@@ -9,12 +9,12 @@ import org.oryxel.viabedrockutility.mixin.interfaces.IRenderTypeTexture;
 
 import java.util.Optional;
 
-final class PlayerTranslucencyBufferSource implements MultiBufferSource {
+public final class PlayerTranslucencyBufferSource implements MultiBufferSource {
     private static final float ALPHA = 0.3F;
 
     private final MultiBufferSource delegate;
 
-    PlayerTranslucencyBufferSource(final MultiBufferSource delegate) {
+    public PlayerTranslucencyBufferSource(final MultiBufferSource delegate) {
         this.delegate = delegate;
     }
 
@@ -23,7 +23,7 @@ final class PlayerTranslucencyBufferSource implements MultiBufferSource {
         return new AlphaVertexConsumer(this.delegate.getBuffer(toTranslucent(renderType)));
     }
 
-    static MultiBufferSource unwrap(final MultiBufferSource source) {
+    public static MultiBufferSource unwrap(final MultiBufferSource source) {
         return source instanceof PlayerTranslucencyBufferSource translucent ? translucent.delegate : source;
     }
 

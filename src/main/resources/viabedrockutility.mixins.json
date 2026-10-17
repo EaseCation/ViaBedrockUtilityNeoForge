@@ -33,6 +33,7 @@
     "render.ModelPartMixin",
     "render.PlayerEntityModelMixin",
     "render.PlayerEntityRenderStateMixin",
+    "render.PlayerRendererMixin",
     "render.TextDisplayCullMixin",
     "render.TextureStateShardMixin",
     "render.dispatcher.EntityRenderDispatcherMixin",
