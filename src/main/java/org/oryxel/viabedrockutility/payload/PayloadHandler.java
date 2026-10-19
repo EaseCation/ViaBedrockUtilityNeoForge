@@ -7,6 +7,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Interaction;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.client.model.PlayerModel;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -22,6 +25,7 @@ import net.easecation.bedrockmotion.pack.PackManager;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
 import org.oryxel.viabedrockutility.payload.impl.entity.AnimatePayload;
 import org.oryxel.viabedrockutility.payload.impl.entity.ModelRequestPayload;
+import org.oryxel.viabedrockutility.payload.impl.entity.CustomEntityMotionPayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.BaseSkinPayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.CapeDataPayload;
 import org.oryxel.viabedrockutility.payload.impl.skin.SkinAnimationDataPayload;
@@ -100,6 +104,7 @@ public class PayloadHandler {
 
     /** Clears all state whose identity belongs to the retired network connection. */
     public void resetConnectionState() {
+        this.customEntityMotionEnabled = false;
         clearInputLocks();
         customEntityHurtTracker.clearAll();
         cachedCustomEntities.values().forEach(ticker ->
@@ -157,7 +162,33 @@ public class PayloadHandler {
         }
     }
 
+    @Getter
+    private boolean customEntityMotionEnabled;
+
     public void handle(final BasePayload payload) {
+        // 能力确认与瞬移不依赖资源包加载，不能排队后重放过时的位置。
+        if (payload instanceof CustomEntityMotionPayload motion) {
+            if (motion.getAction() == CustomEntityMotionPayload.ENABLE) {
+                this.customEntityMotionEnabled = true;
+            } else if (this.customEntityMotionEnabled) {
+                final Minecraft client = Minecraft.getInstance();
+                if (client.level != null) {
+                    Entity entity = null;
+                    for (Entity candidate : client.level.entitiesForRendering()) {
+                        if (candidate.getUUID().equals(motion.getUuid())) {
+                            entity = candidate;
+                            break;
+                        }
+                    }
+                    if (entity instanceof Interaction && !entity.isRemoved()) {
+                        entity.getPositionCodec().setBase(new Vec3(motion.getX(), motion.getY(), motion.getZ()));
+                        entity.snapTo(motion.getX(), motion.getY(), motion.getZ(), motion.getYaw(), motion.getPitch());
+                        entity.setOnGround(motion.isOnGround());
+                    }
+                }
+            }
+            return;
+        }
         // Input permission changes must take effect even while resource packs are still loading.
         if (payload instanceof InputLocksPayload inputLocks) {
             this.inputLockFlags = inputLocks.getFlags();

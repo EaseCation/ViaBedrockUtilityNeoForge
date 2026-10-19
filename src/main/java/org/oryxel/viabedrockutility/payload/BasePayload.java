@@ -162,6 +162,32 @@ public class BasePayload implements CustomPacketPayload {
                 return new PlayerVisualStatePayload(playerUuid, flags);
             }
 
+            case CUSTOM_ENTITY_MOTION -> {
+                if (buf.readableBytes() < 1) {
+                    throw new DecoderException("Missing custom entity motion action");
+                }
+                final int action = buf.readUnsignedByte();
+                if (action == CustomEntityMotionPayload.ENABLE && !buf.isReadable()) {
+                    return CustomEntityMotionPayload.enable();
+                }
+                if (action != CustomEntityMotionPayload.TELEPORT
+                        || buf.readableBytes() != CustomEntityMotionPayload.TELEPORT_BYTES) {
+                    throw new DecoderException("Invalid custom entity motion action or payload length");
+                }
+                final java.util.UUID uuid = buf.readUUID();
+                final double x = buf.readDouble();
+                final double y = buf.readDouble();
+                final double z = buf.readDouble();
+                final float yaw = buf.readFloat();
+                final float pitch = buf.readFloat();
+                final int onGround = buf.readUnsignedByte();
+                if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)
+                        || !Float.isFinite(yaw) || !Float.isFinite(pitch) || onGround > 1) {
+                    throw new DecoderException("Invalid custom entity teleport position, rotation or ground flag");
+                }
+                return new CustomEntityMotionPayload(action, uuid, x, y, z, yaw, pitch, onGround == 1);
+            }
+
             case INPUT_LOCKS -> {
                 if (buf.readableBytes() != Integer.BYTES) {
                     throw new DecoderException("INPUT_LOCKS payload requires exactly 4 flag bytes, got " + buf.readableBytes());

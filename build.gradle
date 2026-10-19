@@ -112,6 +112,7 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.objenesis:objenesis:3.3'
+    testImplementation 'org.mockito:mockito-core:5.18.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     // The default test runtime deliberately excludes Sodium. Opt in to the integration profile with

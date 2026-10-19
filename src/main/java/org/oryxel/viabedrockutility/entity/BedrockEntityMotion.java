@@ -77,6 +77,17 @@ public final class BedrockEntityMotion {
         lastBodyYaw = bodyYaw;
     }
 
+    /** 瞬移只重定位采样基准，不把跨场距离累计到行走动画中。 */
+    public void relocate(int tick, double x, double y, double z, float bodyYaw) {
+        if (!finitePosition(x, y, z, bodyYaw)) {
+            return;
+        }
+        final float previousDistance = walkDistance;
+        reset();
+        walkDistance = previousDistance;
+        initialize(tick, x, y, z, bodyYaw);
+    }
+
     public float modifiedMoveSpeed(float partialTick, boolean baby) {
         final float alpha = frameAlpha(partialTick);
         final float interpolated = Math.fma(walkSpeed - previousWalkSpeed, alpha, previousWalkSpeed);
