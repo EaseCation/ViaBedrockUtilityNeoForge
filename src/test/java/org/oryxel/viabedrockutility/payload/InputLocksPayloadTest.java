@@ -43,6 +43,7 @@ class InputLocksPayloadTest {
         assertEquals(Set.of("viabedrockutility:confirm", "viabedrockutility:particle_runtime_v2",
                         "viabedrockutility:player_visual_state_v1", "viabedrockutility:player_animation_v1",
                         "viabedrockutility:input_locks_v1", "viabedrockutility:custom_entity_motion_v1",
+                        "viabedrockutility:wither_skull_motion_v1",
                         "becamera:confirm", "viabedrockutility:player_state"),
                 ViaBedrockUtility.registrationChannels().stream().map(ResourceLocation::toString)
                         .collect(java.util.stream.Collectors.toSet()));

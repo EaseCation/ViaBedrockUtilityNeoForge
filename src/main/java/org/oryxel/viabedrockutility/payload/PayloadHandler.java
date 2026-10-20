@@ -9,6 +9,7 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Interaction;
+import net.minecraft.world.entity.projectile.WitherSkull;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.client.model.PlayerModel;
 import com.mojang.blaze3d.platform.NativeImage;
@@ -105,6 +106,7 @@ public class PayloadHandler {
     /** Clears all state whose identity belongs to the retired network connection. */
     public void resetConnectionState() {
         this.customEntityMotionEnabled = false;
+        this.witherSkullMotionEnabled = false;
         clearInputLocks();
         customEntityHurtTracker.clearAll();
         cachedCustomEntities.values().forEach(ticker ->
@@ -165,12 +167,18 @@ public class PayloadHandler {
     @Getter
     private boolean customEntityMotionEnabled;
 
+    @Getter
+    private boolean witherSkullMotionEnabled;
+
     public void handle(final BasePayload payload) {
         // 能力确认与瞬移不依赖资源包加载，不能排队后重放过时的位置。
         if (payload instanceof CustomEntityMotionPayload motion) {
             if (motion.getAction() == CustomEntityMotionPayload.ENABLE) {
                 this.customEntityMotionEnabled = true;
-            } else if (this.customEntityMotionEnabled) {
+            } else if (motion.getAction() == CustomEntityMotionPayload.ENABLE_WITHER_SKULLS) {
+                this.witherSkullMotionEnabled = true;
+            } else if ((motion.getAction() == CustomEntityMotionPayload.TELEPORT && this.customEntityMotionEnabled)
+                    || (motion.getAction() == CustomEntityMotionPayload.TELEPORT_WITHER_SKULL && this.witherSkullMotionEnabled)) {
                 final Minecraft client = Minecraft.getInstance();
                 if (client.level != null) {
                     Entity entity = null;
@@ -180,7 +188,9 @@ public class PayloadHandler {
                             break;
                         }
                     }
-                    if (entity instanceof Interaction && !entity.isRemoved()) {
+                    final boolean supported = motion.getAction() == CustomEntityMotionPayload.TELEPORT
+                            ? entity instanceof Interaction : entity instanceof WitherSkull;
+                    if (supported && !entity.isRemoved()) {
                         entity.getPositionCodec().setBase(new Vec3(motion.getX(), motion.getY(), motion.getZ()));
                         entity.snapTo(motion.getX(), motion.getY(), motion.getZ(), motion.getYaw(), motion.getPitch());
                         entity.setOnGround(motion.isOnGround());

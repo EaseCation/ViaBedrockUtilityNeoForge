@@ -170,7 +170,10 @@ public class BasePayload implements CustomPacketPayload {
                 if (action == CustomEntityMotionPayload.ENABLE && !buf.isReadable()) {
                     return CustomEntityMotionPayload.enable();
                 }
-                if (action != CustomEntityMotionPayload.TELEPORT
+                if (action == CustomEntityMotionPayload.ENABLE_WITHER_SKULLS && !buf.isReadable()) {
+                    return CustomEntityMotionPayload.enableWitherSkulls();
+                }
+                if ((action != CustomEntityMotionPayload.TELEPORT && action != CustomEntityMotionPayload.TELEPORT_WITHER_SKULL)
                         || buf.readableBytes() != CustomEntityMotionPayload.TELEPORT_BYTES) {
                     throw new DecoderException("Invalid custom entity motion action or payload length");
                 }

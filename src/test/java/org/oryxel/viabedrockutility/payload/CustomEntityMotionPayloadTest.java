@@ -49,8 +49,36 @@ class CustomEntityMotionPayloadTest {
             assertThrows(DecoderException.class, () -> decode(truncated));
         }
         assertThrows(DecoderException.class, () -> decode(Arrays.copyOf(wire, wire.length + 1)));
-        assertThrows(DecoderException.class, () -> decode(new byte[]{0, 0, 0, 13, 2}));
+        assertThrows(DecoderException.class, () -> decode(new byte[]{0, 0, 0, 13, 4}));
         assertThrows(DecoderException.class, () -> decode(new byte[]{0, 0, 0, 13, 0, 1}));
+        assertThrows(DecoderException.class, () -> decode(new byte[]{0, 0, 0, 13, 2, 1}));
+    }
+
+    @Test
+    void skullMotionNegotiatesIndependentlyAndResetsWithTheConnection() {
+        final PayloadHandler handler = new PayloadHandler();
+        decode(new byte[]{0, 0, 0, 13, 0}).handle(handler);
+        assertFalse(handler.isWitherSkullMotionEnabled());
+        decode(new byte[]{0, 0, 0, 13, 2}).handle(handler);
+        assertTrue(handler.isWitherSkullMotionEnabled());
+        assertNull(handler.getPackManager());
+        handler.resetConnectionState();
+        assertFalse(handler.isWitherSkullMotionEnabled());
+    }
+
+    @Test
+    void skullTeleportsKeepTheValidatedBigEndianSnapshotFormat() {
+        final byte[] wire = wire();
+        wire[4] = 3;
+        final CustomEntityMotionPayload packet = assertInstanceOf(CustomEntityMotionPayload.class, decode(wire));
+        assertEquals(CustomEntityMotionPayload.TELEPORT_WITHER_SKULL, packet.getAction());
+        assertEquals(UUID_VALUE, packet.getUuid());
+        assertEquals(64.5, packet.getY());
+        for (int length = 4; length < wire.length; length++) {
+            final byte[] truncated = Arrays.copyOf(wire, length);
+            assertThrows(DecoderException.class, () -> decode(truncated));
+        }
+        assertThrows(DecoderException.class, () -> decode(Arrays.copyOf(wire, wire.length + 1)));
     }
 
     @Test

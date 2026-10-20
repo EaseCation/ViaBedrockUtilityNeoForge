@@ -117,6 +117,7 @@ public class ViaBedrockUtility {
                 ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "player_animation_v1"),
                 ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "input_locks_v1"),
                 ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "custom_entity_motion_v1"),
+                ResourceLocation.fromNamespaceAndPath(ViaBedrockUtilityNeoForge.MOD_ID, "wither_skull_motion_v1"),
                 ResourceLocation.fromNamespaceAndPath(CameraPayload.CONFIRM_CHANNEL_ID, CameraPayload.CONFIRM_CHANNEL_PATH),
                 PlayerStatePayload.TYPE.id());
     }

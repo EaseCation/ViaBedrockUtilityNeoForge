@@ -19,6 +19,7 @@
     "accessor.PlayerSkinFieldAccessor",
     "entity.EntityMixin",
     "entity.InteractionEntityMixin",
+    "entity.WitherSkullMotionMixin",
     "entity.player.AbstractClientPlayerMixin",
     "network.ClientLoginNetworkHandlerMixin",
     "network.ClientConfigurationNetworkHandlerMixin",
