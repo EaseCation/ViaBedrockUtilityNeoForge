@@ -56,7 +56,8 @@ public final class BedrockPlayerArmorPose {
 
     private static void update(ModelPart part, AttachableHostContext host,
                                BedrockPlayerModelMetadata.Bone bone) {
-        set(part, bone == null ? null : host.presentationDeformationMatrix(bone));
+        // 网格已恢复语义父链，盔甲必须使用同一完整变换。
+        set(part, bone == null ? null : host.deformationMatrix(bone));
     }
 
     static void set(ModelPart part, Matrix4f deformation) {

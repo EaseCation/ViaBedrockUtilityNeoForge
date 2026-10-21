@@ -1,0 +1,134 @@
+{
+  "animation.rl_s3_scene7.player1": {
+    "waist": {
+      "position": [
+        0,
+        -9,
+        0
+      ]
+    },
+    "leftLeg": {
+      "rotation": [
+        -86.8952950803,
+        -17.2831839923,
+        -3.0369326772
+      ],
+      "position": [
+        0,
+        -9,
+        1
+      ]
+    },
+    "rightLeg": {
+      "rotation": [
+        -87.4976213131,
+        2.4976190449,
+        0.1091175934
+      ],
+      "position": [
+        0,
+        -9,
+        0
+      ]
+    }
+  },
+  "animation.rl_s3_scene7.player2": {
+    "waist": {
+      "position": [
+        0,
+        -9,
+        0
+      ]
+    },
+    "leftLeg": {
+      "rotation": [
+        -87.4904625916,
+        -4.995229008,
+        -0.2186512014
+      ],
+      "position": [
+        0,
+        -10,
+        0
+      ]
+    },
+    "rightLeg": {
+      "rotation": [
+        -87.461483538,
+        9.990384523,
+        0.4406689001
+      ],
+      "position": [
+        0,
+        -10,
+        0
+      ]
+    }
+  },
+  "animation.rl_s3_scene7.player3": {
+    "waist": {
+      "position": [
+        0,
+        -7,
+        0
+      ]
+    },
+    "leftLeg": {
+      "rotation": [
+        -79.848918289,
+        -9.8465519398,
+        -1.7537834581
+      ],
+      "position": [
+        0,
+        -8,
+        0
+      ]
+    },
+    "rightLeg": {
+      "rotation": [
+        -79.9625769541,
+        4.9238497548,
+        0.870384675
+      ],
+      "position": [
+        0,
+        -8,
+        0
+      ]
+    }
+  },
+  "animation.rl_s3_scene7.player4": {
+    "waist": {
+      "position": [
+        0,
+        -8,
+        0
+      ]
+    },
+    "leftLeg": {
+      "rotation": [
+        -87.461483538,
+        -9.990384523,
+        -0.4406689001
+      ],
+      "position": [
+        0,
+        -9,
+        0
+      ]
+    },
+    "rightLeg": {
+      "rotation": [
+        -87.4904625916,
+        4.995229008,
+        0.2186512014
+      ],
+      "position": [
+        0,
+        -9,
+        0
+      ]
+    }
+  }
+}

@@ -11,6 +11,7 @@ import net.easecation.bedrockmotion.pack.PackManager;
 import net.minecraft.client.model.PlayerModel;
 import org.oryxel.viabedrockutility.adapter.McBoneModel;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
+import org.oryxel.viabedrockutility.renderer.BedrockPlayerParentPose;
 import team.unnamed.mocha.runtime.ExecutionContext;
 import team.unnamed.mocha.runtime.Scope;
 import team.unnamed.mocha.runtime.value.Function;
@@ -52,6 +53,7 @@ public final class PlayerAnimationRuntime {
 
     public void sampleThirdPerson(PlayerModel model, PlayerAnimationState state) {
         sample(model, state, thirdPerson);
+        BedrockPlayerParentPose.update(model);
         org.oryxel.viabedrockutility.renderer.BedrockPlayerArmorPose.update(model);
     }
 

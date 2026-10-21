@@ -3,12 +3,15 @@ package org.oryxel.viabedrockutility.mixin.interfaces;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.model.geom.ModelPart;
+import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import java.util.Map;
 
 public interface IModelPart {
     boolean viaBedrockUtility$isVBUModel();
+    /** 设置扁平玩家骨骼在第三人称渲染时缺失的父级变换；null 清除。 */
+    void viaBedrockUtility$setParentPose(Matrix4f pose);
     void viaBedrockUtility$setName(String name);
     String viaBedrockUtility$getName();
     void viaBedrockUtility$resetEverything();

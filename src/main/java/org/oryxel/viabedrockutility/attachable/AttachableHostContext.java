@@ -59,6 +59,34 @@ public final class AttachableHostContext {
         return BedrockTransformConvention.hostDeformation(currentWorldMatrix(bone), bindWorldMatrix(bone));
     }
 
+    /** 补回被玩家渲染树扁平化移除的祖先，不对动画矩阵求逆，兼容零缩放隐藏。 */
+    public Matrix4f flattenedParentPose(BedrockPlayerModelMetadata.Bone bone) {
+        if (bone.parentKey().equals(bone.presentationParentKey())) {
+            return null;
+        }
+        final List<BedrockPlayerModelMetadata.Bone> chain = metadata.chainTo(bone);
+        final Matrix4f result = new Matrix4f();
+        Matrix4f bindParent = null;
+        for (int index = 0; index < chain.size() - 1; index++) {
+            final BedrockPlayerModelMetadata.Bone parent = chain.get(index);
+            if (parent.key().equals(bone.presentationParentKey())) {
+                // 这个祖先已由真实 ModelPart 树渲染，只保留其绑定空间。
+                result.identity();
+                bindParent = localMatrix(parent, false);
+                continue;
+            }
+            if (bindParent != null) {
+                result.mul(new Matrix4f(bindParent).invert());
+            }
+            result.mul(localMatrix(parent, true));
+            bindParent = localMatrix(parent, false);
+        }
+        if (bindParent != null) {
+            result.mul(new Matrix4f(bindParent).invert());
+        }
+        return result;
+    }
+
     /** Complete deformation of the flattened third-person presentation chain for armor layers. */
     public Matrix4f presentationDeformationMatrix(BedrockPlayerModelMetadata.Bone bone) {
         return BedrockTransformConvention.hostDeformation(

@@ -9,7 +9,7 @@ import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.attachable.BedrockTransformConvention;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
 
-/** Reconstructs the exact matrix produced by VBU's ModelPart render injections. */
+/** 重建部件自身的变换，不包含渲染时补回的语义父链，避免姿态组合重复继承。 */
 public final class BedrockModelPartTransform {
     private BedrockModelPartTransform() {
     }

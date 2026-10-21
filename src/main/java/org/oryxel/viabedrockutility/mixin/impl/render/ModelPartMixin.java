@@ -68,6 +68,14 @@ public abstract class ModelPartMixin implements IModelPart {
     private Vector3f pivot = new Vector3f();
 
     @Unique
+    private Matrix4f vbu$parentPose;
+
+    @Override
+    public void viaBedrockUtility$setParentPose(Matrix4f pose) {
+        this.vbu$parentPose = pose;
+    }
+
+    @Unique
     private Vector3f offset = new Vector3f();
 
     @Unique
@@ -102,6 +110,9 @@ public abstract class ModelPartMixin implements IModelPart {
             return;
         }
 
+        if (this.vbu$parentPose != null) {
+            matrices.mulPose(this.vbu$parentPose);
+        }
         BedrockModelPartTransform.applyBeforeVanilla(
                 matrices, (ModelPart) (Object) this, this.vbu$tempQuaternion);
     }
@@ -487,6 +498,8 @@ public abstract class ModelPartMixin implements IModelPart {
 
     @Override
     public void viaBedrockUtility$resetToDefaultPose() {
+        // 每次动画采样都清除，第一人称会自行组合语义父链，不能重复叠加。
+        this.vbu$parentPose = null;
         this.rotation.set(this.defaultRotation);
         this.offset.set(0, 0, 0);
         this.xScale = this.yScale = this.zScale = 1.0F;
