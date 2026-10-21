@@ -21,6 +21,7 @@
     "entity.InteractionEntityMixin",
     "entity.WitherSkullMotionMixin",
     "entity.player.AbstractClientPlayerMixin",
+    "entity.player.LocalPlayerInputLockMixin",
     "network.ClientLoginNetworkHandlerMixin",
     "network.ClientConfigurationNetworkHandlerMixin",
     "network.ClientCommonPacketListenerMixin",

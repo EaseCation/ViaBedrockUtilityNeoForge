@@ -16,6 +16,7 @@ import org.oryxel.viabedrockutility.payload.impl.particle.*;
 import org.oryxel.viabedrockutility.payload.impl.player.PlayerVisualStatePayload;
 import org.oryxel.viabedrockutility.payload.impl.player.PlayerAnimatePayload;
 import org.oryxel.viabedrockutility.payload.impl.player.InputLocksPayload;
+import org.oryxel.viabedrockutility.payload.impl.player.InputLocksV2Payload;
 import org.oryxel.viabedrockutility.payload.impl.skin.*;
 import org.oryxel.viabedrockutility.util.EnumUtil;
 
@@ -196,6 +197,18 @@ public class BasePayload implements CustomPacketPayload {
                     throw new DecoderException("INPUT_LOCKS payload requires exactly 4 flag bytes, got " + buf.readableBytes());
                 }
                 return new InputLocksPayload(buf.readInt());
+            }
+
+            case INPUT_LOCKS_V2 -> {
+                if (buf.readableBytes() != Integer.BYTES + 1) {
+                    throw new DecoderException("INPUT_LOCKS_V2 payload requires exactly 5 bytes");
+                }
+                final int flags = buf.readInt();
+                final int immobile = buf.readUnsignedByte();
+                if ((flags & ~InputLocksPayload.SUPPORTED_FLAGS) != 0 || immobile > 1) {
+                    throw new DecoderException("Invalid input lock flags or immobile value");
+                }
+                return new InputLocksV2Payload(flags, immobile == 1);
             }
 
             default -> throw new IllegalStateException("Unexpected value: " + PayloadType.values()[type]);

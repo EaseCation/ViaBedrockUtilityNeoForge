@@ -37,6 +37,7 @@ import org.oryxel.viabedrockutility.payload.impl.particle.SpawnParticleV2Payload
 import org.oryxel.viabedrockutility.payload.impl.player.PlayerVisualStatePayload;
 import org.oryxel.viabedrockutility.payload.impl.player.PlayerAnimatePayload;
 import org.oryxel.viabedrockutility.payload.impl.player.InputLocksPayload;
+import org.oryxel.viabedrockutility.payload.impl.player.InputLocksV2Payload;
 import org.oryxel.viabedrockutility.mixin.impl.accessor.ClientInputAccessor;
 import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.phys.Vec2;
@@ -123,12 +124,19 @@ public class PayloadHandler {
         packManager = null;
     }
 
+    private boolean immobile;
+
     public void clearInputLocks() {
         this.inputLockFlags = 0;
+        this.immobile = false;
     }
 
     public boolean isMovementInputLocked() {
-        return (this.inputLockFlags & InputLocksPayload.MOVEMENT) != 0;
+        return this.immobile || (this.inputLockFlags & InputLocksPayload.MOVEMENT) != 0;
+    }
+
+    public boolean isImmobile() {
+        return this.immobile;
     }
 
     public boolean isCameraInputLocked() {
@@ -202,6 +210,12 @@ public class PayloadHandler {
         // Input permission changes must take effect even while resource packs are still loading.
         if (payload instanceof InputLocksPayload inputLocks) {
             this.inputLockFlags = inputLocks.getFlags();
+            this.immobile = false;
+            return;
+        }
+        if (payload instanceof InputLocksV2Payload inputLocks) {
+            this.inputLockFlags = inputLocks.getFlags();
+            this.immobile = inputLocks.isImmobile();
             return;
         }
         if (payload instanceof PlayerVisualStatePayload visualState) {

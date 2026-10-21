@@ -31,7 +31,7 @@ class InputLocksPayloadTest {
     void inputLocksAppendAfterTheExistingTwelveWireTypes() {
         assertEquals(List.of("CONFIRM", "MODEL_REQUEST", "ANIMATE", "CAPE", "SKIN_INFORMATION", "SKIN_DATA",
                 "SKIN_ANIMATION_INFO", "SKIN_ANIMATION_DATA", "SPAWN_PARTICLE", "SPAWN_PARTICLE_V2",
-                "PLAYER_VISUAL_STATE", "PLAYER_ANIMATE", "INPUT_LOCKS", "CUSTOM_ENTITY_MOTION"),
+                "PLAYER_VISUAL_STATE", "PLAYER_ANIMATE", "INPUT_LOCKS", "CUSTOM_ENTITY_MOTION", "INPUT_LOCKS_V2"),
                 Arrays.stream(PayloadType.values()).map(Enum::name).toList());
         assertEquals(11, PayloadType.PLAYER_ANIMATE.ordinal());
         assertEquals(12, PayloadType.INPUT_LOCKS.ordinal());
@@ -42,7 +42,7 @@ class InputLocksPayloadTest {
     void loginAdvertisementAddsInputLockCapabilityWithoutDroppingExistingChannels() {
         assertEquals(Set.of("viabedrockutility:confirm", "viabedrockutility:particle_runtime_v2",
                         "viabedrockutility:player_visual_state_v1", "viabedrockutility:player_animation_v1",
-                        "viabedrockutility:input_locks_v1", "viabedrockutility:custom_entity_motion_v1",
+                        "viabedrockutility:input_locks_v1", "viabedrockutility:input_locks_v2", "viabedrockutility:custom_entity_motion_v1",
                         "viabedrockutility:wither_skull_motion_v1",
                         "becamera:confirm", "viabedrockutility:player_state"),
                 ViaBedrockUtility.registrationChannels().stream().map(ResourceLocation::toString)
