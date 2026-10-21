@@ -38,6 +38,7 @@ import org.oryxel.viabedrockutility.payload.impl.player.PlayerVisualStatePayload
 import org.oryxel.viabedrockutility.payload.impl.player.PlayerAnimatePayload;
 import org.oryxel.viabedrockutility.payload.impl.player.InputLocksPayload;
 import org.oryxel.viabedrockutility.payload.impl.player.InputLocksV2Payload;
+import org.oryxel.viabedrockutility.payload.impl.player.InputLocksV3Payload;
 import org.oryxel.viabedrockutility.mixin.impl.accessor.ClientInputAccessor;
 import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.phys.Vec2;
@@ -143,9 +144,20 @@ public class PayloadHandler {
         return (this.inputLockFlags & InputLocksPayload.CAMERA) != 0;
     }
 
+    public boolean isJumpInputLocked() {
+        return this.isMovementInputLocked() || (this.inputLockFlags & InputLocksV3Payload.JUMP) != 0;
+    }
+
+    public Input restrictInput(final Input input, final boolean passenger) {
+        if (this.isMovementInputLocked()) return Input.EMPTY;
+        final boolean dismountLocked = passenger && (this.inputLockFlags & InputLocksV3Payload.DISMOUNT) != 0;
+        return new Input(input.forward(), input.backward(), input.left(), input.right(),
+                input.jump() && !this.isJumpInputLocked(), input.shift() && !dismountLocked, input.sprint());
+    }
+
     public void onMovementInputUpdate(final MovementInputUpdateEvent event) {
+        event.getInput().keyPresses = this.restrictInput(event.getInput().keyPresses, event.getEntity() != null && event.getEntity().isPassenger());
         if (this.isMovementInputLocked()) {
-            event.getInput().keyPresses = Input.EMPTY;
             ((ClientInputAccessor) event.getInput()).vbu$setMoveVector(Vec2.ZERO);
         }
     }
@@ -211,6 +223,11 @@ public class PayloadHandler {
         if (payload instanceof InputLocksPayload inputLocks) {
             this.inputLockFlags = inputLocks.getFlags();
             this.immobile = false;
+            return;
+        }
+        if (payload instanceof InputLocksV3Payload inputLocks) {
+            this.inputLockFlags = inputLocks.getFlags();
+            this.immobile = inputLocks.isImmobile();
             return;
         }
         if (payload instanceof InputLocksV2Payload inputLocks) {

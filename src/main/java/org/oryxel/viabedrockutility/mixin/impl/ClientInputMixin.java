@@ -13,7 +13,7 @@ public class ClientInputMixin {
     @Inject(method = "makeJump", at = @At("HEAD"), cancellable = true, require = 1)
     private void vbu$lockAutoJump(CallbackInfo ci) {
         final PayloadHandler handler = ViaBedrockUtility.getInstance().getPayloadHandler();
-        if (handler != null && handler.isMovementInputLocked()) {
+        if (handler != null && handler.isJumpInputLocked()) {
             ci.cancel();
         }
     }

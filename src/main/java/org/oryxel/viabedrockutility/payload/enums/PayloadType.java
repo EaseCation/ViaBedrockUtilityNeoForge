@@ -11,5 +11,6 @@ public enum PayloadType {
     PLAYER_ANIMATE,
     INPUT_LOCKS,
     CUSTOM_ENTITY_MOTION,
-    INPUT_LOCKS_V2
+    INPUT_LOCKS_V2,
+    INPUT_LOCKS_V3
 }
