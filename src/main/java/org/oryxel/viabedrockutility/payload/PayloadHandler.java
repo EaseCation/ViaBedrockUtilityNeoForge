@@ -133,7 +133,7 @@ public class PayloadHandler {
     }
 
     public boolean isMovementInputLocked() {
-        return this.immobile || (this.inputLockFlags & InputLocksPayload.MOVEMENT) != 0;
+        return (this.inputLockFlags & InputLocksPayload.MOVEMENT) != 0;
     }
 
     public boolean isImmobile() {
@@ -157,7 +157,7 @@ public class PayloadHandler {
 
     public void onMovementInputUpdate(final MovementInputUpdateEvent event) {
         event.getInput().keyPresses = this.restrictInput(event.getInput().keyPresses, event.getEntity() != null && event.getEntity().isPassenger());
-        if (this.isMovementInputLocked()) {
+        if (this.immobile || this.isMovementInputLocked()) {
             ((ClientInputAccessor) event.getInput()).vbu$setMoveVector(Vec2.ZERO);
         }
     }

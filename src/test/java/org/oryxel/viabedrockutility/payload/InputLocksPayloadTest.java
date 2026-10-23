@@ -100,6 +100,25 @@ class InputLocksPayloadTest {
     }
 
     @Test
+    void physicalImmobilityKeepsRealKeyIntentButClearsTheLocalMovementAxes() {
+        final PayloadHandler handler = new PayloadHandler();
+        new org.oryxel.viabedrockutility.payload.impl.player.InputLocksV3Payload(0, true).handle(handler);
+        final ClientInput input = movingInput();
+        handler.onMovementInputUpdate(new MovementInputUpdateEvent(null, input));
+        assertTrue(input.keyPresses.forward());
+        assertTrue(input.keyPresses.jump());
+        assertEquals(Vec2.ZERO, input.getMoveVector());
+        assertTrue(handler.isImmobile());
+        assertFalse(handler.isMovementInputLocked());
+        new org.oryxel.viabedrockutility.payload.impl.player.InputLocksV3Payload(64, true).handle(handler);
+        final ClientInput jumpLocked = movingInput();
+        handler.onMovementInputUpdate(new MovementInputUpdateEvent(null, jumpLocked));
+        assertTrue(jumpLocked.keyPresses.forward());
+        assertFalse(jumpLocked.keyPresses.jump());
+        assertEquals(Vec2.ZERO, jumpLocked.getMoveVector());
+    }
+
+    @Test
     void cameraLockPreservesMovementAndConnectionResetClearsBothLocks() {
         final PayloadHandler handler = new PayloadHandler();
         decode(2, false).handle(handler);
@@ -141,6 +160,11 @@ class InputLocksPayloadTest {
             input.makeJump();
             assertFalse(input.keyPresses.jump());
 
+            new org.oryxel.viabedrockutility.payload.impl.player.InputLocksV3Payload(0, true).handle(handler);
+            final ClientInput immobile = new ClientInput();
+            handler.onMovementInputUpdate(new MovementInputUpdateEvent(null, immobile));
+            immobile.makeJump();
+            assertFalse(immobile.keyPresses.jump());
             decode(0, false).handle(handler);
             input.makeJump();
             assertTrue(input.keyPresses.jump());

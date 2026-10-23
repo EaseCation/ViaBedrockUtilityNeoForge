@@ -53,7 +53,9 @@ class InputLocksV3PayloadTest {
         PayloadHandler handler = new PayloadHandler();
         decode(64, 1).handle(handler);
         decode(0, 1).handle(handler);
-        assertEquals(Input.EMPTY, handler.restrictInput(HELD, false));
+        assertEquals(HELD, handler.restrictInput(HELD, false));
+        assertTrue(handler.isImmobile());
+        assertFalse(handler.isMovementInputLocked());
         decode(64, 0).handle(handler);
         assertTrue(handler.restrictInput(HELD, false).forward());
         assertFalse(handler.restrictInput(HELD, false).jump());

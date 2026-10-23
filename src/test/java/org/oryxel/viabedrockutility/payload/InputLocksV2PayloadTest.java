@@ -40,7 +40,7 @@ class InputLocksV2PayloadTest {
         PayloadHandler handler = new PayloadHandler();
         decode(0, 1).handle(handler);
         assertTrue(handler.isImmobile());
-        assertTrue(handler.isMovementInputLocked());
+        assertFalse(handler.isMovementInputLocked());
         assertFalse(handler.isCameraInputLocked());
         decode(6, 1).handle(handler);
         decode(6, 0).handle(handler);
@@ -49,7 +49,7 @@ class InputLocksV2PayloadTest {
         assertTrue(handler.isCameraInputLocked());
         decode(0, 1).handle(handler);
         assertTrue(handler.isImmobile());
-        assertTrue(handler.isMovementInputLocked());
+        assertFalse(handler.isMovementInputLocked());
         decode(0, 0).handle(handler);
         assertFalse(handler.isMovementInputLocked());
         assertFalse(handler.isImmobile());
