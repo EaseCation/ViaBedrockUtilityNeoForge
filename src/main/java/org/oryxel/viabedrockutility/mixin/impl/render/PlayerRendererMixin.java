@@ -1,5 +1,7 @@
 package org.oryxel.viabedrockutility.mixin.impl.render;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -8,6 +10,7 @@ import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 import org.oryxel.viabedrockutility.renderer.PlayerTranslucencyBufferSource;
+import org.oryxel.viabedrockutility.renderer.PlayerTranslucencyRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -24,13 +27,17 @@ public abstract class PlayerRendererMixin {
                 ViaBedrockUtility.getInstance().getPayloadHandler().isPlayerTranslucent(player.getUUID()));
     }
 
-    @ModifyVariable(method = "render(Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
-            at = @At("HEAD"), argsOnly = true)
-    private MultiBufferSource viaBedrockUtility$translucentPlayer(MultiBufferSource source,
-                                                                 PlayerRenderState state, PoseStack poses,
-                                                                 MultiBufferSource originalSource, int light) {
-        return !state.isInvisible && ((ICustomPlayerRendererHolder) state).viaBedrockUtility$isCustomSpectator()
-                ? new PlayerTranslucencyBufferSource(source) : source;
+    @WrapMethod(method = "render(Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V")
+    private void viaBedrockUtility$translucentPlayer(PlayerRenderState state, PoseStack poses,
+                                                    MultiBufferSource source, int light, Operation<Void> original) {
+        if (!state.isInvisible && ((ICustomPlayerRendererHolder) state).viaBedrockUtility$isCustomSpectator()
+                && PlayerTranslucencyRenderer.isCapturing()) {
+            PlayerTranslucencyBufferSource player = PlayerTranslucencyRenderer.capture(source, state.distanceToCameraSq);
+            original.call(state, poses, player, light);
+            PlayerTranslucencyRenderer.submit(player);
+        } else {
+            original.call(state, poses, source, light);
+        }
     }
 
     @ModifyVariable(method = "renderNameTag(Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;Lnet/minecraft/network/chat/Component;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",

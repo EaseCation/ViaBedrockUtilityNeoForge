@@ -5,6 +5,8 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
@@ -15,6 +17,7 @@ import org.oryxel.viabedrockutility.renderer.DeferredNameTag;
 import org.oryxel.viabedrockutility.renderer.FrozenEntityMeshCache;
 import org.oryxel.viabedrockutility.renderer.FrozenMeshDrawQueue;
 import org.oryxel.viabedrockutility.renderer.PoseMeshRebuildBudget;
+import org.oryxel.viabedrockutility.renderer.PlayerTranslucencyRenderer;
 import org.oryxel.viabedrockutility.renderer.VbuRenderMetrics;
 import org.oryxel.viabedrockutility.attachable.FirstPersonAttachableRenderer;
 import org.slf4j.Logger;
@@ -33,6 +36,8 @@ public class ViaBedrockUtilityNeoForge {
                 net.easecation.logging.AsyncLogger.wrap(LoggerFactory.getLogger(
                         net.easecation.bedrockmotion.controller.AnimationControllerInstance.class)));
 		LOGGER.debug("ViaBedrockUtility initialized");
+		modEventBus.addListener((RegisterRenderPipelinesEvent event) -> event.registerPipeline(PlayerTranslucencyRenderer.COMPOSITE));
+		NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> PlayerTranslucencyRenderer.close());
 		LodConfig.load();
 		ViaBedrockUtility.getInstance().init();
 		modEventBus.addListener(ViaBedrockUtility.getInstance()::registerPayloads);
@@ -41,6 +46,7 @@ public class ViaBedrockUtilityNeoForge {
 				ResourceLocation.fromNamespaceAndPath(MOD_ID, "runtime_caches"),
 				(ResourceManagerReloadListener) resourceManager -> {
 					DeferredNameTag.clearCache();
+					PlayerTranslucencyRenderer.close();
 					FrozenMeshDrawQueue.clear();
 					FrozenEntityMeshCache.global().invalidateAll("resource_reload");
 					final var payloadHandler = ViaBedrockUtility.getInstance().getPayloadHandler();
@@ -62,12 +68,16 @@ public class ViaBedrockUtilityNeoForge {
 			// Only name tags submitted after the main opaque pass belong to the main camera. Iris has
 			// already rendered shadow-map entities with a different projection and no AfterEntities event.
 			DeferredNameTag.beginMainEntityPass();
+			PlayerTranslucencyRenderer.beginFrame();
 		});
-		// Replay VBU name tags after all entity geometry is drawn so they show through entities
-		// (faint) instead of being painted over. See DeferredNameTag for the rationale.
 		NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent.AfterEntities event) -> {
+			FrozenMeshDrawQueue.flush();
+			PlayerTranslucencyRenderer.endEntityPass();
+		});
+		// Complete opaque block entities before ghost composition, then replay unchanged name tags.
+		NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent.AfterBlockEntities event) -> {
 			try {
-				FrozenMeshDrawQueue.flush();
+				PlayerTranslucencyRenderer.flush();
 				DeferredNameTag.flush();
 			} finally {
 				// Prevent an exception in either deferred renderer from leaving the next auxiliary pass armed.

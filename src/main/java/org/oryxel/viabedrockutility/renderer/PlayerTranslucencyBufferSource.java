@@ -1,94 +1,93 @@
 package org.oryxel.viabedrockutility.renderer;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
+import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.Sheets;
-import net.minecraft.resources.ResourceLocation;
-import org.oryxel.viabedrockutility.mixin.interfaces.IRenderTypeTexture;
+import org.oryxel.viabedrockutility.mixin.impl.accessor.CompositeRenderTypeAccessor;
 
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
-public final class PlayerTranslucencyBufferSource implements MultiBufferSource {
-    private static final float ALPHA = 0.3F;
+/** Keeps one player's original materials together until its private render target is ready. */
+public final class PlayerTranslucencyBufferSource implements MultiBufferSource, AutoCloseable {
+    private record Batch(ByteBufferBuilder storage, BufferBuilder builder) {
+    }
 
-    private final MultiBufferSource delegate;
+    // Reuse by batch position, not skin RenderType: players entering/leaving view must not retain
+    // a native allocation for every texture ever seen by a pooled player slot.
+    private final List<ByteBufferBuilder> storage = new ArrayList<>();
+    private final Map<RenderType, Batch> builders = new LinkedHashMap<>();
+    private MultiBufferSource delegate;
+    private double distanceSquared;
 
-    public PlayerTranslucencyBufferSource(final MultiBufferSource delegate) {
+    void begin(MultiBufferSource delegate, double distanceSquared) {
         this.delegate = delegate;
+        this.distanceSquared = distanceSquared;
+    }
+
+    double distanceSquared() {
+        return this.distanceSquared;
     }
 
     @Override
-    public VertexConsumer getBuffer(final RenderType renderType) {
-        return new AlphaVertexConsumer(this.delegate.getBuffer(toTranslucent(renderType)));
+    public VertexConsumer getBuffer(RenderType renderType) {
+        return this.builders.computeIfAbsent(renderType, type -> {
+            int index = this.builders.size();
+            if (index == this.storage.size()) {
+                this.storage.add(new ByteBufferBuilder(8192));
+            }
+            ByteBufferBuilder buffer = this.storage.get(index);
+            return new Batch(buffer, new BufferBuilder(buffer, type.mode(), type.format()));
+        }).builder();
     }
 
-    public static MultiBufferSource unwrap(final MultiBufferSource source) {
+    public static MultiBufferSource unwrap(MultiBufferSource source) {
         return source instanceof PlayerTranslucencyBufferSource translucent ? translucent.delegate : source;
     }
 
-    private static RenderType toTranslucent(final RenderType renderType) {
-        final Optional<ResourceLocation> texture = renderType instanceof IRenderTypeTexture textureProvider
-                ? textureProvider.viaBedrockUtility$getTexture()
-                : Optional.empty();
-        return toTranslucent(renderType, texture);
+    void draw() {
+        // Item rendering may request the glint consumer before the base consumer. Its EQUAL depth
+        // test needs the base first; normal translucent materials likewise follow opaque geometry.
+        for (var entry : this.builders.entrySet().stream()
+                .sorted(Comparator.comparingInt(entry -> renderOrder(entry.getKey()))).toList()) {
+            RenderType type = entry.getKey();
+            MeshData mesh = entry.getValue().builder().build();
+            if (mesh != null) {
+                if (type.sortOnUpload()) {
+                    mesh.sortQuads(entry.getValue().storage(), RenderSystem.getProjectionType().vertexSorting());
+                }
+                type.draw(mesh);
+            }
+        }
     }
 
-    static RenderType toTranslucent(final RenderType renderType, final Optional<ResourceLocation> texture) {
-        if (renderType == RenderType.glint() || renderType == RenderType.entityGlint()
-                || renderType == RenderType.armorEntityGlint()) {
-            return RenderType.glintTranslucent();
+    private static int renderOrder(RenderType type) {
+        if (type == RenderType.glint() || type == RenderType.glintTranslucent()
+                || type == RenderType.entityGlint() || type == RenderType.armorEntityGlint()) {
+            return 2;
         }
-        if (renderType == Sheets.solidBlockSheet() || renderType == Sheets.cutoutBlockSheet()) {
-            return Sheets.translucentItemSheet();
-        }
-        if (texture.isPresent()) {
-            return RenderType.entityTranslucent(texture.get(), true);
-        }
-        return renderType;
+        return type instanceof CompositeRenderTypeAccessor accessor
+                && accessor.viaBedrockUtility$getRenderPipeline().getBlendFunction().isPresent() ? 1 : 0;
     }
 
-    private static final class AlphaVertexConsumer implements VertexConsumer {
-        private final VertexConsumer delegate;
+    void reset() {
+        this.builders.clear();
+        this.storage.forEach(ByteBufferBuilder::clear);
+        this.delegate = null;
+    }
 
-        private AlphaVertexConsumer(final VertexConsumer delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public VertexConsumer addVertex(float x, float y, float z) {
-            this.delegate.addVertex(x, y, z);
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setColor(int red, int green, int blue, int alpha) {
-            this.delegate.setColor(red, green, blue, Math.round(alpha * ALPHA));
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setUv(float u, float v) {
-            this.delegate.setUv(u, v);
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setUv1(int u, int v) {
-            this.delegate.setUv1(u, v);
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setUv2(int u, int v) {
-            this.delegate.setUv2(u, v);
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setNormal(float normalX, float normalY, float normalZ) {
-            this.delegate.setNormal(normalX, normalY, normalZ);
-            return this;
-        }
+    @Override
+    public void close() {
+        this.builders.clear();
+        this.storage.forEach(ByteBufferBuilder::close);
+        this.storage.clear();
+        this.delegate = null;
     }
 }
