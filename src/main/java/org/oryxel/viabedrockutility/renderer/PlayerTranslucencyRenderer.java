@@ -8,6 +8,7 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
@@ -23,21 +24,31 @@ import java.util.OptionalInt;
 
 /** Composites each complete player once, preserving armor/skin occlusion inside the silhouette. */
 public final class PlayerTranslucencyRenderer {
-    public static final RenderPipeline COMPOSITE = RenderPipeline.builder()
-            .withLocation(ResourceLocation.fromNamespaceAndPath("viabedrockutility", "pipeline/player_translucency"))
-            .withVertexShader("core/blit_screen")
-            .withFragmentShader(ResourceLocation.fromNamespaceAndPath("viabedrockutility", "core/player_translucency"))
-            .withSampler("InSampler")
-            .withSampler("DepthSampler")
+    public static final RenderPipeline COMPOSITE = pipeline("player_translucency")
             .withBlend(BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA)
-            .withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST)
             .withDepthWrite(false)
-            .withVertexFormat(DefaultVertexFormat.POSITION, VertexFormat.Mode.QUADS)
             .build();
+    public static final RenderPipeline OCCLUSION = pipeline("player_occlusion")
+            .withColorWrite(false)
+            .withDepthWrite(true)
+            .build();
+
+    private static RenderPipeline.Builder pipeline(String name) {
+        return RenderPipeline.builder()
+                .withLocation(ResourceLocation.fromNamespaceAndPath("viabedrockutility", "pipeline/" + name))
+                .withVertexShader("core/blit_screen")
+                .withFragmentShader(ResourceLocation.fromNamespaceAndPath("viabedrockutility", "core/player_translucency"))
+                .withSampler("InSampler")
+                .withSampler("DepthSampler")
+                .withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST)
+                .withVertexFormat(DefaultVertexFormat.POSITION, VertexFormat.Mode.QUADS);
+    }
 
     private static final List<PlayerTranslucencyBufferSource> POOL = new ArrayList<>();
     private static final List<PlayerTranslucencyBufferSource> PENDING = new ArrayList<>();
     private static TextureTarget target;
+    private static GpuTexture accumulatedDepth;
+    private static GpuTextureView accumulatedDepthView;
     private static int usedBuffers;
     private static boolean mainEntityPass;
 
@@ -79,16 +90,23 @@ public final class PlayerTranslucencyRenderer {
         // seen through it regardless of their submission order.
         minecraft.renderBuffers().bufferSource().endBatch();
         RenderTarget scene = minecraft.getMainRenderTarget();
-        if (target == null) {
-            target = new TextureTarget("VBU translucent player", scene.width, scene.height, true);
-        } else if (target.width != scene.width || target.height != scene.height) {
-            target.resize(scene.width, scene.height);
-        }
-
         GpuTextureView sceneColor = RenderSystem.outputColorTextureOverride != null
                 ? RenderSystem.outputColorTextureOverride : scene.getColorTextureView();
         GpuTextureView sceneDepth = RenderSystem.outputDepthTextureOverride != null
                 ? RenderSystem.outputDepthTextureOverride : scene.getDepthTextureView();
+        if (target == null || target.width != scene.width || target.height != scene.height
+                || accumulatedDepth.getFormat() != sceneDepth.texture().getFormat()) {
+            closeTargets();
+            target = new TextureTarget("VBU translucent player", scene.width, scene.height, true);
+            accumulatedDepth = RenderSystem.getDevice().createTexture(
+                    () -> "VBU translucent player occlusion",
+                    GpuTexture.USAGE_COPY_SRC | GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_RENDER_ATTACHMENT,
+                    sceneDepth.texture().getFormat(), scene.width, scene.height, 1, 1);
+            accumulatedDepthView = RenderSystem.getDevice().createTextureView(accumulatedDepth);
+        }
+        RenderSystem.getDevice().createCommandEncoder().copyTextureToTexture(
+                sceneDepth.texture(), accumulatedDepth, 0, 0, 0, 0, 0, scene.width, scene.height);
+
         GpuTextureView savedColor = RenderSystem.outputColorTextureOverride;
         GpuTextureView savedDepth = RenderSystem.outputDepthTextureOverride;
         try {
@@ -102,8 +120,14 @@ public final class PlayerTranslucencyRenderer {
                 player.draw();
                 RenderSystem.outputColorTextureOverride = savedColor;
                 RenderSystem.outputDepthTextureOverride = savedDepth;
-                composite(sceneColor, sceneDepth);
+                composite(sceneColor, sceneDepth, COMPOSITE);
+                composite(sceneColor, accumulatedDepthView, OCCLUSION);
             }
+            // Commit depth only after every player's color is blended. This retains the old
+            // entityTranslucent rules for later name tags and terrain, without culling a ghost
+            // behind another ghost before its color contributes to the scene.
+            RenderSystem.getDevice().createCommandEncoder().copyTextureToTexture(
+                    accumulatedDepth, sceneDepth.texture(), 0, 0, 0, 0, 0, scene.width, scene.height);
         } finally {
             RenderSystem.outputColorTextureOverride = savedColor;
             RenderSystem.outputDepthTextureOverride = savedDepth;
@@ -111,12 +135,12 @@ public final class PlayerTranslucencyRenderer {
         }
     }
 
-    private static void composite(GpuTextureView color, GpuTextureView depth) {
+    private static void composite(GpuTextureView color, GpuTextureView depth, RenderPipeline pipeline) {
         RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
         GpuBuffer indexBuffer = indices.getBuffer(6);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "Composite translucent player", color, OptionalInt.empty(), depth, OptionalDouble.empty())) {
-            pass.setPipeline(COMPOSITE);
+            pass.setPipeline(pipeline);
             RenderSystem.bindDefaultUniforms(pass);
             pass.setVertexBuffer(0, RenderSystem.getQuadVertexBuffer());
             pass.setIndexBuffer(indexBuffer, indices.type());
@@ -140,9 +164,21 @@ public final class PlayerTranslucencyRenderer {
         POOL.forEach(PlayerTranslucencyBufferSource::close);
         POOL.clear();
         usedBuffers = 0;
+        closeTargets();
+    }
+
+    private static void closeTargets() {
         if (target != null) {
             target.destroyBuffers();
             target = null;
+        }
+        if (accumulatedDepthView != null) {
+            accumulatedDepthView.close();
+            accumulatedDepthView = null;
+        }
+        if (accumulatedDepth != null) {
+            accumulatedDepth.close();
+            accumulatedDepth = null;
         }
     }
 }

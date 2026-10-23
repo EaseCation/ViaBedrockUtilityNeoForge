@@ -5,7 +5,9 @@ import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.VertexMultiConsumer;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.OutlineBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import org.oryxel.viabedrockutility.mixin.impl.accessor.CompositeRenderTypeAccessor;
 
@@ -38,7 +40,10 @@ public final class PlayerTranslucencyBufferSource implements MultiBufferSource, 
 
     @Override
     public VertexConsumer getBuffer(RenderType renderType) {
-        return this.builders.computeIfAbsent(renderType, type -> {
+        if (this.delegate instanceof OutlineBufferSource && renderType.isOutline()) {
+            return this.delegate.getBuffer(renderType);
+        }
+        VertexConsumer body = this.builders.computeIfAbsent(renderType, type -> {
             int index = this.builders.size();
             if (index == this.storage.size()) {
                 this.storage.add(new ByteBufferBuilder(8192));
@@ -46,6 +51,13 @@ public final class PlayerTranslucencyBufferSource implements MultiBufferSource, 
             ByteBufferBuilder buffer = this.storage.get(index);
             return new Batch(buffer, new BufferBuilder(buffer, type.mode(), type.format()));
         }).builder();
+        if (this.delegate instanceof OutlineBufferSource) {
+            // Asking for the outline RenderType uses OutlineBufferSource's outline-only branch,
+            // retaining its team color without also emitting an opaque copy of the player's body.
+            return renderType.outline().<VertexConsumer>map(outline ->
+                    VertexMultiConsumer.create(this.delegate.getBuffer(outline), body)).orElse(body);
+        }
+        return body;
     }
 
     public static MultiBufferSource unwrap(MultiBufferSource source) {

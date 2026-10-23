@@ -36,7 +36,10 @@ public class ViaBedrockUtilityNeoForge {
                 net.easecation.logging.AsyncLogger.wrap(LoggerFactory.getLogger(
                         net.easecation.bedrockmotion.controller.AnimationControllerInstance.class)));
 		LOGGER.debug("ViaBedrockUtility initialized");
-		modEventBus.addListener((RegisterRenderPipelinesEvent event) -> event.registerPipeline(PlayerTranslucencyRenderer.COMPOSITE));
+		modEventBus.addListener((RegisterRenderPipelinesEvent event) -> {
+			event.registerPipeline(PlayerTranslucencyRenderer.COMPOSITE);
+			event.registerPipeline(PlayerTranslucencyRenderer.OCCLUSION);
+		});
 		NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> PlayerTranslucencyRenderer.close());
 		LodConfig.load();
 		ViaBedrockUtility.getInstance().init();
