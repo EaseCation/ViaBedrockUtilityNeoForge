@@ -23,9 +23,15 @@ import org.slf4j.LoggerFactory;
 @Mod(value = ViaBedrockUtilityNeoForge.MOD_ID, dist = Dist.CLIENT)
 public class ViaBedrockUtilityNeoForge {
 	public static final String MOD_ID = "viabedrockutility";
-	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+	public static final Logger LOGGER = net.easecation.logging.AsyncLogger.wrap(LoggerFactory.getLogger(MOD_ID));
 
 	public ViaBedrockUtilityNeoForge(IEventBus modEventBus) {
+        net.easecation.bedrockmotion.render.RenderControllerEvaluator.setDiagnosticLogger(
+                net.easecation.logging.AsyncLogger.wrap(LoggerFactory.getLogger(
+                        net.easecation.bedrockmotion.render.RenderControllerEvaluator.class)));
+        net.easecation.bedrockmotion.controller.AnimationControllerInstance.setDiagnosticLogger(
+                net.easecation.logging.AsyncLogger.wrap(LoggerFactory.getLogger(
+                        net.easecation.bedrockmotion.controller.AnimationControllerInstance.class)));
 		LOGGER.debug("ViaBedrockUtility initialized");
 		LodConfig.load();
 		ViaBedrockUtility.getInstance().init();

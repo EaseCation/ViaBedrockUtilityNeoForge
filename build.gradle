@@ -61,6 +61,9 @@ neoForge {
 }
 
 dependencies {
+    implementation "net.easecation:easecation-async-logging:1.0.0"
+    jarJar "net.easecation:easecation-async-logging:1.0.0"
+    additionalRuntimeClasspath "net.easecation:easecation-async-logging:1.0.0"
     // api (not implementation): AttachableQueryProvider exposes BedrockMotion's transitive mocha
     // Value in its method signature, so downstream mods compiling against the query API need it.
     api('com.github.EaseCation:BedrockMotion:1.0.0') {
