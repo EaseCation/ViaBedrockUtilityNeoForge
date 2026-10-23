@@ -13,7 +13,7 @@ import java.util.Map;
 
 /**
  * Collects entity/player name tag draws during the main entity render pass and replays them after all
- * entity geometry has been flushed ({@link net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterEntities}).
+ * entity geometry has been flushed ({@link net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterBlockEntities}).
  *
  * <p>Why: vanilla draws the name in two passes - a faint {@code SEE_THROUGH} pass (no depth write) and
  * an opaque {@code NORMAL} pass (writes depth, LEQUAL). The opaque pass writing depth is what keeps a
