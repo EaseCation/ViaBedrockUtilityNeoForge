@@ -112,6 +112,7 @@ public class CustomEntityTicker implements AnimationEventListener {
     private final List<AnimationControllerInstance> controllerInstances = new ArrayList<>();
 
     private boolean hasPlayInitAnimation;
+    private final RenderControllerEvaluator.Prepared renderProgram;
 
     public CustomEntityTicker(final EntityDefinitions.EntityDefinition entityDefinition) {
         this(Objects.requireNonNull(ViaBedrockUtility.getInstance().getPackManager(), "packManager"),
@@ -124,6 +125,7 @@ public class CustomEntityTicker implements AnimationEventListener {
         this.vbuMaterialDefinitions =
                 new org.oryxel.viabedrockutility.pack.definitions.MaterialDefinitions(this.packManager);
         this.entityDefinition = Objects.requireNonNull(entityDefinition, "entityDefinition");
+        this.renderProgram = RenderControllerEvaluator.prepare(entityDefinition.entityData(), packManager.getRenderControllerDefinitions());
         final Minecraft client = Minecraft.getInstance();
         final EntityRendererProvider.Context context = EntityRendererContextUtil.build(client);
         this.renderer = new CustomEntityRenderer<>(this, new CopyOnWriteArrayList<>(), context);
@@ -485,9 +487,8 @@ public class CustomEntityTicker implements AnimationEventListener {
 
     private boolean evaluateRenderControllerChange(final Scope executionScope) {
         final List<RenderControllerEvaluator.EvaluatedModel> newModels = RenderControllerEvaluator.evaluate(
-                this.entityDefinition.entityData(),
+                this.renderProgram,
                 executionScope,
-                this.packManager.getRenderControllerDefinitions(),
                 this.inverseGeometryMap,
                 this.inverseTextureMap
         );

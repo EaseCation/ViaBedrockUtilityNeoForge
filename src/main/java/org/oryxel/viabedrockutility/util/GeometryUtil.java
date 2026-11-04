@@ -13,6 +13,8 @@ import org.cube.converter.model.impl.bedrock.BedrockGeometryModel;
 import org.cube.converter.util.element.Position3V;
 import org.cube.converter.util.element.UVMap;
 import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+import org.oryxel.viabedrockutility.attachable.AttachableWorldPoses;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICuboid;
@@ -62,6 +64,20 @@ public final class GeometryUtil {
     private static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim,
                                     final String geometryName, final boolean attachable,
                                     final Function<String, TextureAlpha> textureResolver) {
+        return buildModel(geometry, player, slim, geometryName, attachable, textureResolver, Set.of());
+    }
+
+    /** Resolved entity-space roots retain the entity origin rather than a host-bone pivot. */
+    public static Model buildAttachableModel(final BedrockGeometryModel geometry, final String geometryName,
+                                             final Function<String, TextureAlpha> textureResolver,
+                                             final Set<String> entityRoots) {
+        return buildModel(geometry, false, false, geometryName, true, textureResolver, entityRoots);
+    }
+
+    private static Model buildModel(final BedrockGeometryModel geometry, final boolean player, boolean slim,
+                                    final String geometryName, final boolean attachable,
+                                    final Function<String, TextureAlpha> textureResolver,
+                                    final Set<String> entityRoots) {
         // There are some times when the skin image file is larger than the geometry UV points.
         // In this case, we need to scale UV calls
         // https://github.com/Camotoy/BedrockSkinUtility/issues/9
@@ -73,7 +89,7 @@ public final class GeometryUtil {
         final Map<String, Parent> sourceBones = new HashMap<>();
         geometry.getParents().forEach(bone -> sourceBones.put(bone.getName(), bone));
         for (final Parent bone : geometry.getParents()) {
-            final Vector3f localOrigin = attachable ? legacyAttachableOrigin(bone, sourceBones) : null;
+            final Vector3f localOrigin = attachable ? legacyAttachableOrigin(bone, sourceBones, entityRoots) : null;
             // ModelPart renders children in map iteration order. Keep cube transform groups in source order
             // so translucent geometry retains the same vertex submission order as the ungrouped model.
             final Map<String, ModelPart> children = new LinkedHashMap<>();
@@ -294,7 +310,7 @@ public final class GeometryUtil {
      * relative to the root pivot. Explicit binding instead retains the presentation origin (as in
      * Bedrock/Blockbench's root position minus 24). Resolve per root so mixed geometries work too.
      */
-    private static Vector3f legacyAttachableOrigin(Parent bone, Map<String, Parent> sourceBones) {
+    private static Vector3f legacyAttachableOrigin(Parent bone, Map<String, Parent> sourceBones, Set<String> entityRoots) {
         final Set<String> visited = new HashSet<>();
         Parent root = bone;
         while (!root.getParent().isBlank()) {
@@ -307,11 +323,38 @@ public final class GeometryUtil {
             }
             root = parent;
         }
-        if (!root.getBinding().isBlank()) {
+        if (!root.getBinding().isBlank() || entityRoots.contains(root.getName())) {
             return null;
         }
         final Position3V pivot = root.getPivot();
         return new Vector3f(pivot.getX(), pivot.getY(), pivot.getZ());
+    }
+
+    /** Cached alongside an attachable model, using exactly the same subtree origin as its vertices. */
+    public static Map<AttachableWorldPoses.Target,
+            AttachableWorldPoses.Local> attachableAnchors(
+            BedrockGeometryModel geometry, Set<String> entityRoots) {
+        var result = new LinkedHashMap<AttachableWorldPoses.Target,
+                AttachableWorldPoses.Local>();
+        Map<String, Parent> bones = new HashMap<>();
+        geometry.getParents().forEach(bone -> bones.put(bone.getName(), bone));
+        for (Parent bone : geometry.getParents()) {
+            Vector3f origin = legacyAttachableOrigin(bone, bones, entityRoots);
+            var pivot = bone.getPivot();
+            var point = toJavaGeometry(new Vector3f(pivot.getX(), pivot.getY(), pivot.getZ()), origin).div(16);
+            result.put(new AttachableWorldPoses.Target(bone.getName(), ""),
+                    new AttachableWorldPoses.Local(new Matrix4f().translation(point), false));
+            bone.getLocators().forEach((name, locator) -> {
+                var offset = locator.getOffset(); var rotation = locator.getRotation();
+                Vector3f position = toJavaGeometry(new Vector3f(offset.getX(), offset.getY(), offset.getZ()), origin).div(16);
+                float radians = (float)(Math.PI / 180);
+                var matrix = new Matrix4f().translation(position).rotateZYX(
+                        rotation.getZ() * radians, rotation.getY() * radians, rotation.getX() * radians);
+                result.put(new AttachableWorldPoses.Target(bone.getName(), name),
+                        new AttachableWorldPoses.Local(matrix, locator.isIgnoreInheritedScale()));
+            });
+        }
+        return Map.copyOf(result);
     }
 
     private static Vector3f toJavaGeometry(Vector3f bedrock, Vector3f localOrigin) {

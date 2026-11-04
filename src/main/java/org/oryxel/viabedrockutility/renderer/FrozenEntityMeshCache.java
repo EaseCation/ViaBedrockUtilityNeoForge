@@ -15,7 +15,7 @@ public final class FrozenEntityMeshCache {
 
     private final int maxEntries;
     private final LongSupplier maxBytes;
-    private final LinkedHashMap<FrozenMeshEntry, Boolean> entries = new LinkedHashMap<>(32, 0.75F, true);
+    private final LinkedHashMap<GpuMeshEntry, Boolean> entries = new LinkedHashMap<>(32, 0.75F, true);
     private long bytes;
 
     public FrozenEntityMeshCache(int maxEntries, LongSupplier maxBytes) {
@@ -27,13 +27,13 @@ public final class FrozenEntityMeshCache {
         return GLOBAL;
     }
 
-    public synchronized boolean add(FrozenMeshEntry entry) {
+    public synchronized boolean add(GpuMeshEntry entry) {
         long limit = Math.max(0L, maxBytes.getAsLong());
         if (entry.sizeBytes() > limit || maxEntries <= 0) {
             entry.close();
             return false;
         }
-        evictUntilFits(entry.sizeBytes(), limit);
+        evictUntilFits(1, entry.sizeBytes(), limit);
         if (entries.size() >= maxEntries || bytes + entry.sizeBytes() > limit) {
             entry.close();
             return false;
@@ -43,15 +43,15 @@ public final class FrozenEntityMeshCache {
         return true;
     }
 
-    public synchronized boolean touch(FrozenMeshEntry entry) {
+    public synchronized boolean touch(GpuMeshEntry entry) {
         if (entries.get(entry) == null || !entry.isValid()) {
             return false;
         }
-        evictUntilFits(0L, Math.max(0L, maxBytes.getAsLong()));
+        evictUntilFits(0, 0L, Math.max(0L, maxBytes.getAsLong()));
         return entries.containsKey(entry) && entry.isValid();
     }
 
-    public synchronized void remove(FrozenMeshEntry entry, String reason) {
+    public synchronized void remove(GpuMeshEntry entry, String reason) {
         if (entries.remove(entry) != null) {
             bytes -= entry.sizeBytes();
         }
@@ -60,7 +60,7 @@ public final class FrozenEntityMeshCache {
     }
 
     public synchronized void invalidateAll(String reason) {
-        for (FrozenMeshEntry entry : entries.keySet()) {
+        for (GpuMeshEntry entry : entries.keySet()) {
             entry.close();
         }
         if (!entries.isEmpty()) {
@@ -73,10 +73,10 @@ public final class FrozenEntityMeshCache {
     public synchronized int size() { return entries.size(); }
     public synchronized long bytes() { return bytes; }
 
-    private void evictUntilFits(long incoming, long limit) {
-        Iterator<Map.Entry<FrozenMeshEntry, Boolean>> iterator = entries.entrySet().iterator();
-        while ((entries.size() >= maxEntries || bytes + incoming > limit) && iterator.hasNext()) {
-            FrozenMeshEntry eldest = iterator.next().getKey();
+    private void evictUntilFits(int incomingEntries, long incoming, long limit) {
+        Iterator<Map.Entry<GpuMeshEntry, Boolean>> iterator = entries.entrySet().iterator();
+        while ((entries.size() + incomingEntries > maxEntries || bytes + incoming > limit) && iterator.hasNext()) {
+            GpuMeshEntry eldest = iterator.next().getKey();
             iterator.remove();
             bytes -= eldest.sizeBytes();
             eldest.close();

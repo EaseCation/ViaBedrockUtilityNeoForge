@@ -2,6 +2,8 @@ package org.oryxel.viabedrockutility.attachable;
 
 import net.minecraft.world.entity.HumanoidArm;
 import org.joml.Matrix4f;
+import net.easecation.bedrockmotion.model.EntityRotationTransform;
+import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
 import org.joml.Vector3f;
 import org.oryxel.viabedrockutility.renderer.BedrockModelPartTransform;
 import org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata;
@@ -25,6 +27,8 @@ public final class AttachableHostContext {
         }
         this.metadata = metadata;
     }
+
+    BedrockPlayerModelMetadata metadata() { return metadata; }
 
     public BedrockPlayerModelMetadata.Bone itemBone(AttachableQueryContext.LogicalHand hand,
                                                     HumanoidArm physicalArm) {
@@ -57,6 +61,22 @@ public final class AttachableHostContext {
 
     public Matrix4f deformationMatrix(BedrockPlayerModelMetadata.Bone bone) {
         return BedrockTransformConvention.hostDeformation(currentWorldMatrix(bone), bindWorldMatrix(bone));
+    }
+
+    /** Full semantic pose is necessary when flattening crosses an entity-relative ancestor.
+     * A prefix cannot undo an animated zero-scale presentation parent.
+     */
+    public Matrix4f absoluteParentPoseForRelativeChain(BedrockPlayerModelMetadata.Bone bone) {
+        final var chain = metadata.chainTo(bone);
+        for (BedrockPlayerModelMetadata.Bone ancestor : chain) {
+            if (((IModelPart)(Object)ancestor.part()).viaBedrockUtility$isEntityRelativeRotation()) {
+                if (chain.size() == 1) return new Matrix4f();
+                final var parent = chain.get(chain.size() - 2);
+                return worldMatrix(chain.subList(0, chain.size() - 1), true)
+                        .mul(localMatrix(parent, false).invert());
+            }
+        }
+        return null;
     }
 
     /** 补回被玩家渲染树扁平化移除的祖先，不对动画矩阵求逆，兼容零缩放隐藏。 */
@@ -158,14 +178,14 @@ public final class AttachableHostContext {
             Function<BedrockPlayerModelMetadata.Bone, Matrix4f> currentAbsoluteMatrix,
             Function<BedrockPlayerModelMetadata.Bone, Matrix4f> bindAbsoluteMatrix) {
         final Matrix4f matrix = firstPersonCameraMatrix();
-        matrix.mul(worldMatrix(chain, currentAbsoluteMatrix, bindAbsoluteMatrix));
+        matrix.mul(worldMatrix(chain, currentAbsoluteMatrix, bindAbsoluteMatrix, true));
         return matrix;
     }
 
     private static Matrix4f worldMatrix(List<BedrockPlayerModelMetadata.Bone> chain, boolean current) {
         return worldMatrix(chain,
                 bone -> localMatrix(bone, current),
-                bone -> localMatrix(bone, false));
+                bone -> localMatrix(bone, false), current);
     }
 
     /**
@@ -176,7 +196,7 @@ public final class AttachableHostContext {
     private static Matrix4f worldMatrix(
             List<BedrockPlayerModelMetadata.Bone> chain,
             Function<BedrockPlayerModelMetadata.Bone, Matrix4f> currentAbsoluteMatrix,
-            Function<BedrockPlayerModelMetadata.Bone, Matrix4f> bindAbsoluteMatrix) {
+            Function<BedrockPlayerModelMetadata.Bone, Matrix4f> bindAbsoluteMatrix, boolean current) {
         final Matrix4f matrix = new Matrix4f();
         Matrix4f bindParent = null;
         for (BedrockPlayerModelMetadata.Bone bone : chain) {
@@ -185,6 +205,11 @@ public final class AttachableHostContext {
                     ? currentAbsolute
                     : new Matrix4f(bindParent).invert().mul(currentAbsolute);
             matrix.mul(local);
+            if (current && ((IModelPart)(Object)bone.part()).viaBedrockUtility$isEntityRelativeRotation()) {
+                Vector3f pivot = ((IModelPart)(Object)bone.part()).viaBedrockUtility$getPivot();
+                EntityRotationTransform.apply(matrix, new Matrix4f(), currentAbsolute,
+                        pivot.x / 16, pivot.y / 16, pivot.z / 16, new Matrix4f());
+            }
             bindParent = bindAbsoluteMatrix.apply(bone);
         }
         return matrix;

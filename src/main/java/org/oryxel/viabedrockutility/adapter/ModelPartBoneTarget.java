@@ -40,6 +40,12 @@ public class ModelPartBoneTarget implements IBoneTarget {
     }
 
     @Override
+    public Vector3f readAnimationOffset(Vector3f destination) {
+        Vector3f stored = mixin.viaBedrockUtility$getOffset();
+        return destination.set(stored.x, -stored.y, stored.z);
+    }
+
+    @Override
     public float getScaleX() {
         return part.xScale;
     }
@@ -60,6 +66,9 @@ public class ModelPartBoneTarget implements IBoneTarget {
         part.yScale = y;
         part.zScale = z;
     }
+
+    @Override public boolean isEntityRelativeRotation() { return mixin.viaBedrockUtility$isEntityRelativeRotation(); }
+    @Override public void setEntityRelativeRotation(boolean relative) { mixin.viaBedrockUtility$setEntityRelativeRotation(relative); }
 
     @Override
     public void addOffset(Vector3f offset) {
@@ -82,6 +91,12 @@ public class ModelPartBoneTarget implements IBoneTarget {
 
     @Override
     public void resetToDefaultPose() {
+        mixin.viaBedrockUtility$resetToDefaultPose();
+    }
+
+    @Override
+    public void resetForAnimationOverride() {
+        part.resetPose();
         mixin.viaBedrockUtility$resetToDefaultPose();
     }
 

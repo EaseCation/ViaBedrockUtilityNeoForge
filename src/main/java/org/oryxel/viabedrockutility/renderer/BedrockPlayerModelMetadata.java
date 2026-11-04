@@ -25,6 +25,8 @@ public final class BedrockPlayerModelMetadata {
     private static final Map<PlayerModel, BedrockPlayerModelMetadata> BY_MODEL = Collections.synchronizedMap(new WeakHashMap<>());
 
     private final Map<String, Bone> bones = new LinkedHashMap<>();
+    private final Map<String, Bone> originalBones = new HashMap<>();
+    private final Map<String, Vector3f> defaultBedrockPivots = new HashMap<>();
     private final boolean slim;
 
     public BedrockPlayerModelMetadata(boolean slim) {
@@ -57,7 +59,7 @@ public final class BedrockPlayerModelMetadata {
             ));
         }
 
-        bones.put(key, new Bone(
+        Bone registered = new Bone(
                 source.getName(),
                 key,
                 normalize(semanticParent),
@@ -67,11 +69,25 @@ public final class BedrockPlayerModelMetadata {
                 bounds(source),
                 locators,
                 part
-        ));
+        );
+        bones.put(key, registered);
+        originalBones.put(normalize(source.getName()), registered);
+        // Query defaults are author coordinates, not animated pivots or Java's presentation origin.
+        defaultBedrockPivots.put(key, new Vector3f(source.getPivot().getX(),
+                source.getPivot().getY(), source.getPivot().getZ()));
+    }
+
+    public double defaultBonePivot(String name, int axis) {
+        Bone bone = bone(name);
+        Vector3f pivot = bone == null ? null : defaultBedrockPivots.get(bone.key());
+        if (pivot == null || axis < 0 || axis > 2) return 0.0;
+        return pivot.get(axis);
     }
 
     public Bone bone(String name) {
-        return bones.get(normalize(name));
+        final String key = normalize(name);
+        final Bone canonical = bones.get(key);
+        return canonical != null ? canonical : originalBones.get(key);
     }
 
     public Bone firstBone(String... names) {

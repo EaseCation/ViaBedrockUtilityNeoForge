@@ -15,7 +15,12 @@ public final class BedrockPlayerParentPose {
             return;
         }
         final AttachableHostContext host = new AttachableHostContext(metadata);
-        for (BedrockPlayerModelMetadata.Bone bone : metadata.bones()) {
+        final var bones = metadata.bones();
+        final boolean hasRelative = bones.stream().anyMatch(bone ->
+                ((IModelPart)(Object)bone.part()).viaBedrockUtility$isEntityRelativeRotation());
+        for (BedrockPlayerModelMetadata.Bone bone : bones) {
+            ((IModelPart) (Object) bone.part()).viaBedrockUtility$setAbsoluteParentPose(
+                    hasRelative ? host.absoluteParentPoseForRelativeChain(bone) : null);
             ((IModelPart) (Object) bone.part()).viaBedrockUtility$setParentPose(
                     host.flattenedParentPose(bone));
         }

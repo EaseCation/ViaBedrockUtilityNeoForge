@@ -26,8 +26,17 @@ public abstract class CuboidMixin implements ICuboid {
     @Unique
     private boolean isVBU;
 
-    @Unique
-    private float vOffset;
+    @Unique private float vOffset;
+    @Unique private boolean vbu$animatedUv;
+    @Unique private Runnable vbu$geometryListener;
+    @Override public boolean viaBedrockUtility$hasAnimatedUv() { return vbu$animatedUv; }
+    @Override public void viaBedrockUtility$watchGeometry(Runnable listener) {
+        if (vbu$geometryListener != null && vbu$geometryListener != listener) throw new IllegalStateException("Geometry already observed");
+        vbu$geometryListener = listener;
+    }
+    @Override public void viaBedrockUtility$unwatchGeometry(Runnable listener) {
+        if (vbu$geometryListener == listener) vbu$geometryListener = null;
+    }
 
     @Unique
     private VbuCompiledCuboid vbu$compiledGeometry;
@@ -65,6 +74,7 @@ public abstract class CuboidMixin implements ICuboid {
                 ? VbuCompiledCuboid.compileBox(
                         this.polygons, box[0], box[1], box[2], box[3], box[4], box[5])
                 : VbuCompiledCuboid.compile(this.polygons);
+        if (vbu$geometryListener != null) vbu$geometryListener.run();
     }
 
     @Override
@@ -79,7 +89,10 @@ public abstract class CuboidMixin implements ICuboid {
 
     @Override
     public void viaBedrockUtility$setVOffset(float offset) {
+        if (Float.floatToIntBits(this.vOffset) == Float.floatToIntBits(offset)) return;
         this.vOffset = offset;
+        this.vbu$animatedUv = true;
+        if (vbu$geometryListener != null) vbu$geometryListener.run();
     }
 
     @Inject(method = "compile", at = @At("HEAD"), cancellable = true)

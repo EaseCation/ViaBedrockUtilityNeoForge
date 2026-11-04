@@ -25,7 +25,13 @@ public final class AttachableQueryProviders {
         PROVIDERS.removeIf(registration -> registration.ownerModId().equals(ownerModId));
         final Set<String> normalizedNames = new LinkedHashSet<>();
         queryNames.forEach(name -> normalizedNames.add(normalize(name)));
-        PROVIDERS.add(new Registration(ownerModId, Set.copyOf(normalizedNames), provider));
+        final Set<String> namespaces = new LinkedHashSet<>();
+        for (String name : normalizedNames) {
+            for (int dot = name.indexOf('.'); dot >= 0; dot = name.indexOf('.', dot + 1)) {
+                namespaces.add(name.substring(0, dot));
+            }
+        }
+        PROVIDERS.add(new Registration(ownerModId, Set.copyOf(normalizedNames), Set.copyOf(namespaces), provider));
     }
 
     public static void unregister(String ownerModId) {
@@ -70,9 +76,9 @@ public final class AttachableQueryProviders {
     }
 
     public static boolean isNamespace(String queryPrefix) {
-        final String prefix = normalize(queryPrefix) + ".";
+        final String prefix = normalize(queryPrefix);
         for (Registration registration : PROVIDERS) {
-            if (registration.queryNames().stream().anyMatch(name -> name.startsWith(prefix))) {
+            if (registration.namespaces().contains(prefix)) {
                 return true;
             }
         }
@@ -99,7 +105,7 @@ public final class AttachableQueryProviders {
         WARNED_PROVIDER_FAILURE.clear();
     }
 
-    private record Registration(String ownerModId, Set<String> queryNames,
+    private record Registration(String ownerModId, Set<String> queryNames, Set<String> namespaces,
                                 AttachableQueryProvider provider) {
     }
 }

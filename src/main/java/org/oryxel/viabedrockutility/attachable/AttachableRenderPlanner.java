@@ -27,6 +27,8 @@ import java.util.function.Predicate;
  * vetoes the whole render before any pass can commit partial geometry.
  */
 final class AttachableRenderPlanner {
+    /** Internal reference, not an authored host-bone name. */
+    static final String ENTITY_SPACE_BINDING = "@entity";
     private AttachableRenderPlanner() {
     }
 
@@ -81,8 +83,9 @@ final class AttachableRenderPlanner {
             for (Map.Entry<String, String> binding : rootBindings.entrySet()) {
                 HostGroup<B> group = hostGroups.get(binding.getValue());
                 if (group == null) {
-                    final B hostBone = hostBoneLookup.apply(binding.getValue());
-                    if (hostBone == null) {
+                    final boolean entitySpace = ENTITY_SPACE_BINDING.equals(binding.getValue());
+                    final B hostBone = entitySpace ? null : hostBoneLookup.apply(binding.getValue());
+                    if (!entitySpace && hostBone == null) {
                         fatalDetail.accept("Host binding bone is missing: " + binding.getValue());
                         warnings.accept("binding:" + binding.getValue(),
                         "Missing host binding bone '" + binding.getValue()
@@ -121,7 +124,9 @@ final class AttachableRenderPlanner {
             }
             String binding = bone.getBinding();
             if (binding.isBlank()) {
-                binding = defaultHostBone;
+                // Legacy skeletal attachables reproduce the actor's named hierarchy. A shared
+                // root binds to that actor bone; unrelated unbound roots stay in entity space.
+                binding = knownHostBone.test(bone.getName()) ? bone.getName() : defaultHostBone;
             } else if (!knownHostBone.test(binding)) {
                 try {
                     final Value evaluated = MoLangEngine.eval(scope, context, binding);
@@ -140,6 +145,9 @@ final class AttachableRenderPlanner {
                     warnings.accept("binding-eval:" + binding,
                             "Binding expression '" + binding + "' failed to evaluate; treating it as a literal bone name");
                 }
+            }
+            if (!bone.getBinding().isBlank() && ENTITY_SPACE_BINDING.equals(binding)) {
+                throw new IllegalArgumentException("Reserved internal binding reference on bone " + bone.getName());
             }
             bindings.put(bone.getName(), binding);
         }

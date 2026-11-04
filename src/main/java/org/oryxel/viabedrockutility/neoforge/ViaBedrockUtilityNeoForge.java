@@ -36,6 +36,7 @@ public class ViaBedrockUtilityNeoForge {
 		LodConfig.load();
 		ViaBedrockUtility.getInstance().init();
 		modEventBus.addListener(ViaBedrockUtility.getInstance()::registerPayloads);
+        modEventBus.addListener(org.oryxel.viabedrockutility.attachable.AttachableMaterials::registerPipelines);
 		// Retire client objects that retain resources or mutable animation state across reload generations.
 		modEventBus.addListener((AddClientReloadListenersEvent event) -> event.addListener(
 				ResourceLocation.fromNamespaceAndPath(MOD_ID, "runtime_caches"),
@@ -43,6 +44,7 @@ public class ViaBedrockUtilityNeoForge {
 					DeferredNameTag.clearCache();
 					FrozenMeshDrawQueue.clear();
 					FrozenEntityMeshCache.global().invalidateAll("resource_reload");
+                    org.oryxel.viabedrockutility.renderer.RigidMeshRenderer.clear("resource_reload");
 					final var payloadHandler = ViaBedrockUtility.getInstance().getPayloadHandler();
 					if (payloadHandler != null) {
 						payloadHandler.resetPlayerAnimationRuntimes();
@@ -62,6 +64,7 @@ public class ViaBedrockUtilityNeoForge {
 			// Only name tags submitted after the main opaque pass belong to the main camera. Iris has
 			// already rendered shadow-map entities with a different projection and no AfterEntities event.
 			DeferredNameTag.beginMainEntityPass();
+            org.oryxel.viabedrockutility.renderer.RigidMeshRenderer.prepareFrame();
 		});
 		// Replay VBU name tags after all entity geometry is drawn so they show through entities
 		// (faint) instead of being painted over. See DeferredNameTag for the rationale.

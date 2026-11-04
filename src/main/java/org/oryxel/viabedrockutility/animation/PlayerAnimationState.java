@@ -192,7 +192,7 @@ public record PlayerAnimationState(
         if (stack == null || stack.isEmpty()) {
             return "";
         }
-        final ResourceLocation identifier = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        final ResourceLocation identifier = org.oryxel.viabedrockutility.item.BedrockItemIdentity.resolve(stack);
         return identifier == null ? "" : identifier.toString();
     }
 

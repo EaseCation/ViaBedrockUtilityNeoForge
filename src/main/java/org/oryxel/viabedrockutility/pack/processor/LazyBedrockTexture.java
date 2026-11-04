@@ -21,6 +21,7 @@ final class LazyBedrockTexture extends AbstractTexture {
     private final Consumer<Throwable> decodeFailure;
     private byte[] encodedImage;
     private boolean closed;
+    private boolean decodeFailed;
 
     LazyBedrockTexture(Supplier<String> label, byte[] encodedImage, Consumer<Throwable> decodeFailure) {
         this.label = Objects.requireNonNull(label, "label");
@@ -34,6 +35,11 @@ final class LazyBedrockTexture extends AbstractTexture {
 
     synchronized void preload() {
         ensureLoaded();
+    }
+
+    synchronized void requireLoaded() {
+        ensureLoaded();
+        if (decodeFailed) throw new IllegalStateException("Required texture decoded as missing-image fallback");
     }
 
     @Override
@@ -85,6 +91,7 @@ final class LazyBedrockTexture extends AbstractTexture {
         try {
             decoded = NativeImage.read(this.encodedImage);
         } catch (IOException | RuntimeException exception) {
+            this.decodeFailed = true;
             this.decodeFailure.accept(exception);
             decoded = MissingTextureAtlasSprite.generateMissingImage();
         }
@@ -92,6 +99,8 @@ final class LazyBedrockTexture extends AbstractTexture {
             final GpuDevice device = RenderSystem.getDevice();
             this.texture = device.createTexture(this.label, 5, TextureFormat.RGBA8,
                     image.getWidth(), image.getHeight(), 1, 1);
+            // Independent Bedrock textures repeat; atlas/clamped vanilla textures are not changed.
+            this.texture.setAddressMode(com.mojang.blaze3d.textures.AddressMode.REPEAT);
             this.texture.setTextureFilter(FilterMode.NEAREST, false);
             this.textureView = device.createTextureView(this.texture);
             device.createCommandEncoder().writeToTexture(this.texture, image);

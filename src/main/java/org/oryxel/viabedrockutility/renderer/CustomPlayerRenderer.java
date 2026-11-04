@@ -8,7 +8,7 @@ import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.core.registries.BuiltInRegistries;
+import org.oryxel.viabedrockutility.item.BedrockItemIdentity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import org.joml.Matrix4f;
 import net.easecation.bedrockmotion.pack.PackManager;
@@ -85,12 +85,10 @@ public class CustomPlayerRenderer extends PlayerRenderer {
                 new AttachableOwnerSnapshot(player.getUUID(), "minecraft:player",
                         player.getAttackAnim(partialTick), state.xRot,
                         state.yRot));
-        ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setPlayerAnimationState(
-                PlayerAnimationState.thirdPerson(player, state, partialTick));
     }
 
     private static ResourceLocation itemIdentifier(net.minecraft.world.item.ItemStack stack) {
-        return stack == null || stack.isEmpty() ? null : BuiltInRegistries.ITEM.getKey(stack.getItem());
+        return BedrockItemIdentity.resolve(stack);
     }
 
     @Override
@@ -213,12 +211,11 @@ public class CustomPlayerRenderer extends PlayerRenderer {
     }
 
     public boolean sampleFirstPerson(PlayerAnimationState state) {
+        org.oryxel.viabedrockutility.animation.PlayerPoseLayers.begin(this.model);
         final PlayerAnimationRuntime runtime = playerAnimationRuntime(state);
-        if (runtime == null) {
-            return false;
-        }
-        runtime.sampleFirstPerson(this.model, state);
-        return true;
+        if (runtime != null) runtime.sampleFirstPerson(this.model, state);
+        boolean layer = org.oryxel.viabedrockutility.animation.PlayerPoseLayers.sample(this.model, state);
+        return runtime != null || layer;
     }
 
     public PlayerAnimationRuntime.DebugSnapshot playerAnimationDebugSnapshot() {

@@ -6,6 +6,9 @@ import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import org.oryxel.viabedrockutility.mixin.interfaces.ICustomPlayerRendererHolder;
 import org.oryxel.viabedrockutility.mixin.interfaces.IModelPart;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
+import org.oryxel.viabedrockutility.animation.PlayerPoseLayers;
+import org.oryxel.viabedrockutility.renderer.BedrockPlayerParentPose;
+import org.oryxel.viabedrockutility.renderer.BedrockPlayerArmorPose;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -35,15 +38,29 @@ public abstract class PlayerEntityModelMixin {
         }
     }
 
+    @Inject(method = "setupAnim(Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;)V", at = @At("HEAD"))
+    private void restoreOwnedLayers(PlayerRenderState state, CallbackInfo ci) {
+        PlayerPoseLayers.begin((PlayerModel) (Object) this);
+    }
+
     @Inject(method = "setupAnim(Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;)V", at = @At("TAIL"))
     private void applyBedrockAnimations(PlayerRenderState state, CallbackInfo ci) {
         final var runtime = viaBedrockUtility$runtime(state);
-        if (runtime == null) {
-            return;
-        }
         final var snapshot = ((ICustomPlayerRendererHolder) state)
                 .viaBedrockUtility$getPlayerAnimationState();
-        runtime.sampleThirdPerson((PlayerModel) (Object) this, snapshot);
+        final var model = (PlayerModel) (Object) this;
+        if (runtime != null) {
+            runtime.sampleThirdPerson(model, snapshot);
+        } else if (org.oryxel.viabedrockutility.renderer.BedrockPlayerModelMetadata.get(model) != null) {
+            // Vanilla computes head look in actor space, independently of the torso ModelPart.
+            // Restoring a Bedrock semantic body parent must not rotate/scale that look a second time.
+            // An owned overriding head animation can reset/replace this base-space declaration.
+            ((IModelPart)(Object)model.head).viaBedrockUtility$setEntityRelativeRotation(true);
+        }
+        if (PlayerPoseLayers.sample(model, snapshot)) {
+            BedrockPlayerParentPose.update(model);
+            BedrockPlayerArmorPose.update(model);
+        }
     }
 
     @Unique

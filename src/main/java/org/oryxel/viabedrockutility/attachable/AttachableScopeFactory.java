@@ -50,7 +50,7 @@ final class AttachableScopeFactory {
                                       AttachableQueryContext.ViewContext view, long tick, float partialTick,
                                       String attachable) {
             final MutableObjectBinding variables = new MutableObjectBinding();
-            final Scope scope = Scope.create();
+            final Scope scope = net.easecation.bedrockmotion.mocha.MoLangEngine.newScope();
             scope.set("variable", variables);
             scope.set("v", variables);
             return create(scope, new RuntimeActor(variables), owner, ownerEntity, item, hand, arm, view,

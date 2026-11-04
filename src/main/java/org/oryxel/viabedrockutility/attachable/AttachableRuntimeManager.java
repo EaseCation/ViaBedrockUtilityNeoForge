@@ -8,7 +8,7 @@ import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
-import net.minecraft.core.registries.BuiltInRegistries;
+import org.oryxel.viabedrockutility.item.BedrockItemIdentity;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.HumanoidArm;
@@ -47,7 +47,7 @@ public final class AttachableRuntimeManager {
 
     private static final long RUNTIME_TTL_TICKS = 20L * 30L;
     private static final long DEBUG_ATTEMPT_TTL_TICKS = 20L * 30L;
-    private final AttachableRuntimeRegistry<AttachableRuntimeInstance> runtimes = new AttachableRuntimeRegistry<>();
+    private final AttachableRuntimeRegistry<AttachableRuntimeInstance> runtimes = new AttachableRuntimeRegistry<>(AttachableRuntimeInstance::close);
     private final DetachedAttachableRenderer detached = new DetachedAttachableRenderer();
     private final AttachableDebugAttemptStore debugAttempts = new AttachableDebugAttemptStore();
     private final AttachableClientTickCounter tickCounter = new AttachableClientTickCounter();
@@ -78,6 +78,11 @@ public final class AttachableRuntimeManager {
     }
 
     public void tick() {
+        FirstPersonSkinLayers.tick();
+        FirstPersonViewSpace.tick();
+        AttachableSurfaces.tick();
+        AttachablePoseLayers.tick();
+        AttachableWorldPoses.tick();
         final Minecraft minecraft = Minecraft.getInstance();
         final AttachableClientTickCounter.Snapshot clock = tickCounter.advance(minecraft.level);
         if (clock.levelChanged()) {
@@ -91,6 +96,18 @@ public final class AttachableRuntimeManager {
         final long tick = clock.tick();
         for (Map.Entry<AttachableRuntimeRegistry.RuntimeKey, AttachableRuntimeRegistry.EntryView<AttachableRuntimeInstance>> entry
                 : runtimes.snapshot().entrySet()) {
+            // Visibility is not equipment ownership. A temporarily culled held item may keep
+            // its clock, but an unequipped/removed owner must not continue an old controller or
+            // resume it on re-equip. Read identity only; ammo/component updates do not restart it.
+            final var owner = minecraft.level.getPlayerByUUID(entry.getKey().ownerUuid());
+            final ResourceLocation heldIdentifier = owner == null ? null : BedrockItemIdentity.resolve(
+                    entry.getKey().hand() == AttachableQueryContext.LogicalHand.MAIN_HAND
+                            ? owner.getMainHandItem() : owner.getOffhandItem());
+            if (heldIdentifier == null
+                    || !heldIdentifier.toString().equals(entry.getValue().identity().itemIdentifier())) {
+                runtimes.removeIfSame(entry.getKey(), entry.getValue().runtime());
+                continue;
+            }
             try {
                 entry.getValue().runtime().advanceTo(tick,
                         authoritativeTickView(minecraft, entry.getKey().ownerUuid()));
@@ -124,7 +141,12 @@ public final class AttachableRuntimeManager {
      * mod configuration, not runtime state, and deliberately survive.
      */
     public void clear() {
+        AttachableWorldPoses.clear();
+        AttachablePoseLayers.clearModels();
+        FirstPersonRenderTrace.clearBoneCapture();
+        BedrockItemIdentity.clear();
         runtimes.clear();
+        org.oryxel.viabedrockutility.renderer.RigidMeshRenderer.clear("attachable_clear");
         detached.clear();
         debugAttempts.clear();
         AttachableDebugLog.clearWarned();
@@ -133,6 +155,16 @@ public final class AttachableRuntimeManager {
 
     public int size() {
         return runtimes.size();
+    }
+
+    public Map<String, Object> inspectVariables(UUID owner, boolean offhand, List<String> names) {
+        if (names.size() > 32 || names.stream().anyMatch(name -> name == null || name.length() > 256)) {
+            throw new IllegalArgumentException("Attachable inspection accepts at most 32 bounded variable names");
+        }
+        final var key = new AttachableRuntimeRegistry.RuntimeKey(owner,
+                offhand ? AttachableQueryContext.LogicalHand.OFF_HAND : AttachableQueryContext.LogicalHand.MAIN_HAND);
+        final var entry = runtimes.snapshot().get(key);
+        return entry == null ? Map.of() : entry.runtime().inspectVariables(names);
     }
 
     public DebugRenderMode debugRenderMode() {
@@ -155,7 +187,7 @@ public final class AttachableRuntimeManager {
                             ? null : runtime.lastPhysicalAnchorMatrix.get(new float[16]),
                     runtime.lastGeometryInstallationMatrix == null
                             ? null : runtime.lastGeometryInstallationMatrix.get(new float[16]),
-                    runtime.lastGeometrySummary,
+                    runtime.lastGeometrySummary(),
                     runtime.lastRenderPath);
         }).toList();
     }
@@ -191,7 +223,7 @@ public final class AttachableRuntimeManager {
         if (stack == null || stack.isEmpty()) {
             return AttachableItemSnapshot.EMPTY;
         }
-        final ResourceLocation identifier = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        final ResourceLocation identifier = BedrockItemIdentity.resolve(stack);
         if (!candidateItemIdentifiers.contains(identifier)) {
             return AttachableItemSnapshot.EMPTY;
         }
@@ -281,6 +313,7 @@ public final class AttachableRuntimeManager {
         try {
             // An item can change after the client tick has already advanced the old hand runtime.
             // Prime the replacement with its current frame before submitting raw geometry.
+            runtime.prepareFrame(tick, partialTick);
             runtime.advanceCurrentFrameTo(tick);
             final boolean rendered = runtime.render(host, poses, buffers, packedLight, partialTick, hostMeshRenderer);
             recordAttempt(key, tick, generation.generation(), item, view,

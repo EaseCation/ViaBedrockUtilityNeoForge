@@ -39,15 +39,17 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /** One live attachable: animation sampling, two-phase pass submission, binding/material/visibility state. */
-final class AttachableRuntimeInstance {
+final class AttachableRuntimeInstance implements AutoCloseable {
     private final AttachableDefinitions.AttachableDefinition definition;
     private final PackManager packs;
+    private final String queryIdentifier;
     private final AnimationClock.Client clock = new AnimationClock.Client();
     private final MutableObjectBinding variables = new MutableObjectBinding();
     private final AttachableScopeFactory.RuntimeActor actor = new AttachableScopeFactory.RuntimeActor(variables);
-    private final Scope persistentScope = Scope.create();
+    private final Scope persistentScope = net.easecation.bedrockmotion.mocha.MoLangEngine.newScope();
     private final AttachableAnimationRuntime animation;
     private final Map<ModelKey, ModelState> models = new HashMap<>();
     private AttachableScopeFactory.RuntimeScope frame;
@@ -65,44 +67,55 @@ final class AttachableRuntimeInstance {
     volatile List<String> lastRenderPasses = List.of();
     volatile Matrix4f lastPhysicalAnchorMatrix;
     volatile Matrix4f lastGeometryInstallationMatrix;
-    volatile String lastGeometrySummary = "unbuilt";
+    private volatile Model lastGeometryModel;
     volatile String lastRenderPath = "VBU_ATTACHABLE";
     volatile String lastFailure = "Runtime did not submit geometry";
     private final List<PendingParticleEvent> pendingParticleEvents = new ArrayList<>();
     private final List<PendingSoundEvent> pendingSoundEvents = new ArrayList<>();
-    private boolean pendingEventsDispatched;
+    // Transient effects wait only for a nearby displayed pose, never for a culled holder to return.
+    private static final long EVENT_POSE_MAX_AGE_TICKS = 2;
+    private static final int MAX_PENDING_EVENTS = 128;
+    private long expiredEvents, overflowEvents, consumedEvents;
 
-    private record PendingParticleEvent(String alias, String locator, String preEffectExpression) {}
-    private record PendingSoundEvent(String alias, String locator) {}
-    private record ModelKey(String geometry, String texture) {}
+    private record PendingParticleEvent(String alias, String locator, String preEffectExpression, long tick) {}
+    private record PendingSoundEvent(String alias, String locator, long tick) {}
+    private record ModelKey(String geometry, String texture, Set<String> entityRoots) {}
 
     AttachableRuntimeInstance(AttachableDefinitions.AttachableDefinition definition, PackManager packs) {
+        this(definition, packs, definition.identifier());
+    }
+
+    AttachableRuntimeInstance(AttachableDefinitions.AttachableDefinition definition, PackManager packs, String queryIdentifier) {
         this.definition = definition;
         this.packs = packs;
+        this.queryIdentifier = queryIdentifier;
         persistentScope.set("variable", variables);
         persistentScope.set("v", variables);
-        this.animation = new AttachableAnimationRuntime(definition.data(), packs, clock,
+        this.animation = new AttachableAnimationRuntime(definition.data(), definition.program(), packs, clock,
                 new AnimationEventListener() {
                     @Override
                     public void onTimelineEvent(List<String> expressions) {
-                        // Timeline script expressions remain owned by BedrockMotion. They are not
-                        // blindly interpreted as Java sound names; pre_animation/query writes are
-                        // evaluated there and typed particle keyframes arrive below.
-                        AttachableDebugLog.warnOnce(definition.identifier() + ":timeline-expression",
-                                "[Attachable] Timeline expressions received for '" + definition.identifier() + "'", null);
+                        try {
+                            for (String expression : expressions) {
+                                net.easecation.bedrockmotion.mocha.MoLangEngine.eval(
+                                        frame.scope(), frame.context(), expression);
+                            }
+                        } catch (IOException | RuntimeException failure) {
+                            AttachableDebugLog.warnOnce(definition.identifier() + ":timeline-expression",
+                                    "[Attachable] Timeline expression failed for '" + definition.identifier() + "'", failure);
+                        }
                     }
 
                     @Override
                     public void onParticleEvent(AnimationParticleEvent event) {
-                        pendingParticleEvents.add(new PendingParticleEvent(
-                                event.effect(), event.locator(), event.preEffectExpression()));
-                        pendingEventsDispatched = false;
+                        if (acceptEvent(event.tick())) pendingParticleEvents.add(new PendingParticleEvent(
+                                event.effect(), event.locator(), event.preEffectExpression(), event.tick()));
                     }
 
                     @Override
                     public void onSoundEvent(AnimationSoundEvent event) {
-                        pendingSoundEvents.add(new PendingSoundEvent(event.effect(), event.locator()));
-                        pendingEventsDispatched = false;
+                        if (acceptEvent(event.tick())) pendingSoundEvents.add(new PendingSoundEvent(
+                                event.effect(), event.locator(), event.tick()));
                     }
 
                     @Override
@@ -121,10 +134,21 @@ final class AttachableRuntimeInstance {
         this.hand = hand;
         this.arm = arm;
         this.view = view;
-        this.pendingEventsDispatched = false;
         actor.variables.set("is_enchanted", Value.of(item.stack().hasFoil()));
         frame = AttachableScopeFactory.RuntimeScope.persistent(persistentScope, actor, owner, ownerEntity, item,
-                hand, arm, view, tick, partialTick, definition.identifier());
+                hand, arm, view, tick, partialTick, queryIdentifier);
+    }
+
+    void skinContext(String variantQuery, int variant) {
+        variables.set("is_first_person", Value.of(true));
+        variables.set("is_paperdoll", Value.of(false));
+        variables.set("map_face_icon", Value.of(false));
+        var query = (MutableObjectBinding) frame.scope().get("query");
+        var inherited = query.get("mod");
+        var mod = new net.easecation.bedrockmotion.mocha.OverlayBinding(
+                inherited instanceof MutableObjectBinding binding ? binding : null);
+        mod.set(variantQuery.substring("query.mod.".length()), Value.of(variant));
+        query.set("mod", mod);
     }
 
     void advanceTo(long tick, AttachableQueryContext.ViewContext view) throws IOException {
@@ -133,7 +157,7 @@ final class AttachableRuntimeInstance {
         }
         this.view = view;
         frame = AttachableScopeFactory.RuntimeScope.persistent(persistentScope, actor, owner, ownerEntity, item,
-                hand, arm, view, tick, 0.0F, definition.identifier());
+                hand, arm, view, tick, 0.0F, queryIdentifier);
         advanceCurrentFrameTo(tick);
     }
 
@@ -146,16 +170,54 @@ final class AttachableRuntimeInstance {
         if (frame == null) {
             return false;
         }
+        expireEvents(tick);
+        updatePoseOverride();
         return animation.tick(tick, frame.scope(), frame.context());
+    }
+
+    private void updatePoseOverride() {
+        animation.setPoseOverride(AttachablePoseLayers.current(ownerEntity, item.itemIdentifier().toString(), hand, view));
+    }
+
+    void prepareFrame(long tick, float partialTick) {
+        updatePoseOverride();
+        animation.prepareFrame(org.oryxel.viabedrockutility.animation.BedrockFrameTime.INSTANCE.frame(),
+                view, tick, partialTick, frame.scope(), frame.context());
     }
 
     boolean hasAnimator(String identifier) {
         return animation.animators().containsKey(identifier);
     }
 
+    /** Explicit diagnostics only: reads existing variables, never evaluates a script or advances time. */
+    Map<String, Object> inspectVariables(List<String> names) {
+        final Map<String, Double> selected = new java.util.LinkedHashMap<>();
+        for (String requested : names) {
+            final String name = requested.startsWith("variable.") ? requested.substring(9)
+                    : requested.startsWith("v.") ? requested.substring(2) : requested;
+            if (variables.getProperty(name) != null) selected.put(requested, variables.get(name).getAsNumber());
+        }
+        Map<String, Object> result = new LinkedHashMap<>(Map.of("tick", animation.lastTick(), "view", view.name(),
+                "display_frame", animation.lastFrame(), "prepared_frames", animation.preparedFrames(),
+                "variables", Map.copyOf(selected), "cached_animations", List.copyOf(animation.animators().keySet()),
+                "active_animations", animation.activeAnimations(),
+                "frame_cache", animation.frameCacheStatistics(),
+                "binding", lastBinding, "host_inheritance", models.values().stream()
+                        .filter(model -> model.inheritance != null).flatMap(model -> model.inheritance.description().stream()).distinct().toList()));
+        result.put("events", Map.of("pending", pendingParticleEvents.size() + pendingSoundEvents.size(),
+                "expired", expiredEvents, "overflow", overflowEvents, "consumed", consumedEvents));
+        return Map.copyOf(result);
+    }
+
     boolean render(AttachableHostContext host, PoseStack poses,
                    MultiBufferSource buffers, int packedLight, float partialTick,
                    FirstPersonHostMeshRenderer hostMeshRenderer) throws IOException {
+        return render(host, poses, buffers, packedLight, partialTick, hostMeshRenderer, null);
+    }
+
+    boolean render(AttachableHostContext host, PoseStack poses,
+                   MultiBufferSource buffers, int packedLight, float partialTick,
+                   FirstPersonHostMeshRenderer hostMeshRenderer, ResourceLocation skin) throws IOException {
         final List<RenderControllerEvaluator.EvaluatedRenderPass> passes =
                 animation.evaluateRenderPasses(frame.scope(), frame.context());
         lastControllerStates = animation.controllers().entrySet().stream().collect(
@@ -179,7 +241,7 @@ final class AttachableRuntimeInstance {
                 AttachableRenderPlanner.plan(passes,
                         geometryName -> packs.getModelDefinitions().getEntityModels().get(geometryName),
                         binding -> host.bindingBone(binding, frame.hand(), frame.arm()) != null,
-                        frame.arm() == HumanoidArm.RIGHT ? "rightitem" : "leftitem",
+                        AttachableRenderPlanner.ENTITY_SPACE_BINDING,
                         binding -> host.bindingBone(binding, frame.hand(), frame.arm()),
                         frame.scope(), frame.context(),
                         (warnKey, message) -> AttachableDebugLog.warnOnce(definition.identifier() + ":" + warnKey,
@@ -210,26 +272,31 @@ final class AttachableRuntimeInstance {
         int submittedPasses = 0;
         for (AttachableRenderPlanner.PlannedPass<BedrockPlayerModelMetadata.Bone> plannedPass : planned) {
             try {
+                final Set<String> entityRoots = !plannedPass.rootBindings().containsValue(AttachableRenderPlanner.ENTITY_SPACE_BINDING)
+                        ? Set.of() : plannedPass.rootBindings().entrySet().stream()
+                        .filter(entry -> AttachableRenderPlanner.ENTITY_SPACE_BINDING.equals(entry.getValue()))
+                        .map(Map.Entry::getKey).collect(java.util.stream.Collectors.toUnmodifiableSet());
                 final ModelKey modelKey = new ModelKey(plannedPass.pass().geometryValue(),
-                        plannedPass.pass().textureValue());
+                        plannedPass.pass().textureValue(), entityRoots);
                 final ModelState model = models.computeIfAbsent(modelKey,
                         ignored -> {
                             final Model built = GeometryUtil.buildAttachableModel(
                                     plannedPass.geometry(), plannedPass.pass().geometryValue(),
                                     alias -> AttachableTextureResolver.resolve(
                                             packs, definition.data().getTextures(), alias,
-                                            plannedPass.pass().textureValue()));
-                            return new ModelState(built, new McBoneModel(built));
+                                            plannedPass.pass().textureValue()), entityRoots);
+                            return new ModelState(built, new McBoneModel(built), GeometryUtil.attachableAnchors(plannedPass.geometry(), entityRoots));
                         });
-                lastGeometrySummary = geometrySummary(model.model());
-                animation.sample(model.bones(), partialTick, frame.scope(), frame.context());
+                lastGeometryModel = model.model();
+                animation.sample(model.bones(), partialTick, frame.scope(), frame.context(),
+                        model.inheritance(plannedPass.geometry(), host));
                 boolean submittedPass = false;
                 for (AttachableRenderPlanner.HostGroup<BedrockPlayerModelMetadata.Bone> group
                         : plannedPass.hostGroups().values()) {
                     poses.pushPose();
                     try {
                         submittedPass |= renderGroup(host, model, plannedPass, group,
-                                poses, buffers, packedLight);
+                                poses, buffers, packedLight, skin);
                     } finally {
                         poses.popPose();
                     }
@@ -257,23 +324,24 @@ final class AttachableRuntimeInstance {
     private boolean renderGroup(AttachableHostContext host, ModelState model,
                                 AttachableRenderPlanner.PlannedPass<BedrockPlayerModelMetadata.Bone> plannedPass,
                                 AttachableRenderPlanner.HostGroup<BedrockPlayerModelMetadata.Bone> group,
-                                PoseStack poses, MultiBufferSource buffers, int packedLight) {
+                                PoseStack poses, MultiBufferSource buffers, int packedLight, ResourceLocation skin) {
         final boolean firstPerson = frame.view() == AttachableQueryContext.ViewContext.FIRST_PERSON;
         final BedrockPlayerModelMetadata.Bone hostBone = group.hostBone();
-        final Matrix4f physicalAnchor = firstPerson
-                ? host.firstPersonAttachmentMatrix(hostBone)
-                : host.attachmentMatrix(hostBone);
+        final Matrix4f physicalAnchor = hostBone == null
+                ? (firstPerson ? AttachableHostContext.firstPersonCameraMatrix() : new Matrix4f())
+                : firstPerson ? host.firstPersonAttachmentMatrix(hostBone) : host.attachmentMatrix(hostBone);
         final AttachableAnimationRuntime.Scale scale = animation.rootScale();
         final Matrix4f geometryInstallation = BedrockTransformConvention.geometryInstallation(
                 physicalAnchor, scale.x(), scale.y(), scale.z());
         lastHostProfile = firstPerson
                 ? AttachableHostContext.FIRST_PERSON_PROFILE
                 : "third_person_bone_deformation";
-        lastSemanticChain = host.semanticChain(hostBone);
-        lastPresentationChain = host.presentationChain(hostBone);
+        lastSemanticChain = hostBone == null ? List.of("entity") : host.semanticChain(hostBone);
+        lastPresentationChain = hostBone == null ? List.of("entity") : host.presentationChain(hostBone);
         lastPhysicalAnchorMatrix = new Matrix4f(physicalAnchor);
         lastGeometryInstallationMatrix = new Matrix4f(geometryInstallation);
-        dispatchPendingParticleEvents(physicalAnchor);
+        try (var entitySpace = org.oryxel.viabedrockutility.renderer.BedrockEntityRenderSpace.enter(
+                poses, firstPerson ? AttachableHostContext.firstPersonCameraMatrix() : null)) {
         poses.mulPose(geometryInstallation);
         if (firstPerson) {
             FirstPersonRenderTrace.record("item_submit", arm, poses);
@@ -285,57 +353,99 @@ final class AttachableRuntimeInstance {
         if (roots != null && roots.isEmpty()) {
             return false;
         }
-        final Map<ModelPart, Boolean> visibility =
-                applyVisibility(model.model(), plannedPass.pass().partVisibility());
-        try {
-            renderMaterials(model.model(), plannedPass.pass(), plannedPass.texture(),
-                    poses, buffers, packedLight, roots);
+        final FlagSnapshot visibility =
+                    applyVisibility(model, plannedPass.pass().partVisibility());
+        try (var cameraSpace = FirstPersonViewSpace.geometry(plannedPass.pass().geometryValue(), owner.uuid(), hand, firstPerson);
+             var worldAnchors = AttachableWorldPoses.geometry(owner.uuid(), item.itemIdentifier().toString(), hand, view, model.anchors)) {
+            renderMaterials(model, plannedPass.pass(), skin == null ? plannedPass.texture() : skin,
+                    poses, buffers, packedLight, roots, skin == null
+                            ? AttachableSurfaces.sample(owner.uuid(), item.itemIdentifier().toString(), hand)
+                            : AttachableSurfaces.Uv.IDENTITY);
+            worldAnchors.commit();
         } finally {
-            visibility.forEach((part, visible) -> part.visible = visible);
+            if (visibility != null) visibility.close();
         }
+        // A failed material submission must not consume effects against a pose that never drew.
+        // The bounded queue may be consumed by a later successful pass, or expire on tick.
+        dispatchPendingParticleEvents(physicalAnchor);
         return true;
+        }
     }
 
     private void dispatchPendingParticleEvents(Matrix4f physicalAnchor) {
-        if (pendingEventsDispatched || (pendingParticleEvents.isEmpty() && pendingSoundEvents.isEmpty())) return;
-        pendingEventsDispatched = true;
+        expireEvents(animation.lastTick());
+        if (pendingParticleEvents.isEmpty() && pendingSoundEvents.isEmpty()) return;
+        // Consume before invoking external sinks: failures/reentrant passes cannot replay a batch.
+        final var particles = List.copyOf(pendingParticleEvents);
+        final var sounds = List.copyOf(pendingSoundEvents);
+        pendingParticleEvents.clear(); pendingSoundEvents.clear();
         final float x = physicalAnchor.m30();
         final float y = physicalAnchor.m31();
         final float z = physicalAnchor.m32();
-        for (PendingParticleEvent event : List.copyOf(pendingParticleEvents)) {
-            final String identifier = definition.data().getParticleEffects().get(event.alias());
-            if (identifier == null || identifier.isBlank()) {
-                AttachableDebugLog.warnOnce(definition.identifier() + ":particle-alias:" + event.alias,
-                        "[Attachable] Particle alias '" + event.alias + "' has no definition", null);
-                continue;
+        for (PendingParticleEvent event : particles) {
+            consumedEvents++;
+            try {
+                final String identifier = definition.data().getParticleEffects().get(event.alias());
+                if (identifier == null || identifier.isBlank()) {
+                    AttachableDebugLog.warnOnce(definition.identifier() + ":particle-alias:" + event.alias,
+                            "[Attachable] Particle alias '" + event.alias + "' has no definition", null);
+                    continue;
+                }
+                // The physical anchor is the attachable item anchor. A locator-specific offset is only
+                // applied when the geometry exposes it. The locator resolver is intentionally a
+                // separate pose-provider boundary; never silently substitute the item bone because
+                // that would produce a plausible but incorrect muzzle/effect position.
+                if (event.locator() != null && !event.locator().isBlank()) {
+                    AttachableDebugLog.warnOnce(definition.identifier() + ":locator:" + event.locator(),
+                            "[Attachable] Locator '" + event.locator() + "' cannot be resolved by the current pose provider; dropping event", null);
+                    continue;
+                }
+                ViaBedrockUtility.getInstance().spawnParticle(
+                        org.oryxel.viabedrockutility.particle.BedrockParticleRequest.builder(identifier)
+                                .position(x, y, z)
+                                .preEffectExpression(event.preEffectExpression())
+                                .source("attachable-animation:" + definition.identifier())
+                                .build());
+            } catch (RuntimeException failure) {
+                AttachableDebugLog.warnOnce(definition.identifier() + ":particle-dispatch",
+                        "[Attachable] Particle dispatch failed for '" + definition.identifier() + "'", failure);
             }
-            // The physical anchor is the attachable item anchor. A locator-specific offset is only
-            // applied when the geometry exposes it. The locator resolver is intentionally a
-            // separate pose-provider boundary; never silently substitute the item bone because
-            // that would produce a plausible but incorrect muzzle/effect position.
-            if (event.locator() != null && !event.locator().isBlank()) {
-                AttachableDebugLog.warnOnce(definition.identifier() + ":locator:" + event.locator(),
-                        "[Attachable] Locator '" + event.locator() + "' cannot be resolved by the current pose provider; dropping event", null);
-                continue;
-            }
-            ViaBedrockUtility.getInstance().spawnParticle(
-                    org.oryxel.viabedrockutility.particle.BedrockParticleRequest.builder(identifier)
-                            .position(x, y, z)
-                            .preEffectExpression(event.preEffectExpression())
-                            .source("attachable-animation:" + definition.identifier())
-                            .build());
         }
-        pendingParticleEvents.clear();
-        for (PendingSoundEvent event : List.copyOf(pendingSoundEvents)) {
-            final String identifier = definition.data().getSoundEffects().get(event.alias());
-            if (identifier == null || identifier.isBlank()) {
-                AttachableDebugLog.warnOnce(definition.identifier() + ":sound-alias:" + event.alias(),
-                        "[Attachable] Sound alias '" + event.alias() + "' has no definition", null);
-                continue;
+        for (PendingSoundEvent event : sounds) {
+            consumedEvents++;
+            try {
+                final String identifier = definition.data().getSoundEffects().get(event.alias());
+                if (identifier == null || identifier.isBlank()) {
+                    AttachableDebugLog.warnOnce(definition.identifier() + ":sound-alias:" + event.alias(),
+                            "[Attachable] Sound alias '" + event.alias() + "' has no definition", null);
+                    continue;
+                }
+                ViaBedrockUtility.getInstance().playParticleSound(identifier, x, y, z, event.locator(), Map.of());
+            } catch (RuntimeException failure) {
+                AttachableDebugLog.warnOnce(definition.identifier() + ":sound-dispatch",
+                        "[Attachable] Sound dispatch failed for '" + definition.identifier() + "'", failure);
             }
-            ViaBedrockUtility.getInstance().playParticleSound(identifier, x, y, z, event.locator(), Map.of());
         }
-        pendingSoundEvents.clear();
+    }
+    private boolean acceptEvent(long tick) {
+        expireEvents(tick);
+        if (pendingParticleEvents.size() + pendingSoundEvents.size() < MAX_PENDING_EVENTS) return true;
+        overflowEvents++;
+        AttachableDebugLog.warnOnce(definition.identifier() + ":event-overflow",
+                "[Attachable] Transient event queue is full for '" + definition.identifier() + "'; dropping overflow", null);
+        return false;
+    }
+
+    private void expireEvents(long tick) {
+        int before = pendingParticleEvents.size() + pendingSoundEvents.size();
+        if (before == 0) return;
+        pendingParticleEvents.removeIf(event -> staleEvent(event.tick(), tick));
+        pendingSoundEvents.removeIf(event -> staleEvent(event.tick(), tick));
+        expiredEvents += before - pendingParticleEvents.size() - pendingSoundEvents.size();
+    }
+
+    private static boolean staleEvent(long created, long now) {
+        return created > now || now - created > EVENT_POSE_MAX_AGE_TICKS;
     }
 
     private List<ModelPart> rootParts(Model model, List<String> rootNames) {
@@ -361,40 +471,49 @@ final class AttachableRuntimeInstance {
         return roots;
     }
 
-    private void renderMaterials(Model model,
+    private void renderMaterials(ModelState state,
                                  RenderControllerEvaluator.EvaluatedRenderPass pass,
                                  ResourceLocation texture, PoseStack poses,
-                                 MultiBufferSource buffers, int packedLight, List<ModelPart> roots) {
+                                 MultiBufferSource buffers, int packedLight, List<ModelPart> roots, AttachableSurfaces.Uv uv) {
+        final Model model = state.model();
         if (pass.perBoneMaterial().isEmpty()) {
-            renderModel(model, roots, pass, texture, poses, buffers, packedLight,
-                    AttachableRenderTypes.renderType(pass, texture), pass.emissive(), pass.glint());
+            renderModel(state, roots, pass, texture, poses, buffers, packedLight,
+                    AttachableRenderTypes.renderType(pass, texture), pass.emissive(), pass.glint(), uv);
             return;
         }
 
         final LinkedHashSet<String> materials = new LinkedHashSet<>(pass.perBoneMaterial().values());
         for (String material : materials) {
-            final Map<ModelPart, Boolean> skipped =
-                    applyMaterialSelection(model, pass.perBoneMaterial(), material);
+            final FlagSnapshot skipped =
+                    applyMaterialSelection(state, pass.perBoneMaterial(), material);
             try {
                 final String normalized = material.toLowerCase(Locale.ROOT);
-                renderModel(model, roots, pass, texture, poses, buffers, packedLight,
-                        AttachableRenderTypes.renderType(material, pass, texture), normalized.contains("emissive"),
-                        normalized.contains("enchanted") || normalized.contains("glint"));
+                renderModel(state, roots, pass, texture, poses, buffers, packedLight,
+                        AttachableRenderTypes.renderType(material, pass, texture),
+                        normalized.contains("emissive") && !AttachableMaterials.emissiveAlpha(material),
+                        normalized.contains("enchanted") || normalized.contains("glint"), uv);
             } finally {
-                skipped.forEach((part, skipDraw) -> part.skipDraw = skipDraw);
+                skipped.close();
             }
         }
     }
 
-    private static void renderModel(Model model, List<ModelPart> roots,
+    private void renderModel(ModelState state, List<ModelPart> roots,
                                     RenderControllerEvaluator.EvaluatedRenderPass pass,
                                     ResourceLocation texture, PoseStack poses,
                                     MultiBufferSource buffers, int packedLight,
-                                    RenderType type, boolean emissive, boolean glint) {        final int light = pass.ignoreLighting() || emissive
+                                    RenderType type, boolean emissive, boolean glint, AttachableSurfaces.Uv uv) {        final int light = pass.ignoreLighting() || emissive
                 ? LightTexture.FULL_BRIGHT : packedLight;
         // Known limitation (mirrors BedrockMotion's EvaluatedRenderPass javadoc): enchanted/glint
         // materials degrade to the vanilla foil buffer, and Bedrock's second texture slot is not rendered.
-        final VertexConsumer consumer = ItemRenderer.getFoilBuffer(buffers, type, false, glint);
+        final VertexConsumer consumer = AttachableSurfaces.transform(
+                ItemRenderer.getFoilBuffer(buffers, type, false, glint), uv);
+        final Model model = state.model();
+        if (view == AttachableQueryContext.ViewContext.THIRD_PERSON && !glint) {
+            var rigid = state.rigid();
+            if (rigid != null && rigid.render(roots, poses, consumer, type, glint, light,
+                    OverlayTexture.NO_OVERLAY, pass.colorArgb(), uv)) return;
+        }
         if (roots == null) {
             model.renderToBuffer(poses, consumer, light, OverlayTexture.NO_OVERLAY, pass.colorArgb());
             return;
@@ -404,60 +523,139 @@ final class AttachableRuntimeInstance {
         }
     }
 
-    private static Map<ModelPart, Boolean> applyMaterialSelection(
-            Model model, Map<String, String> rules, String selectedMaterial) {
-        final LinkedHashMap<ModelPart, Boolean> previous = new LinkedHashMap<>();
-        for (ModelPart part : model.allParts()) {
-            final IModelPart extension = (IModelPart) (Object) part;
-            final String name = extension.viaBedrockUtility$getName();
-            if (name == null || extension.viaBedrockUtility$isCubeGroup()) {
-                continue;
+    private static FlagSnapshot applyMaterialSelection(
+            ModelState model, Map<String, String> rules, String selectedMaterial) {
+        final var matches = model.materialSelectors.resolve(rules);
+        final FlagSnapshot previous = model.materialFlags.acquire();
+        try {
+            for (var match : matches) {
+                final ModelPart part = match.part();
+                String material = null;
+                for (String key : match.keys()) material = rules.get(key);
+                previous.capture(part);
+                part.skipDraw = !selectedMaterial.equals(material);
             }
-            String material = null;
-            for (Map.Entry<String, String> rule : rules.entrySet()) {
-                if (globMatches(rule.getKey(), name)) {
-                    material = rule.getValue();
-                }
-            }
-            previous.put(part, part.skipDraw);
-            part.skipDraw = !selectedMaterial.equals(material);
-        }
-        return previous;
-    }
-
-    private static Map<ModelPart, Boolean> applyVisibility(
-            Model model, Map<String, Boolean> rules) {
-        final LinkedHashMap<ModelPart, Boolean> previous = new LinkedHashMap<>();
-        if (rules.isEmpty()) {
             return previous;
+        } catch (RuntimeException | Error failure) {
+            previous.close();
+            throw failure;
         }
-        for (ModelPart part : model.allParts()) {
-            final String name = ((IModelPart) (Object) part).viaBedrockUtility$getName();
-            if (name == null) {
-                continue;
-            }
-            for (Map.Entry<String, Boolean> rule : rules.entrySet()) {
-                if (globMatches(rule.getKey(), name)) {
-                    previous.putIfAbsent(part, part.visible);
-                    part.visible = rule.getValue();
+    }
+
+    private static FlagSnapshot applyVisibility(
+            ModelState model, Map<String, Boolean> rules) {
+        if (rules.isEmpty()) return null;
+        final var matches = model.visibilitySelectors.resolve(rules);
+        final FlagSnapshot previous = model.visibilityFlags.acquire();
+        try {
+            for (var match : matches) {
+                final ModelPart part = match.part();
+                if (!match.keys().isEmpty()) {
+                    previous.capture(part);
+                    part.visible = rules.get(match.keys().getLast());
                 }
             }
+            return previous;
+        } catch (RuntimeException | Error failure) {
+            previous.close();
+            throw failure;
         }
-        return previous;
     }
 
-    private static boolean globMatches(String pattern, String name) {
-        if (pattern.equals("*")) {
-            return true;
+    /** Per-model storage, reused across passes; nested draws retain separate restore frames. */
+    private static final class FlagSnapshots {
+        private final int capacity;
+        private final boolean visibility;
+        private final List<FlagSnapshot> frames = new ArrayList<>();
+        private int depth;
+        FlagSnapshots(int capacity, boolean visibility) { this.capacity = capacity; this.visibility = visibility; }
+        FlagSnapshot acquire() {
+            if (depth == frames.size()) frames.add(new FlagSnapshot(this, depth, capacity));
+            FlagSnapshot frame = frames.get(depth++);
+            frame.open = true;
+            return frame;
         }
-        final String regex = pattern.replace(".", "\\.").replace("*", ".*");
-        return name.matches("(?i)" + regex);
     }
 
-    private record ModelState(Model model, McBoneModel bones) {
+    private static final class FlagSnapshot implements AutoCloseable {
+        private final FlagSnapshots owner;
+        private final int index;
+        private final ModelPart[] parts;
+        private final boolean[] values;
+        private int count;
+        private boolean open;
+        FlagSnapshot(FlagSnapshots owner, int index, int capacity) {
+            this.owner = owner; this.index = index;
+            parts = new ModelPart[capacity]; values = new boolean[capacity];
+        }
+        void capture(ModelPart part) {
+            parts[count] = part;
+            values[count++] = owner.visibility ? part.visible : part.skipDraw;
+        }
+        @Override public void close() {
+            if (!open) return;
+            if (owner.depth != index + 1) throw new IllegalStateException("Part flags must restore in draw order");
+            while (count > 0) {
+                int i = --count;
+                if (owner.visibility) parts[i].visible = values[i];
+                else parts[i].skipDraw = values[i];
+                parts[i] = null;
+            }
+            owner.depth--;
+            open = false;
+        }
     }
 
-    private static String geometrySummary(Model model) {
+    private static final class ModelState {
+        private final Model model;
+        private final McBoneModel bones;
+        private final Map<AttachableWorldPoses.Target, AttachableWorldPoses.Local> anchors;
+        private final AttachablePartSelectors materialSelectors, visibilitySelectors;
+        private final FlagSnapshots materialFlags, visibilityFlags;
+        private BedrockPlayerModelMetadata inheritedFrom;
+        private HostBoneInheritance inheritance;
+        private org.oryxel.viabedrockutility.renderer.RigidMeshRenderer rigid;
+        private boolean rigidUnavailable;
+        org.oryxel.viabedrockutility.renderer.RigidMeshRenderer rigid() {
+            if (rigid == null && !rigidUnavailable) {
+                try { rigid = new org.oryxel.viabedrockutility.renderer.RigidMeshRenderer(model); }
+                catch (RuntimeException failure) {
+                    rigidUnavailable = true;
+                    org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge.LOGGER.warn("[Attachable] Rigid geometry is unavailable; retaining native rendering", failure);
+                }
+            }
+            return rigid;
+        }
+        void close() { if (rigid != null) rigid.close(); if (inheritance != null) inheritance.release(); }
+        ModelState(Model model, McBoneModel bones, Map<AttachableWorldPoses.Target, AttachableWorldPoses.Local> anchors) {
+            this.model = model; this.bones = bones; this.anchors = anchors;
+            materialSelectors = new AttachablePartSelectors(model, false);
+            visibilitySelectors = new AttachablePartSelectors(model, true);
+            materialFlags = new FlagSnapshots(model.allParts().size(), false);
+            visibilityFlags = new FlagSnapshots(model.allParts().size(), true);
+        }
+        Model model() { return model; }
+        McBoneModel bones() { return bones; }
+        Runnable inheritance(org.cube.converter.model.impl.bedrock.BedrockGeometryModel geometry,
+                             AttachableHostContext host) {
+            if (inheritedFrom != host.metadata()) {
+                if (inheritance != null) inheritance.release();
+                inheritedFrom = host.metadata();
+                inheritance = new HostBoneInheritance(geometry, model, inheritedFrom);
+            }
+            return inheritance;
+        }
+    }
+
+    @Override public void close() {
+        for (ModelState model : models.values()) model.close();
+        models.clear(); pendingParticleEvents.clear(); pendingSoundEvents.clear();
+        lastGeometryModel = null;
+    }
+
+    String lastGeometrySummary() {
+        Model model = lastGeometryModel;
+        if (model == null) return "unbuilt";
         int cuboids = 0;
         int vertices = 0;
         for (ModelPart part : model.allParts()) {

@@ -14,6 +14,55 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class FirstPersonRenderTrace {
     private static final ThreadLocal<UUID> OWNER = new ThreadLocal<>();
     private static final Map<UUID, Snapshot> LAST = new ConcurrentHashMap<>();
+    private static BoneCapture boneCapture;
+
+    /** One actual display frame, bounded and off by default. No pose is reevaluated. */
+    public static void captureBones(UUID owner, java.util.List<String> names) {
+        if (owner == null || names.isEmpty() || names.size() > 16
+                || names.stream().anyMatch(name -> name == null || name.isBlank() || name.length() > 256)) {
+            throw new IllegalArgumentException("Select 1..16 bounded bone names");
+        }
+        boneCapture = new BoneCapture(owner, java.util.Set.copyOf(names), System.nanoTime() + 2_000_000_000L);
+    }
+
+    public static void clearBoneCapture() { boneCapture = null; }
+
+    public static Map<String, Object> capturedBones() {
+        BoneCapture capture = boneCapture;
+        if (capture == null) return Map.of();
+        if (System.nanoTime() >= capture.deadline
+                || org.oryxel.viabedrockutility.animation.BedrockFrameTime.INSTANCE.frame() > capture.frame) capture.done = true;
+        return Map.of("complete", capture.done, "frame", capture.frame,
+                "truncated", capture.truncated, "parts", java.util.List.copyOf(capture.parts));
+    }
+
+    public static void recordBone(String name, boolean cubeGroup, PoseStack poses) {
+        BoneCapture capture = boneCapture;
+        if (capture == null || capture.done) return;
+        if (System.nanoTime() >= capture.deadline) { capture.done = true; return; }
+        if (!capture.owner.equals(OWNER.get())) return;
+        long frame = org.oryxel.viabedrockutility.animation.BedrockFrameTime.INSTANCE.frame();
+        if (frame < capture.frame) return;
+        if (frame > capture.frame) { capture.done = true; return; }
+        if (!capture.names.contains(name)) return;
+        if (capture.parts.size() >= 128) { capture.done = capture.truncated = true; return; }
+        capture.parts.add(Map.of("bone", name, "cube_group", cubeGroup,
+                "pose", poses.last().pose().get(new float[16]),
+                "final_pose", new Matrix4f(com.mojang.blaze3d.systems.RenderSystem.getModelViewMatrix())
+                        .mul(poses.last().pose()).get(new float[16])));
+    }
+
+    private static final class BoneCapture {
+        final UUID owner;
+        final java.util.Set<String> names;
+        final long deadline;
+        final java.util.List<Map<String, Object>> parts = new java.util.ArrayList<>();
+        final long frame = org.oryxel.viabedrockutility.animation.BedrockFrameTime.INSTANCE.frame() + 1;
+        boolean done, truncated;
+        BoneCapture(UUID owner, java.util.Set<String> names, long deadline) {
+            this.owner = owner; this.names = names; this.deadline = deadline;
+        }
+    }
 
     private FirstPersonRenderTrace() {
     }

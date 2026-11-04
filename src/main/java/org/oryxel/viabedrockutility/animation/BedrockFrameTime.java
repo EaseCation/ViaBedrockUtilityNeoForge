@@ -7,8 +7,10 @@ public final class BedrockFrameTime {
     private boolean initialized;
     private long previousNanos;
     private float deltaSeconds;
+    private long frame;
 
     public void beginFrame(long nowNanos) {
+        frame++;
         deltaSeconds = initialized ? Math.max(0L, nowNanos - previousNanos) / 1_000_000_000.0F : 0.0F;
         previousNanos = nowNanos;
         initialized = true;
@@ -17,4 +19,7 @@ public final class BedrockFrameTime {
     public float deltaSeconds() {
         return deltaSeconds;
     }
+
+    /** Display identity shared by player layers, attachables, shadows and material passes. */
+    public long frame() { return frame; }
 }

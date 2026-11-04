@@ -39,7 +39,8 @@ public final class BedrockJavaSoundPlayer {
         return true;
     }
 
-    static ResourceLocation resolveEvent(String identifier) {
+    /** Canonical Bedrock-to-Java event mapping, also used by hosts that own playback handles. */
+    public static ResourceLocation resolveEvent(String identifier) {
         if (identifier == null || identifier.isBlank()) return null;
         final String value = identifier.trim();
         try {

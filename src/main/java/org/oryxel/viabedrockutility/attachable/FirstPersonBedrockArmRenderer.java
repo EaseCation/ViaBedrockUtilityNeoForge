@@ -24,7 +24,8 @@ public final class FirstPersonBedrockArmRenderer {
         }
 
         poses.pushPose();
-        try {
+        try (var entitySpace = org.oryxel.viabedrockutility.renderer.BedrockEntityRenderSpace.enter(
+                poses, AttachableHostContext.firstPersonCameraMatrix())) {
             poses.mulPose(host.firstPersonArmRenderPrefix(armBone));
             FirstPersonRenderTrace.record("arm_prefix", arm, poses);
             // ModelPart.render() consumes this exact current absolute transform. Capture the

@@ -14,8 +14,6 @@ import org.oryxel.viabedrockutility.payload.impl.entity.ModelRequestPayload;
 import org.oryxel.viabedrockutility.payload.impl.player.PlayerAnimatePayload;
 import org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer;
 import team.unnamed.mocha.runtime.Scope;
-import team.unnamed.mocha.runtime.binding.JavaObjectBinding;
-import team.unnamed.mocha.runtime.standard.MochaMath;
 
 import java.util.Collections;
 import java.util.EnumSet;
@@ -27,13 +25,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Getter
 public class CustomEntityPayloadHandler extends PayloadHandler {
-    public static final Scope BASE_SCOPE = Scope.create();
+    public static final Scope BASE_SCOPE = net.easecation.bedrockmotion.mocha.MoLangEngine.newScope();
     public static final Material DEFAULT_MATERIAL;
     private final Map<UUID, ModelRequestState> activeModelRequests = new ConcurrentHashMap<>();
 
     static {
-        //noinspection UnstableApiUsage
-        BASE_SCOPE.set("math", JavaObjectBinding.of(MochaMath.class, null, new MochaMath()));
         BASE_SCOPE.readOnly(true);
 
         DEFAULT_MATERIAL = VanillaMaterials.getMaterial("entity");

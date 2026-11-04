@@ -30,10 +30,14 @@ public final class FirstPersonAttachableRenderer {
         if (player == null) {
             return;
         }
+        final AttachableQueryContext.LogicalHand logicalHand = event.getHand() == InteractionHand.MAIN_HAND
+                ? AttachableQueryContext.LogicalHand.MAIN_HAND
+                : AttachableQueryContext.LogicalHand.OFF_HAND;
+        final var renderedStack = FirstPersonViewSpace.renderItem(player, logicalHand, event.getItemStack());
         final var renderer = ViaBedrockUtility.getInstance().getPayloadHandler()
                 .getCachedPlayerRenderers().get(player.getUUID());
         final AttachableItemSnapshot item = ViaBedrockUtility.getInstance()
-                .getAttachableRuntimeManager().snapshotIfCandidate(event.getItemStack());
+                .getAttachableRuntimeManager().snapshotIfCandidate(renderedStack);
         if (!(renderer instanceof CustomPlayerRenderer customRenderer)) {
             if (!item.isEmpty() && DIAGNOSED.add("renderer:" + item.itemIdentifier())) {
                 ViaBedrockUtilityNeoForge.LOGGER.debug(
@@ -44,9 +48,6 @@ public final class FirstPersonAttachableRenderer {
             return;
         }
 
-        final AttachableQueryContext.LogicalHand logicalHand = event.getHand() == InteractionHand.MAIN_HAND
-                ? AttachableQueryContext.LogicalHand.MAIN_HAND
-                : AttachableQueryContext.LogicalHand.OFF_HAND;
         final PlayerAnimationState animationState = PlayerAnimationState.firstPerson(
                 player, event.getPartialTick(), event.getSwingProgress(), event.getEquipProgress());
         final HumanoidArm arm = logicalHand == AttachableQueryContext.LogicalHand.MAIN_HAND
@@ -54,7 +55,8 @@ public final class FirstPersonAttachableRenderer {
         final AttachableOwnerSnapshot owner = new AttachableOwnerSnapshot(
                 player.getUUID(), "minecraft:player", animationState.attackTime(),
                 animationState.targetXRotation(), animationState.targetYRotation());
-        if (!customRenderer.sampleFirstPerson(animationState)) {
+        final boolean playerPoseAvailable = customRenderer.sampleFirstPerson(animationState);
+        if (!playerPoseAvailable && !FirstPersonViewSpace.canRenderWithoutPlayerPose(player.getUUID(), item, logicalHand)) {
             return;
         }
 
@@ -72,6 +74,10 @@ public final class FirstPersonAttachableRenderer {
         event.getPoseStack().pushPose();
         try {
             FirstPersonRenderTrace.record("event", arm, event.getPoseStack());
+            if (!FirstPersonViewSpace.apply(player.getUUID(), item, logicalHand, event.getPoseStack(), playerPoseAvailable)) {
+                event.setCanceled(true);
+                return;
+            }
             FirstPersonRenderTrace.record("camera", arm, event.getPoseStack());
             final AttachableRenderResult result = ViaBedrockUtility.getInstance().getAttachableRuntimeManager().renderFirstPerson(
                     owner, item, logicalHand, arm,
@@ -84,14 +90,23 @@ public final class FirstPersonAttachableRenderer {
                 // Only the main-hand empty event renders an arm in vanilla; preserving that rule avoids
                 // introducing a second empty off-hand arm. Attachable items retain priority above.
                 if (logicalHand == AttachableQueryContext.LogicalHand.MAIN_HAND
-                        && event.getItemStack().isEmpty() && !player.isInvisible()
+                        && renderedStack.isEmpty() && !player.isInvisible()
                         && renderBedrockArm(event, customRenderer, arm)) {
                     event.setCanceled(true);
                 }
                 return;
             }
             event.setCanceled(true);
+            try {
+                FirstPersonSkinLayers.render(owner, item, logicalHand, arm, customRenderer.getPlayerModel(),
+                        customRenderer.getPlayerTexture(), event.getPoseStack(), event.getMultiBufferSource(),
+                        event.getPackedLight(), event.getPartialTick());
+            } catch (java.io.IOException | RuntimeException failure) {
+                AttachableDebugLog.warnOnce("owned-skin:" + item.itemIdentifier(),
+                        "[Attachable] Owned first-person skin layer failed", failure);
+            }
         } finally {
+            FirstPersonViewSpace.end();
             event.getPoseStack().popPose();
             FirstPersonRenderTrace.end();
             RENDERING.set(false);

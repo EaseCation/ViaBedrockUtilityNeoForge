@@ -1,6 +1,6 @@
 package org.oryxel.viabedrockutility.attachable;
 
-import net.minecraft.core.registries.BuiltInRegistries;
+import org.oryxel.viabedrockutility.item.BedrockItemIdentity;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
@@ -14,7 +14,7 @@ public record AttachableItemSnapshot(ResourceLocation itemIdentifier, ItemStack 
     public static AttachableItemSnapshot of(ItemStack stack) {
         return stack == null || stack.isEmpty()
                 ? EMPTY
-                : new AttachableItemSnapshot(BuiltInRegistries.ITEM.getKey(stack.getItem()), stack);
+                : new AttachableItemSnapshot(BedrockItemIdentity.resolve(stack), stack);
     }
 
     static AttachableItemSnapshot of(ResourceLocation itemIdentifier, ItemStack stack) {

@@ -28,6 +28,9 @@ final class AttachableRenderTypes {
                                  RenderControllerEvaluator.EvaluatedRenderPass pass,
                                  ResourceLocation texture) {
         final String name = material.toLowerCase(Locale.ROOT);
+        if (AttachableMaterials.emissiveAlpha(name)) {
+            return AttachableMaterials.emissiveAlpha(texture, (pass.colorArgb() >>> 24) < 255);
+        }
         if ((pass.colorArgb() >>> 24) < 255 || name.contains("blend") || name.contains("spectator")) {
             return RenderType.entityTranslucent(texture);
         }

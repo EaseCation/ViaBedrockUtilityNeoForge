@@ -159,6 +159,26 @@ public class ViaBedrockUtility {
         return this.packGeneration.manager();
     }
 
+    /** Bounded read-only evidence from the real attachable runtime, not a second evaluator. */
+    public Map<String, Object> inspectAttachableVariables(UUID owner, boolean offhand, List<String> names) {
+        if (!Minecraft.getInstance().isSameThread()) {
+            throw new IllegalStateException("Attachable inspection requires the client thread");
+        }
+        return this.attachableRuntimeManager.inspectVariables(owner, offhand, names);
+    }
+
+    /** Explicit single-frame render evidence; empty selection clears the bounded capture. */
+    public void captureFirstPersonBones(UUID owner, List<String> names) {
+        if (!Minecraft.getInstance().isSameThread()) throw new IllegalStateException("Capture requires client thread");
+        if (names.isEmpty()) org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.clearBoneCapture();
+        else org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.captureBones(owner, names);
+    }
+
+    public Map<String, Object> inspectFirstPersonBones() {
+        if (!Minecraft.getInstance().isSameThread()) throw new IllegalStateException("Capture requires client thread");
+        return org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.capturedBones();
+    }
+
     /** Publishes manager+generation atomically, then invalidates every mutable attachable instance. */
     public synchronized void setPackManager(PackManager manager) {
         this.setPackManager(manager, BedrockPackDiagnostics.Snapshot.empty());
@@ -169,6 +189,8 @@ public class ViaBedrockUtility {
                                             BedrockPackDiagnostics.Snapshot diagnostics) {
         final long generation = this.packGenerationCounter.incrementAndGet();
         this.packGeneration = new PackGeneration(generation, manager);
+        // Release the API's previous generation even if its consumers are currently inactive.
+        org.oryxel.viabedrockutility.pack.api.BedrockPackResources.snapshot();
         this.packDiagnostics = diagnostics == null
                 ? BedrockPackDiagnostics.Snapshot.empty() : diagnostics;
         if (this.payloadHandler != null) {

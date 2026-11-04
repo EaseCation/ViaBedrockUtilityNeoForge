@@ -19,6 +19,7 @@ public class TextureProcessor {
             new ConcurrentHashMap<>();
 
     public static void process(final List<Content> packs) {
+        org.oryxel.viabedrockutility.attachable.AttachableMaterials.clear();
         final Minecraft client = Minecraft.getInstance();
         final Map<ResourceLocation, LazyBedrockTexture> nextGeneration = new LinkedHashMap<>();
         final Map<ResourceLocation, GeometryUtil.TextureAlpha> nextGenerationAlphas = new LinkedHashMap<>();
@@ -111,6 +112,16 @@ public class TextureProcessor {
         }
     }
 
+    /** Explicit opt-in preparation; normal rendering keeps its existing missing-image fallback. */
+    public static void prepareRequiredTexture(final String rawPath) {
+        if (!Minecraft.getInstance().isSameThread()) throw new IllegalStateException("Texture preparation requires render thread");
+        final var identifier = normalizeTextureIdentifier(rawPath);
+        final var texture = REGISTERED_TEXTURES.get(identifier);
+        if (texture == null) throw new IllegalArgumentException("Missing required Bedrock texture: " + rawPath);
+        try { texture.requireLoaded(); }
+        catch (RuntimeException failure) { throw new IllegalStateException("Cannot prepare Bedrock texture: " + rawPath, failure); }
+    }
+
     /** Returns the CPU-side alpha snapshot for a registered Bedrock texture, when available. */
     public static GeometryUtil.TextureAlpha resolveAlpha(final String rawPath) {
         try {
@@ -122,6 +133,7 @@ public class TextureProcessor {
 
     /** Releases every dynamic texture owned by the retired server-pack generation. */
     public static void clear() {
+        org.oryxel.viabedrockutility.attachable.AttachableMaterials.clear();
         final Minecraft client = Minecraft.getInstance();
         REGISTERED_TEXTURES.keySet().forEach(client.getTextureManager()::release);
         REGISTERED_TEXTURES.clear();

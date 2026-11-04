@@ -15,6 +15,8 @@
     "accessor.ClientInputAccessor",
     "accessor.CompositeRenderTypeAccessor",
     "accessor.CompositeStateAccessor",
+    "accessor.PoseStackPoseAccessor",
+    "accessor.GlRenderPassAccessor",
     "accessor.EntityRenderDispatcherAccessor",
     "accessor.PlayerSkinFieldAccessor",
     "entity.EntityMixin",
@@ -30,8 +32,10 @@
     "render.CuboidMixin",
     "render.CompositeRenderTypeMixin",
     "render.CompositeStateMixin",
+    "render.AttachableMaterialOutputMixin",
     "render.EntityRendererNameTagMixin",
     "render.LevelRendererMixin",
+    "render.LivingEntityRenderSpaceMixin",
     "render.ModelPartMixin",
     "render.PlayerEntityModelMixin",
     "render.PlayerEntityRenderStateMixin",
@@ -44,6 +48,7 @@
     "render.item.ItemModelResolverMixin",
     "render.item.ItemStackRenderStateMixin",
     "sound.SoundSystemMixin",
+    "sound.ChannelMixin",
     "world.ClientWorldMixin"
   ]
 }

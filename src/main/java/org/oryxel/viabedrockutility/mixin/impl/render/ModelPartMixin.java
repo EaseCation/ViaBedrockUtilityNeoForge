@@ -1,6 +1,9 @@
 package org.oryxel.viabedrockutility.mixin.impl.render;
 
 import net.minecraft.client.model.geom.ModelPart;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import org.oryxel.viabedrockutility.renderer.BedrockEntityRenderSpace;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -58,6 +61,14 @@ public abstract class ModelPartMixin implements IModelPart {
     private String name = "";
 
     @Unique private boolean isVBUModel;
+    @Unique private Runnable vbu$topologyListener;
+    @Override public void viaBedrockUtility$watchTopology(Runnable listener) {
+        if (vbu$topologyListener != null && vbu$topologyListener != listener) throw new IllegalStateException("Topology already observed");
+        vbu$topologyListener = listener;
+    }
+    @Override public void viaBedrockUtility$unwatchTopology(Runnable listener) {
+        if (vbu$topologyListener == listener) vbu$topologyListener = null;
+    }
     @Unique private boolean vbu$cubeGroup;
     @Unique private boolean neededOffset;
 
@@ -69,6 +80,10 @@ public abstract class ModelPartMixin implements IModelPart {
 
     @Unique
     private Matrix4f vbu$parentPose;
+    @Unique private Matrix4f vbu$absoluteParentPose;
+    @Override public void viaBedrockUtility$setAbsoluteParentPose(Matrix4f pose) { vbu$absoluteParentPose = pose; }
+    @Override public Matrix4f viaBedrockUtility$getParentPose() { return vbu$parentPose; }
+    @Override public Matrix4f viaBedrockUtility$getAbsoluteParentPose() { return vbu$absoluteParentPose; }
 
     @Override
     public void viaBedrockUtility$setParentPose(Matrix4f pose) {
@@ -86,6 +101,10 @@ public abstract class ModelPartMixin implements IModelPart {
 
     @Unique
     private boolean alreadySetRotation = false;
+    @Unique private boolean vbu$entityRelativeRotation;
+
+    @Override public boolean viaBedrockUtility$isEntityRelativeRotation() { return vbu$entityRelativeRotation; }
+    @Override public void viaBedrockUtility$setEntityRelativeRotation(boolean relative) { vbu$entityRelativeRotation = relative; }
 
     @Unique private static final ModelPart[] vbu$EMPTY_CHILDREN = new ModelPart[0];
     @Unique private static final ModelPart.Cube[] vbu$EMPTY_CUBES = new ModelPart.Cube[0];
@@ -110,7 +129,9 @@ public abstract class ModelPartMixin implements IModelPart {
             return;
         }
 
-        if (this.vbu$parentPose != null) {
+        if (this.vbu$absoluteParentPose != null) {
+            BedrockEntityRenderSpace.applyAbsolute(matrices, this.vbu$absoluteParentPose);
+        } else if (this.vbu$parentPose != null) {
             matrices.mulPose(this.vbu$parentPose);
         }
         BedrockModelPartTransform.applyBeforeVanilla(
@@ -124,6 +145,12 @@ public abstract class ModelPartMixin implements IModelPart {
         }
 
         BedrockModelPartTransform.applyAfterVanilla(matrices, (ModelPart) (Object) this);
+        if (vbu$entityRelativeRotation) {
+            org.oryxel.viabedrockutility.renderer.BedrockEntityRenderSpace.apply(matrices, (ModelPart)(Object)this);
+        }
+        org.oryxel.viabedrockutility.attachable.FirstPersonViewSpace.applyBone(name, vbu$cubeGroup, matrices);
+        org.oryxel.viabedrockutility.attachable.FirstPersonRenderTrace.recordBone(name, vbu$cubeGroup, matrices);
+        org.oryxel.viabedrockutility.attachable.AttachableWorldPoses.recordBone(name, vbu$cubeGroup, matrices);
     }
 
     /**
@@ -131,21 +158,21 @@ public abstract class ModelPartMixin implements IModelPart {
      * with immutable array snapshots for VBU parts. Child calls remain recursive so rendering a player arm,
      * head, or any other subtree directly keeps vanilla PoseStack and visibility semantics.
      */
-    @Inject(
-            method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V",
-            at = @At("HEAD"),
-            cancellable = true,
-            require = 1
-    )
-    private void vbu$interceptIndexedRender(PoseStack matrices, VertexConsumer vertices, int light, int overlay,
-                                            int color, CallbackInfo ci) {
-        if (!this.isVBUModel || !vbu$INDEXED_RENDER_ENABLED) {
+    @WrapMethod(method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V")
+    private void vbu$renderInEntitySpace(PoseStack matrices, VertexConsumer vertices, int light, int overlay,
+                                        int color, Operation<Void> original) {
+        if (!isVBUModel) {
+            original.call(matrices, vertices, light, overlay, color);
             return;
         }
-        ci.cancel();
-
-        VbuRenderMetrics.recordModelRender();
-        this.viaBedrockUtility$renderIndexed(matrices, vertices, light, overlay, color);
+        try (var scope = BedrockEntityRenderSpace.enterIfAbsent(matrices)) {
+            if (vbu$INDEXED_RENDER_ENABLED) {
+                VbuRenderMetrics.recordModelRender();
+                viaBedrockUtility$renderIndexed(matrices, vertices, light, overlay, color);
+            } else {
+                original.call(matrices, vertices, light, overlay, color);
+            }
+        }
     }
 
     @Override
@@ -161,6 +188,7 @@ public abstract class ModelPartMixin implements IModelPart {
         }
         VbuRenderMetrics.recordPart();
 
+        final var entitySpace = org.oryxel.viabedrockutility.renderer.BedrockEntityRenderSpace.enterIfAbsent(matrices);
         matrices.pushPose();
         try {
             ((ModelPart) (Object) this).translateAndRotate(matrices);
@@ -222,6 +250,7 @@ public abstract class ModelPartMixin implements IModelPart {
             }
         } finally {
             matrices.popPose();
+            entitySpace.close();
         }
     }
 
@@ -348,6 +377,7 @@ public abstract class ModelPartMixin implements IModelPart {
 
     @Override
     public void viaBedrockUtility$invalidateChildrenCache() {
+        if (vbu$topologyListener != null) vbu$topologyListener.run();
         this.vbu$cubesArray = null;
         this.vbu$childrenArray = null;
         this.vbu$compiledBatch = null;
@@ -500,6 +530,8 @@ public abstract class ModelPartMixin implements IModelPart {
     public void viaBedrockUtility$resetToDefaultPose() {
         // 每次动画采样都清除，第一人称会自行组合语义父链，不能重复叠加。
         this.vbu$parentPose = null;
+        this.vbu$absoluteParentPose = null;
+        this.vbu$entityRelativeRotation = false;
         this.rotation.set(this.defaultRotation);
         this.offset.set(0, 0, 0);
         this.xScale = this.yScale = this.zScale = 1.0F;

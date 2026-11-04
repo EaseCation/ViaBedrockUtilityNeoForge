@@ -20,6 +20,10 @@ public abstract class PlayerRendererMixin {
             at = @At("TAIL"))
     private void viaBedrockUtility$extractVisualState(AbstractClientPlayer player, PlayerRenderState state,
                                                      float partialTick, CallbackInfo ci) {
+        ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setPlayerAnimationState(
+                (Object)this instanceof org.oryxel.viabedrockutility.renderer.CustomPlayerRenderer
+                        || org.oryxel.viabedrockutility.animation.PlayerPoseLayers.hasActive(player.getUUID())
+                        ? org.oryxel.viabedrockutility.animation.PlayerAnimationState.thirdPerson(player, state, partialTick) : null);
         ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setCustomSpectator(
                 ViaBedrockUtility.getInstance().getPayloadHandler().isPlayerTranslucent(player.getUUID()));
     }

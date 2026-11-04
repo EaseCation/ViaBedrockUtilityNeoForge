@@ -23,7 +23,6 @@ import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
 import org.jsoup.Jsoup;
-import org.jsoup.HttpStatusException;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -36,6 +35,7 @@ import org.trimou.engine.resolver.MapResolver;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.net.URL;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -73,8 +73,8 @@ public abstract class EnumGeneratorTask extends DefaultTask {
         Document doc;
         try {
             doc = Jsoup.parse(new URL(ENUMS_URL), 60_000);
-        } catch (HttpStatusException exception) {
-            // raw.githubusercontent.com may independently rate-limit an otherwise healthy GitHub
+        } catch (IOException exception) {
+            // raw.githubusercontent.com may independently reset or rate-limit an otherwise healthy GitHub
             // connection. The Contents API serves the exact same pinned blob as raw HTML.
             doc = Jsoup.connect(ENUMS_API_URL)
                     .header("Accept", "application/vnd.github.raw+json")

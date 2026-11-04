@@ -9,12 +9,17 @@ import java.util.function.Supplier;
 /** Owner+logical-hand registry. Mutable runtime state is never shared between owners. */
 public final class AttachableRuntimeRegistry<T> {
     private final Map<RuntimeKey, Entry<T>> entries = new HashMap<>();
+    private final java.util.function.Consumer<T> disposer;
+    public AttachableRuntimeRegistry() { this(ignored -> {}); }
+    public AttachableRuntimeRegistry(java.util.function.Consumer<T> disposer) { this.disposer = java.util.Objects.requireNonNull(disposer); }
 
     public synchronized T getOrCreate(RuntimeKey key, RuntimeIdentity identity, long tick,
                                       Supplier<T> factory) {
         Entry<T> entry = entries.get(key);
         if (entry == null || !entry.identity().equals(identity)) {
-            entry = new Entry<>(identity, factory.get(), tick);
+            T replacement = factory.get();
+            if (entry != null) disposer.accept(entry.runtime());
+            entry = new Entry<>(identity, replacement, tick);
             entries.put(key, entry);
         } else {
             entry = new Entry<>(entry.identity(), entry.runtime(), tick);
@@ -23,16 +28,28 @@ public final class AttachableRuntimeRegistry<T> {
         return entry.runtime();
     }
 
+    /** A stale tick snapshot must never retire a replacement registered for the same hand. */
+    public synchronized boolean removeIfSame(RuntimeKey key, T expectedRuntime) {
+        Entry<T> entry = entries.get(key);
+        if (entry == null || entry.runtime() != expectedRuntime) return false;
+        disposer.accept(entry.runtime());
+        entries.remove(key);
+        return true;
+    }
+
     public synchronized void evictOlderThan(long minimumTick) {
         Iterator<Entry<T>> iterator = entries.values().iterator();
         while (iterator.hasNext()) {
-            if (iterator.next().lastSeenTick() < minimumTick) {
+            Entry<T> entry = iterator.next();
+            if (entry.lastSeenTick() < minimumTick) {
+                disposer.accept(entry.runtime());
                 iterator.remove();
             }
         }
     }
 
     public synchronized void clear() {
+        entries.values().forEach(entry -> disposer.accept(entry.runtime()));
         entries.clear();
     }
 
