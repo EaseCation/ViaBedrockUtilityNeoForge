@@ -100,6 +100,10 @@ class VbuCuboidBatchRendererTest {
         }
 
         @Override public boolean viaBedrockUtility$isVBUCuboid() { return true; }
+        @Override public boolean viaBedrockUtility$hasAnimatedUv() { return true; }
+        // This fixture changes only the UV offset; its compiled geometry is immutable.
+        @Override public void viaBedrockUtility$watchGeometry(Runnable listener) { }
+        @Override public void viaBedrockUtility$unwatchGeometry(Runnable listener) { }
         @Override public void viaBedrockUtility$markAsVBU() { }
         @Override public void viaBedrockUtility$markAsVBUBox(
                 float x0, float y0, float z0, float x1, float y1, float z1) { }
