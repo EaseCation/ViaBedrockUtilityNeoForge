@@ -2,6 +2,7 @@ package org.oryxel.viabedrockutility.attachable;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import net.minecraft.client.model.geom.ModelPart;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.Test;
@@ -178,7 +179,7 @@ class PlayerHostSharedPosePathTest {
     private static BedrockPlayerModelMetadata.Bone bone(String key, String parent) {
         return new BedrockPlayerModelMetadata.Bone(
                 key, key, parent, parent, new Vector3f(), new Vector3f(),
-                null, Map.of(), null);
+                null, Map.of(), new ModelPart(List.of(), Map.of()));
     }
 
     private static void assertMatrixEquals(Matrix4f expected, Matrix4f actual) {

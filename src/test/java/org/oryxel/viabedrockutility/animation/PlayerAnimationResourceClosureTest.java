@@ -800,6 +800,7 @@ class PlayerAnimationResourceClosureTest {
         private float scaleX = 1.0F;
         private float scaleY = 1.0F;
         private float scaleZ = 1.0F;
+        private boolean entityRelativeRotation;
 
         private TestBone(String name) {
             this.name = name;
@@ -818,6 +819,16 @@ class PlayerAnimationResourceClosureTest {
         @Override
         public Vector3f getOffset() {
             return offset;
+        }
+
+        @Override
+        public boolean isEntityRelativeRotation() {
+            return entityRelativeRotation;
+        }
+
+        @Override
+        public void setEntityRelativeRotation(boolean relative) {
+            entityRelativeRotation = relative;
         }
 
         @Override
@@ -866,6 +877,7 @@ class PlayerAnimationResourceClosureTest {
             scaleX = 1.0F;
             scaleY = 1.0F;
             scaleZ = 1.0F;
+            entityRelativeRotation = false;
         }
 
         @Override
