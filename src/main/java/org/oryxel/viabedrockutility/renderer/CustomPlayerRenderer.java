@@ -74,6 +74,9 @@ public class CustomPlayerRenderer extends PlayerRenderer {
 
     @Override
     public void extractRenderState(AbstractClientPlayer player, PlayerRenderState state, float partialTick) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/player/extract");
+        try {
         super.extractRenderState(player, state, partialTick);
         final var attachables = ViaBedrockUtility.getInstance().getAttachableRuntimeManager();
         ((ICustomPlayerRendererHolder) state).viaBedrockUtility$setHandSnapshots(
@@ -85,6 +88,7 @@ public class CustomPlayerRenderer extends PlayerRenderer {
                 new AttachableOwnerSnapshot(player.getUUID(), "minecraft:player",
                         player.getAttackAnim(partialTick), state.xRot,
                         state.yRot));
+        } finally { attributionProfiler.pop(); }
     }
 
     private static ResourceLocation itemIdentifier(net.minecraft.world.item.ItemStack stack) {
@@ -121,6 +125,9 @@ public class CustomPlayerRenderer extends PlayerRenderer {
     }
 
     void captureThirdPersonPose(PlayerRenderState state, PoseStack poseStack) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/player/world_pose");
+        try {
         final Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null) return;
         final AttachableOwnerSnapshot owner = ((ICustomPlayerRendererHolder) state)
@@ -145,6 +152,8 @@ public class CustomPlayerRenderer extends PlayerRenderer {
                 .mul(poseStack.last().pose());
         this.thirdPersonPose = BedrockPlayerWorldPose.capture(
                 owner.uuid(), tick, worldPresentation, metadata);
+
+        } finally { attributionProfiler.pop(); }
     }
 
     public BedrockPlayerWorldPose thirdPersonPose(UUID ownerUuid, long currentTick) {

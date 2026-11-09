@@ -130,22 +130,28 @@ public final class DeferredNameTag {
      * NORMAL pass) after every entity body has been drawn, then flush once and clear.
      */
     public static void flush() {
-        mainEntityPassActive = false;
-        if (QUEUE.isEmpty()) {
-            return;
-        }
+        var ecPerf = net.minecraft.util.profiling.Profiler.get();
+        ecPerf.push("ec:viabedrockutility/name_tags");
         try {
-            final MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
-            for (final Entry e : QUEUE) {
-                // Reuse the cached glyph layout; only visit() (vertex emit with this frame's pose) runs per
-                // frame. mode is applied by the GlyphVisitor, so the SEE_THROUGH and NORMAL passes share the
-                // same cached PreparedText and differ only in the visitor.
-                final Font.PreparedText prepared = prepared(e);
-                prepared.visit(Font.GlyphVisitor.forMultiBufferSource(bufferSource, e.pose(), e.mode(), e.packedLight()));
+            mainEntityPassActive = false;
+            if (QUEUE.isEmpty()) {
+                return;
             }
-            bufferSource.endBatch();
+            try {
+                final MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
+                for (final Entry e : QUEUE) {
+                    // Reuse the cached glyph layout; only visit() (vertex emit with this frame's pose) runs per
+                    // frame. mode is applied by the GlyphVisitor, so the SEE_THROUGH and NORMAL passes share the
+                    // same cached PreparedText and differ only in the visitor.
+                    final Font.PreparedText prepared = prepared(e);
+                    prepared.visit(Font.GlyphVisitor.forMultiBufferSource(bufferSource, e.pose(), e.mode(), e.packedLight()));
+                }
+                bufferSource.endBatch();
+            } finally {
+                clearPending();
+            }
         } finally {
-            clearPending();
+            ecPerf.pop();
         }
     }
 

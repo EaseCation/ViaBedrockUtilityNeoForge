@@ -58,6 +58,9 @@ public final class AttachableRuntimeManager {
                                                     AttachableQueryContext.LogicalHand hand, HumanoidArm physicalArm,
                                                     PlayerModel playerModel, PoseStack poses,
                                                     MultiBufferSource buffers, int packedLight) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/attachable/third_person");
+        try {
         final ICustomPlayerRendererHolder extension = (ICustomPlayerRendererHolder) state;
         final AttachableOwnerSnapshot owner = extension.viaBedrockUtility$getOwnerSnapshot();
         if (owner.uuid() == null) {
@@ -66,6 +69,8 @@ public final class AttachableRuntimeManager {
         return render(owner, item, hand, physicalArm, AttachableQueryContext.ViewContext.THIRD_PERSON,
                 playerModel, poses, buffers, packedLight,
                 state.ageInTicks - (float) Math.floor(state.ageInTicks), null);
+
+        } finally { attributionProfiler.pop(); }
     }
 
     public AttachableRenderResult renderFirstPerson(AttachableOwnerSnapshot owner, AttachableItemSnapshot item,
@@ -78,6 +83,9 @@ public final class AttachableRuntimeManager {
     }
 
     public void tick() {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/attachable/tick");
+        try {
         FirstPersonSkinLayers.tick();
         FirstPersonViewSpace.tick();
         AttachableSurfaces.tick();
@@ -118,6 +126,8 @@ public final class AttachableRuntimeManager {
         }
         runtimes.evictOlderThan(tick - RUNTIME_TTL_TICKS);
         debugAttempts.evictOlderThan(tick - DEBUG_ATTEMPT_TTL_TICKS);
+
+        } finally { attributionProfiler.pop(); }
     }
 
     /**

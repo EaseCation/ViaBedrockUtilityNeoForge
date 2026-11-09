@@ -296,6 +296,18 @@ public class ViaBedrockUtility {
     }
 
     public void registerClientCommands(RegisterClientCommandsEvent event) {
+        event.getDispatcher().register(net.minecraft.commands.Commands.literal("vbumodels").executes(context -> {
+            final var stats = this.payloadHandler.modelRequestSnapshot();
+            final String json = new com.google.gson.Gson().toJson(stats);
+            ViaBedrockUtilityNeoForge.LOGGER.info("[ModelRequestQueue] {}", json);
+            context.getSource().sendSuccess(() -> Component.literal("VBU 模型队列：待处理 "
+                    + stats.get("pendingOperations") + "，已应用 " + stats.get("applied")
+                    + "，合并/重复 " + stats.get("coalesced") + "/" + stats.get("duplicates")
+                    + "，拒绝 " + stats.get("rejected") + " ")
+                    .append(Component.literal("[复制全部]").withStyle(style -> style.withClickEvent(
+                            new net.minecraft.network.chat.ClickEvent.CopyToClipboard(json)))), false);
+            return Command.SINGLE_SUCCESS;
+        }));
         // To enable debugging in order to use animate test thingy (look at ClientPlayNetworkHandler)
         event.getDispatcher().register(net.minecraft.commands.Commands.literal("vbudebug").executes(context -> {
             DEBUGGING = !DEBUGGING;

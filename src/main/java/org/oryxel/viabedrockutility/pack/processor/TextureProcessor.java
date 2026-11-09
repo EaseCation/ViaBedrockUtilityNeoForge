@@ -1,11 +1,13 @@
 package org.oryxel.viabedrockutility.pack.processor;
 
 import net.easecation.bedrockmotion.pack.content.Content;
+import net.easecation.bedrockmotion.pack.PackManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import org.oryxel.viabedrockutility.neoforge.ViaBedrockUtilityNeoForge;
 import org.oryxel.viabedrockutility.util.GeometryUtil;
 
+import java.lang.ref.WeakReference;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -15,14 +17,56 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TextureProcessor {
     private static final Map<ResourceLocation, LazyBedrockTexture> REGISTERED_TEXTURES =
             new ConcurrentHashMap<>();
-    private static final Map<ResourceLocation, GeometryUtil.TextureAlpha> REGISTERED_ALPHAS =
-            new ConcurrentHashMap<>();
+    private static volatile AlphaSnapshot registeredAlphas = new AlphaSnapshot(null, Map.of());
+    private static long alphaRevision;
 
-    public static void process(final List<Content> packs) {
+    // Published Content payload arrays are immutable. Weak identities avoid extending pack/byte
+    // lifetimes merely to reuse alpha, while Content.put with replacement bytes invalidates a hit.
+    record AlphaEntry(WeakReference<Content> source, String path, WeakReference<byte[]> bytes,
+                      GeometryUtil.TextureAlpha alpha) {
+        AlphaEntry(Content source, String path, byte[] bytes, GeometryUtil.TextureAlpha alpha) {
+            this(new WeakReference<>(source), path, new WeakReference<>(bytes), alpha);
+        }
+        boolean stillMatches() {
+            final Content current = source.get();
+            final byte[] expected = bytes.get();
+            return current == null || (expected != null && current.get(path) == expected);
+        }
+    }
+    static final class AlphaSnapshot {
+        private final WeakReference<PackManager> owner;
+        private final Map<ResourceLocation, AlphaEntry> entries;
+        AlphaSnapshot(PackManager owner, Map<ResourceLocation, AlphaEntry> entries) {
+            this.owner = new WeakReference<>(owner);
+            this.entries = Map.copyOf(entries);
+        }
+        PackManager owner() { return owner.get(); }
+        Map<ResourceLocation, AlphaEntry> entries() { return entries; }
+    }
+    static synchronized long beginAlphaUpdate() { return ++alphaRevision; }
+    static synchronized void publishAlphas(long revision, PackManager owner, Map<ResourceLocation, AlphaEntry> entries) {
+        if (revision == alphaRevision) registeredAlphas = new AlphaSnapshot(owner, entries);
+    }
+    /** Failed publication may retire only its own snapshot, never a newer manager's snapshot. */
+    public static synchronized void discardAlphas(PackManager owner) {
+        if (registeredAlphas.owner() == owner) {
+            ++alphaRevision;
+            registeredAlphas = new AlphaSnapshot(null, Map.of());
+        }
+    }
+    static synchronized void clearAlphas() {
+        ++alphaRevision;
+        registeredAlphas = new AlphaSnapshot(null, Map.of());
+    }
+
+    public static void process(final List<Content> packs) { process(packs, null); }
+
+    public static void process(final List<Content> packs, final PackManager owner) {
         org.oryxel.viabedrockutility.attachable.AttachableMaterials.clear();
+        final long revision = beginAlphaUpdate();
         final Minecraft client = Minecraft.getInstance();
         final Map<ResourceLocation, LazyBedrockTexture> nextGeneration = new LinkedHashMap<>();
-        final Map<ResourceLocation, GeometryUtil.TextureAlpha> nextGenerationAlphas = new LinkedHashMap<>();
+        final Map<ResourceLocation, AlphaEntry> nextGenerationAlphas = new LinkedHashMap<>();
 
         int registered = 0;
         int preloaded = 0;
@@ -55,7 +99,9 @@ public class TextureProcessor {
                     }
                     client.getTextureManager().register(identifier, texture);
                     nextGeneration.put(identifier, texture);
-                    nextGenerationAlphas.put(identifier, GeometryUtil.TextureAlpha.from(image.getImage()));
+                    final String sourcePath = content.getFullPath(path, "png", "jpg");
+                    nextGenerationAlphas.put(identifier, new AlphaEntry(content, sourcePath, content.get(sourcePath),
+                            GeometryUtil.TextureAlpha.from(image.getImage())));
                     registered++;
                 } catch (final RuntimeException e) {
                     if (texture != null) {
@@ -76,7 +122,7 @@ public class TextureProcessor {
         // Bedrock connection to time out. Emit a single summary line instead. Use debug for
         // per-texture detail if you ever need to re-enable it.
         ViaBedrockUtilityNeoForge.LOGGER.info(
-                "[ResourcePack:Texture] Registered {} lazy textures ({} active texture(s) refreshed, "
+                "[ResourcePack:Texture] Registered {} lazy textures ({} active texture(s) queued for preparation, "
                         + "{} metadata sidecars handled by ResourceManager, {} failed)",
                 registered, preloaded, metadata, failed
         );
@@ -86,8 +132,7 @@ public class TextureProcessor {
                 .forEach(client.getTextureManager()::release);
         REGISTERED_TEXTURES.clear();
         REGISTERED_TEXTURES.putAll(nextGeneration);
-        REGISTERED_ALPHAS.clear();
-        REGISTERED_ALPHAS.putAll(nextGenerationAlphas);
+        publishAlphas(revision, owner, nextGenerationAlphas);
     }
 
     /** Returns the exact resource location used for a Bedrock texture path. */
@@ -125,18 +170,41 @@ public class TextureProcessor {
     /** Returns the CPU-side alpha snapshot for a registered Bedrock texture, when available. */
     public static GeometryUtil.TextureAlpha resolveAlpha(final String rawPath) {
         try {
-            return REGISTERED_ALPHAS.get(normalizeTextureIdentifier(rawPath));
+            final AlphaEntry entry = registeredAlphas.entries().get(normalizeTextureIdentifier(rawPath));
+            return entry != null && entry.stillMatches() ? entry.alpha() : null;
         } catch (RuntimeException ignored) {
             return null;
         }
     }
 
+    /** Cache lookup at the current layer; never skips the caller's normal top-to-bottom search. */
+    public static GeometryUtil.TextureAlpha resolveAlpha(PackManager owner, Content source, String rawPath) {
+        final AlphaSnapshot snapshot = registeredAlphas;
+        if (owner == null || snapshot.owner() != owner) return null;
+        try {
+            final AlphaEntry entry = snapshot.entries().get(normalizeTextureIdentifier(rawPath));
+            if (entry == null || entry.source().get() != source || !entry.stillMatches()) return null;
+            // PNG/JPG selection and exact-path preference must agree with Content.getShortnameImage.
+            return entry.path().equals(source.getFullPath(rawPath, "png", "jpg")) ? entry.alpha() : null;
+        } catch (RuntimeException invalid) { return null; }
+    }
+
+    /** Fallback for this manager after its source lookup, including registered vanilla base textures. */
+    public static GeometryUtil.TextureAlpha resolveAlpha(PackManager owner, String rawPath) {
+        final AlphaSnapshot snapshot = registeredAlphas;
+        if (owner == null || snapshot.owner() != owner) return null;
+        try {
+            final AlphaEntry entry = snapshot.entries().get(normalizeTextureIdentifier(rawPath));
+            return entry != null && entry.stillMatches() ? entry.alpha() : null;
+        } catch (RuntimeException invalid) { return null; }
+    }
+
     /** Releases every dynamic texture owned by the retired server-pack generation. */
     public static void clear() {
         org.oryxel.viabedrockutility.attachable.AttachableMaterials.clear();
+        clearAlphas();
         final Minecraft client = Minecraft.getInstance();
         REGISTERED_TEXTURES.keySet().forEach(client.getTextureManager()::release);
         REGISTERED_TEXTURES.clear();
-        REGISTERED_ALPHAS.clear();
     }
 }

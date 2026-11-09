@@ -51,9 +51,14 @@ public class ViaBedrockUtilityNeoForge {
 					}
 				}));
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::onClientTick);
+        NeoForge.EVENT_BUS.addListener(org.oryxel.viabedrockutility.pack.processor.TexturePreparation::beforeFrame);
+        NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance().getPayloadHandler()::beforeModelFrame);
 		NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST,
 				ViaBedrockUtility.getInstance().getPayloadHandler()::onMovementInputUpdate);
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::registerClientCommands);
+        NeoForge.EVENT_BUS.addListener(org.oryxel.viabedrockutility.pack.processor.TexturePreparationDebug::register);
+        NeoForge.EVENT_BUS.addListener(org.oryxel.viabedrockutility.pack.processor.TexturePreparationDebug::render);
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event)->org.oryxel.viabedrockutility.pack.processor.TexturePreparationDebug.clear());
 		NeoForge.EVENT_BUS.addListener(FirstPersonAttachableRenderer::onRenderHand);
 		// Reset the per-frame animation budget before entities render (AfterOpaqueBlocks fires before
 		// the entity pass). Caps full-rate MoLang animation count in dense scenes. See AnimationBudget.

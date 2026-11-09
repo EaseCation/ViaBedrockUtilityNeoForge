@@ -110,10 +110,7 @@ public class PayloadHandler {
         this.customEntityMotionEnabled = false;
         this.witherSkullMotionEnabled = false;
         clearInputLocks();
-        customEntityHurtTracker.clearAll();
-        cachedCustomEntities.values().forEach(ticker ->
-                ticker.getRenderer().invalidateFrozenMeshes("connection_reset"));
-        cachedCustomEntities.clear();
+        clearCustomEntityModels();
         cachedPlayerRenderers.clear();
         cachedPlayerCapes.clear();
         cachedPlayerSkins.clear();
@@ -123,6 +120,14 @@ public class PayloadHandler {
         pendingPayloads.clear();
         skinDebugLog.clear();
         packManager = null;
+    }
+
+    /** World-owned custom models must not survive a world replacement; player skin caches may. */
+    public void clearCustomEntityModels() {
+        customEntityHurtTracker.clearAll();
+        cachedCustomEntities.values().forEach(ticker ->
+                ticker.getRenderer().invalidateFrozenMeshes("world_reset"));
+        cachedCustomEntities.clear();
     }
 
     private boolean immobile;
@@ -191,6 +196,9 @@ public class PayloadHandler {
     private boolean witherSkullMotionEnabled;
 
     public void handle(final BasePayload payload) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/payload/apply");
+        try {
         // 能力确认与瞬移不依赖资源包加载，不能排队后重放过时的位置。
         if (payload instanceof CustomEntityMotionPayload motion) {
             if (motion.getAction() == CustomEntityMotionPayload.ENABLE) {
@@ -282,6 +290,8 @@ public class PayloadHandler {
         } else if (payload instanceof PlayerAnimatePayload animatePayload) {
             this.handle(animatePayload);
         }
+
+        } finally { attributionProfiler.pop(); }
     }
 
     public void handle(final PlayerVisualStatePayload payload) {
@@ -304,6 +314,9 @@ public class PayloadHandler {
      * re-queued. Each is isolated so one failure does not abort the rest.
      */
     public void flushPendingPayloads() {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/payload/flush_pending");
+        try {
         if (this.pendingPayloads.isEmpty()) {
             return;
         }
@@ -320,6 +333,8 @@ public class PayloadHandler {
                 ViaBedrockUtilityNeoForge.LOGGER.warn("[Payload] Failed to replay queued {}: {}", payload.getClass().getSimpleName(), e.getMessage());
             }
         }
+
+        } finally { attributionProfiler.pop(); }
     }
 
     public void handle(final ModelRequestPayload payload) {}
@@ -399,6 +414,9 @@ public class PayloadHandler {
     }
 
     public void handle(final CapeDataPayload payload) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/skin/cape_apply");
+        try {
         final NativeImage capeImage = ImageUtil.toNativeImage(payload.getCapeData(), payload.getWidth(), payload.getHeight());
         if (capeImage == null) {
             return;
@@ -424,12 +442,17 @@ public class PayloadHandler {
         builder.capeTexture = payload.getIdentifier();
 
         ((PlayerSkinFieldAccessor)entry).setPlayerSkin(builder::build);
+
+        } finally { attributionProfiler.pop(); }
     }
 
     private static final List<String> HARDCODED_GEOMETRY_IDENTIFIERS = List.of(
             "geometry.humanoid.custom", "geometry.humanoid.customSlim");
 
     public void handle(final SkinDataPayload payload) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/skin/assemble_apply");
+        try {
         final SkinInfo info = this.cachedSkinInfo.get(payload.getPlayerUuid());
         if (info == null) {
             this.skinDebugLog.rejected(payload.getPlayerUuid(), -1L, clientTick(),
@@ -597,6 +620,8 @@ public class PayloadHandler {
         } else {
             ViaBedrockUtilityNeoForge.LOGGER.warn("[Skin] Final PlayerInfo NOT FOUND for {}", payload.getPlayerUuid());
         }
+
+        } finally { attributionProfiler.pop(); }
     }
 
     @Getter
@@ -694,6 +719,9 @@ public class PayloadHandler {
     }
 
     public void handle(final SkinAnimationDataPayload payload) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/skin/animation_apply");
+        try {
         final Map<Integer, PendingAnimation> anims = pendingAnimations.get(payload.getPlayerUuid());
         if (anims == null) return;
 
@@ -711,6 +739,8 @@ public class PayloadHandler {
             }
             buildAnimationOverlay(payload.getPlayerUuid(), pending);
         }
+
+        } finally { attributionProfiler.pop(); }
     }
 
     private void buildAnimationOverlay(UUID playerUuid, PendingAnimation pending) {

@@ -61,6 +61,8 @@ neoForge {
 }
 
 dependencies {
+    implementation "net.easecation.clientdiagnostics:performance-api:1.0.0"
+    jarJar "net.easecation.clientdiagnostics:performance-api:1.0.0"
     implementation "net.easecation:easecation-async-logging:1.0.0"
     jarJar "net.easecation:easecation-async-logging:1.0.0"
     additionalRuntimeClasspath "net.easecation:easecation-async-logging:1.0.0"

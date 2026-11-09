@@ -122,177 +122,193 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
     @Override
     public void render(CustomEntityRenderState state, PoseStack matrices, MultiBufferSource vertexConsumers, int light) {
-        // Distance-based render culling: completely skip rendering for very distant entities
-        if (LodConfig.getInstance().shouldSkipRender(state.getDistanceFromCamera())) {
-            return;
-        }
-
-        this.renderFrameCounter++;
-
-        LodConfig config = LodConfig.getInstance();
-        if (!config.isFrozenMeshEnabled() && !this.frozenEntries.isEmpty()) {
-            this.invalidateFrozenMeshes("cache_disabled");
-        }
-        boolean queryRebakePending = this.isQueryRebakePending();
-        boolean allowFrozenPose = config.isFrozenMeshEnabled()
-                && !this.explicitAnimationActive
-                && this.forcedDynamicAnimationFrames == 0
-                && !queryRebakePending;
-        FrozenMeshState currentFrozenState = this.frozenState.update(
-                allowFrozenPose, state.getDistanceFromCamera(),
-                config.getFrozenMeshEnterDistance(), config.getFrozenMeshExitDistance());
-        boolean useFrozenPose = currentFrozenState != FrozenMeshState.DYNAMIC;
-        boolean initializeFrozenPose = this.frozenState.requiresInitialPose(this.hasRetainedAnimatedPose);
-
-        // Distance-based LOD: skip animation computation for distant entities (configurable)
-        boolean forceAnimationUpdate = initializeFrozenPose || this.explicitAnimationActive
-                || this.forcedDynamicAnimationFrames > 0;
-        this.forceMeshRebuildThisFrame = forceAnimationUpdate;
-        boolean shouldAnimate = forceAnimationUpdate || (!useFrozenPose
-                && config.shouldAnimate(state.getDistanceFromCamera(), this.renderFrameCounter));
-
-        // Per-frame animation budget: distance LOD doesn't throttle near entities, so a dense lobby would
-        // animate every one of them every frame. Cap the number of full-rate animations per frame; entities
-        // that exhaust the budget fall back to a staggered cadence (renderFrameCounter is identityHashCode-
-        // seeded, spreading the throttled updates across frames) so they still animate, just less often.
-        if (shouldAnimate && !forceAnimationUpdate && !AnimationBudget.tryAcquire()) {
-            final int interval = config.getAnimationThrottleInterval();
-            shouldAnimate = interval <= 1 || (this.renderFrameCounter % interval == 0);
-        }
-        // Once every model layer has a reusable pose mesh, animation and mesh expansion become one
-        // operation. If this entity misses the rotating rebuild budget, keep both its bones and GPU
-        // mesh at the previous revision instead of calculating a pose that cannot be displayed.
-        if (shouldAnimate && !forceAnimationUpdate && config.isFrozenMeshEnabled()
-                && this.hasCompleteReusablePoseMesh() && !this.tryAcquireMeshRebuildBudget()) {
-            shouldAnimate = false;
-            VbuRenderMetrics.recordPoseMeshBudgetDeferral();
-        }
-
-        final Scope frameScope;
-        if (shouldAnimate) {
-            // Build per-frame scope with all query bindings, execute pre_animation, set up animators
-            frameScope = this.buildFrameScope(state);
-            this.ticker.runPreAnimationTask(frameScope);
-            this.animators.values().forEach(a -> a.setBaseScope(frameScope));
-            this.evaluateAnimationConditions(frameScope);
-
-            // Tick animation controllers (evaluate transitions, update blend weights)
-            for (AnimationControllerInstance ci : this.ticker.getControllerInstances()) {
-                ci.setBaseScope(frameScope);
-                ci.tick(frameScope);
+        var ecPerf = net.minecraft.util.profiling.Profiler.get();
+        ecPerf.push("ec:viabedrockutility/entity");
+        try {
+            // Distance-based render culling: completely skip rendering for very distant entities
+            if (LodConfig.getInstance().shouldSkipRender(state.getDistanceFromCamera())) {
+                return;
             }
-        } else {
-            frameScope = null;
-        }
 
-        if (shouldAnimate) {
-            this.poseRevision++;
-        }
+            this.renderFrameCounter++;
 
-        float s = (this.ticker.getScale() != null) ? this.ticker.getScale() : 1.0F;
-        for (Model model : this.models) {
-            matrices.pushPose();
+            LodConfig config = LodConfig.getInstance();
+            if (!config.isFrozenMeshEnabled() && !this.frozenEntries.isEmpty()) {
+                this.invalidateFrozenMeshes("cache_disabled");
+            }
+            boolean queryRebakePending = this.isQueryRebakePending();
+            boolean allowFrozenPose = config.isFrozenMeshEnabled()
+                    && !this.explicitAnimationActive
+                    && this.forcedDynamicAnimationFrames == 0
+                    && !queryRebakePending;
+            FrozenMeshState currentFrozenState = this.frozenState.update(
+                    allowFrozenPose, state.getDistanceFromCamera(),
+                    config.getFrozenMeshEnterDistance(), config.getFrozenMeshExitDistance());
+            boolean useFrozenPose = currentFrozenState != FrozenMeshState.DYNAMIC;
+            boolean initializeFrozenPose = this.frozenState.requiresInitialPose(this.hasRetainedAnimatedPose);
 
-            this.setupTransforms(state, matrices);
-            matrices.scale(-s, -s, s);
-            matrices.translate(0.0F, -1.501F, 0.0F);
+            // Distance-based LOD: skip animation computation for distant entities (configurable)
+            boolean forceAnimationUpdate = initializeFrozenPose || this.explicitAnimationActive
+                    || this.forcedDynamicAnimationFrames > 0;
+            this.forceMeshRebuildThisFrame = forceAnimationUpdate;
+            boolean shouldAnimate = forceAnimationUpdate || (!useFrozenPose
+                    && config.shouldAnimate(state.getDistanceFromCamera(), this.renderFrameCounter));
+
+            // Per-frame animation budget: distance LOD doesn't throttle near entities, so a dense lobby would
+            // animate every one of them every frame. Cap the number of full-rate animations per frame; entities
+            // that exhaust the budget fall back to a staggered cadence (renderFrameCounter is identityHashCode-
+            // seeded, spreading the throttled updates across frames) so they still animate, just less often.
+            if (shouldAnimate && !forceAnimationUpdate && !AnimationBudget.tryAcquire()) {
+                final int interval = config.getAnimationThrottleInterval();
+                shouldAnimate = interval <= 1 || (this.renderFrameCounter % interval == 0);
+            }
+            // Once every model layer has a reusable pose mesh, animation and mesh expansion become one
+            // operation. If this entity misses the rotating rebuild budget, keep both its bones and GPU
+            // mesh at the previous revision instead of calculating a pose that cannot be displayed.
+            if (shouldAnimate && !forceAnimationUpdate && config.isFrozenMeshEnabled()
+                    && this.hasCompleteReusablePoseMesh() && !this.tryAcquireMeshRebuildBudget()) {
+                shouldAnimate = false;
+                VbuRenderMetrics.recordPoseMeshBudgetDeferral();
+            }
+
+            final Scope frameScope;
+            if (shouldAnimate) {
+                ecPerf.push("ec:viabedrockutility/entity/animation");
+                try {
+                    // Build per-frame scope with all query bindings, execute pre_animation, set up animators
+                    frameScope = this.buildFrameScope(state);
+                    this.ticker.runPreAnimationTask(frameScope);
+                    this.animators.values().forEach(a -> a.setBaseScope(frameScope));
+                    this.evaluateAnimationConditions(frameScope);
+
+                    // Tick animation controllers (evaluate transitions, update blend weights)
+                    for (AnimationControllerInstance ci : this.ticker.getControllerInstances()) {
+                        ci.setBaseScope(frameScope);
+                        ci.tick(frameScope);
+                    }
+                } finally {
+                    ecPerf.pop();
+                }
+            } else {
+                frameScope = null;
+            }
 
             if (shouldAnimate) {
-                final McBoneModel boneModel = boneModelCache.computeIfAbsent(model.model(), McBoneModel::new);
+                this.poseRevision++;
+            }
 
-                // Reset all bones to default pose before additive animation blending
-                boneModel.resetAllBones();
+            float s = (this.ticker.getScale() != null) ? this.ticker.getScale() : 1.0F;
+            for (Model model : this.models) {
+                matrices.pushPose();
 
-                this.animators.values().forEach(animator -> {
+                this.setupTransforms(state, matrices);
+                matrices.scale(-s, -s, s);
+                matrices.translate(0.0F, -1.501F, 0.0F);
+
+                if (shouldAnimate) {
+                    ecPerf.push("ec:viabedrockutility/entity/pose");
                     try {
-                        animator.animate(boneModel);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+                        final McBoneModel boneModel = boneModelCache.computeIfAbsent(model.model(), McBoneModel::new);
+
+                        // Reset all bones to default pose before additive animation blending
+                        boneModel.resetAllBones();
+
+                        this.animators.values().forEach(animator -> {
+                            try {
+                                animator.animate(boneModel);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        });
+
+                        // Apply animation controller animations
+                        for (AnimationControllerInstance ci : this.ticker.getControllerInstances()) {
+                            ci.animate(boneModel);
+                        }
+
+                        // Apply part_visibility
+                        if (model.parsedPartVisibility() != null && !model.parsedPartVisibility().isEmpty()) {
+                            applyPartVisibility(model.model(), model.parsedPartVisibility(), frameScope);
+                        }
+                        this.hasRetainedAnimatedPose = true;
+                    } finally {
+                        ecPerf.pop();
                     }
-                });
-
-                // Apply animation controller animations
-                for (AnimationControllerInstance ci : this.ticker.getControllerInstances()) {
-                    ci.animate(boneModel);
                 }
 
-                // Apply part_visibility
-                if (model.parsedPartVisibility() != null && !model.parsedPartVisibility().isEmpty()) {
-                    applyPartVisibility(model.model(), model.parsedPartVisibility(), frameScope);
+                try {
+                    Material.MaterialInfo.Variant skinningColor = model.material.info().getVariants().get("skinning_color");
+                    RenderType renderType = skinningColor.build().apply(model.texture);
+                    if (renderType != null) {
+                        // ignore_lighting / emissive -> render flat & fully bright like Bedrock. FULL_BRIGHT
+                        // maxes the lightmap, but Minecraft's entity shader also applies normal-based
+                        // directional shading (top bright, bottom dark) that the lightmap can't override;
+                        // FlatNormalVertexConsumer forces all normals up to remove it.
+                        boolean flatLight = (model.controller() != null && model.controller().ignoreLighting())
+                                || skinningColor.getDefines().contains("USE_EMISSIVE");
+
+                        int effectiveLight = light;
+                        if (flatLight) {
+                            effectiveLight = LightTexture.FULL_BRIGHT;
+                        } else if (model.controller() != null && model.controller().lightColorMultiplier() != 1.0F) {
+                            effectiveLight = scaleLight(light, model.controller().lightColorMultiplier());
+                        }
+
+                        boolean queuedCachedMesh = false;
+                        if (config.isFrozenMeshEnabled()) {
+                            queuedCachedMesh = this.tryQueuePoseMesh(
+                                    state, model, renderType, vertexConsumers, effectiveLight, flatLight,
+                                    matrices.last().pose());
+                        }
+                        if (useFrozenPose) {
+                            VbuRenderMetrics.recordFrozenCandidate();
+                        }
+                        if (!queuedCachedMesh) {
+                            VertexConsumer vertexConsumer = vertexConsumers.getBuffer(renderType);
+                            // Signal flat normals without wrapping the consumer, preserving Sodium's writer.
+                            VbuCompileScratch.FLAT_NORMAL = flatLight;
+                            model.model.renderToBuffer(
+                                    matrices, vertexConsumer, effectiveLight, state.packedOverlay());
+                        }
+                    }
+                } catch (StackOverflowError soe) {
+                    if (!this.renderFailureReported) {
+                        this.renderFailureReported = true;
+                        ViaBedrockUtilityNeoForge.LOGGER.error(
+                                "[VBU] StackOverflow rendering model! key='{}', geometry='{}', texture='{}'",
+                                model.key(), model.geometry(), model.texture());
+                        dumpModelHierarchy(model.model().root(), "", 0);
+                    }
+                } catch (Exception e) {
+                    if (!this.renderFailureReported) {
+                        this.renderFailureReported = true;
+                        ViaBedrockUtilityNeoForge.LOGGER.debug(
+                                "[Render] Error rendering model key={}, texture={}",
+                                model.key(), model.texture(), e);
+                    }
+                } finally {
+                    // Always clear the flat-normal flag after each model so it never leaks into the next one
+                    // (which may not be emissive). Render-thread only, so no synchronization needed.
+                    VbuCompileScratch.FLAT_NORMAL = false;
                 }
-                this.hasRetainedAnimatedPose = true;
+
+                matrices.popPose();
             }
-
-            try {
-                Material.MaterialInfo.Variant skinningColor = model.material.info().getVariants().get("skinning_color");
-                RenderType renderType = skinningColor.build().apply(model.texture);
-                if (renderType != null) {
-                    // ignore_lighting / emissive -> render flat & fully bright like Bedrock. FULL_BRIGHT
-                    // maxes the lightmap, but Minecraft's entity shader also applies normal-based
-                    // directional shading (top bright, bottom dark) that the lightmap can't override;
-                    // FlatNormalVertexConsumer forces all normals up to remove it.
-                    boolean flatLight = (model.controller() != null && model.controller().ignoreLighting())
-                            || skinningColor.getDefines().contains("USE_EMISSIVE");
-
-                    int effectiveLight = light;
-                    if (flatLight) {
-                        effectiveLight = LightTexture.FULL_BRIGHT;
-                    } else if (model.controller() != null && model.controller().lightColorMultiplier() != 1.0F) {
-                        effectiveLight = scaleLight(light, model.controller().lightColorMultiplier());
-                    }
-
-                    boolean queuedCachedMesh = false;
-                    if (config.isFrozenMeshEnabled()) {
-                        queuedCachedMesh = this.tryQueuePoseMesh(
-                                state, model, renderType, vertexConsumers, effectiveLight, flatLight,
-                                matrices.last().pose());
-                    }
-                    if (useFrozenPose) {
-                        VbuRenderMetrics.recordFrozenCandidate();
-                    }
-                    if (!queuedCachedMesh) {
-                        VertexConsumer vertexConsumer = vertexConsumers.getBuffer(renderType);
-                        // Signal flat normals without wrapping the consumer, preserving Sodium's writer.
-                        VbuCompileScratch.FLAT_NORMAL = flatLight;
-                        model.model.renderToBuffer(
-                                matrices, vertexConsumer, effectiveLight, state.packedOverlay());
-                    }
-                }
-            } catch (StackOverflowError soe) {
-                if (!this.renderFailureReported) {
-                    this.renderFailureReported = true;
-                    ViaBedrockUtilityNeoForge.LOGGER.error(
-                            "[VBU] StackOverflow rendering model! key='{}', geometry='{}', texture='{}'",
-                            model.key(), model.geometry(), model.texture());
-                    dumpModelHierarchy(model.model().root(), "", 0);
-                }
-            } catch (Exception e) {
-                if (!this.renderFailureReported) {
-                    this.renderFailureReported = true;
-                    ViaBedrockUtilityNeoForge.LOGGER.debug(
-                            "[Render] Error rendering model key={}, texture={}",
-                            model.key(), model.texture(), e);
-                }
-            } finally {
-                // Always clear the flat-normal flag after each model so it never leaks into the next one
-                // (which may not be emissive). Render-thread only, so no synchronization needed.
-                VbuCompileScratch.FLAT_NORMAL = false;
+            if (this.frozenState.state() == FrozenMeshState.BAKE_PENDING) {
+                this.frozenState.bakingComplete();
             }
-
-            matrices.popPose();
+            if (this.forcedDynamicAnimationFrames > 0) {
+                this.forcedDynamicAnimationFrames--;
+            }
+            if (this.explicitAnimationActive) {
+                boolean freezeAfterCompletedCycle = config.isFrozenMeshEnabled()
+                        && state.getDistanceFromCamera() >= config.getFrozenMeshEnterDistance();
+                this.updateExplicitAnimationState(freezeAfterCompletedCycle);
+            }
+            super.render(state, matrices, vertexConsumers, light);
+        } finally {
+            ecPerf.pop();
         }
-        if (this.frozenState.state() == FrozenMeshState.BAKE_PENDING) {
-            this.frozenState.bakingComplete();
-        }
-        if (this.forcedDynamicAnimationFrames > 0) {
-            this.forcedDynamicAnimationFrames--;
-        }
-        if (this.explicitAnimationActive) {
-            boolean freezeAfterCompletedCycle = config.isFrozenMeshEnabled()
-                    && state.getDistanceFromCamera() >= config.getFrozenMeshEnterDistance();
-            this.updateExplicitAnimationState(freezeAfterCompletedCycle);
-        }
-        super.render(state, matrices, vertexConsumers, light);
     }
 
     private void updateExplicitAnimationState(boolean freezeAfterCompletedCycle) {
@@ -448,41 +464,47 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
 
     private FrozenMeshEntry bakeFrozenMesh(Model model, RenderType renderType,
                                            int effectiveLight, boolean flatLight) {
-        try (ByteBufferBuilder allocation = new ByteBufferBuilder(renderType.bufferSize())) {
-            BufferBuilder builder = new BufferBuilder(allocation, renderType.mode(), renderType.format());
-            PoseStack identityPose = new PoseStack();
-            VbuCompileScratch.FLAT_NORMAL = flatLight;
-            model.model().renderToBuffer(
-                    identityPose, builder, effectiveLight, OverlayTexture.pack(0, 10));
-            try (MeshData mesh = builder.build()) {
-                if (mesh == null || mesh.drawState().vertexCount() < 128) {
-                    this.frozenFailures.put(model, "too_small");
-                    VbuRenderMetrics.recordFrozenFallback("too_small", 1);
-                    return null;
+        var ecPerf = net.minecraft.util.profiling.Profiler.get();
+        ecPerf.push("ec:viabedrockutility/frozen/bake");
+        try {
+            try (ByteBufferBuilder allocation = new ByteBufferBuilder(renderType.bufferSize())) {
+                BufferBuilder builder = new BufferBuilder(allocation, renderType.mode(), renderType.format());
+                PoseStack identityPose = new PoseStack();
+                VbuCompileScratch.FLAT_NORMAL = flatLight;
+                model.model().renderToBuffer(
+                        identityPose, builder, effectiveLight, OverlayTexture.pack(0, 10));
+                try (MeshData mesh = builder.build()) {
+                    if (mesh == null || mesh.drawState().vertexCount() < 128) {
+                        this.frozenFailures.put(model, "too_small");
+                        VbuRenderMetrics.recordFrozenFallback("too_small", 1);
+                        return null;
+                    }
+                    FrozenMeshBackend.Handle handle = FrozenMeshDrawQueue.upload(
+                            model.key() + "/" + model.geometry(), mesh.vertexBuffer());
+                    FrozenMeshEntry entry = new FrozenMeshEntry(
+                            handle, renderType, mesh.drawState().vertexCount(),
+                            mesh.drawState().indexCount(), mesh.drawState().mode(), effectiveLight,
+                            this.poseRevision);
+                    if (!FrozenEntityMeshCache.global().add(entry)) {
+                        this.frozenFailures.put(model, "cache_full");
+                        VbuRenderMetrics.recordFrozenFallback("cache_full", 1);
+                        return null;
+                    }
+                    VbuRenderMetrics.recordFrozenUpload(entry.sizeBytes());
+                    return entry;
                 }
-                FrozenMeshBackend.Handle handle = FrozenMeshDrawQueue.upload(
-                        model.key() + "/" + model.geometry(), mesh.vertexBuffer());
-                FrozenMeshEntry entry = new FrozenMeshEntry(
-                        handle, renderType, mesh.drawState().vertexCount(),
-                        mesh.drawState().indexCount(), mesh.drawState().mode(), effectiveLight,
-                        this.poseRevision);
-                if (!FrozenEntityMeshCache.global().add(entry)) {
-                    this.frozenFailures.put(model, "cache_full");
-                    VbuRenderMetrics.recordFrozenFallback("cache_full", 1);
-                    return null;
-                }
-                VbuRenderMetrics.recordFrozenUpload(entry.sizeBytes());
-                return entry;
+            } catch (Throwable error) {
+                this.frozenFailures.put(model, "upload_error");
+                VbuRenderMetrics.recordFrozenFallback("upload_error", 1);
+                ViaBedrockUtilityNeoForge.LOGGER.debug(
+                        "[FrozenMesh] Failed to bake model key={}, geometry={}",
+                        model.key(), model.geometry(), error);
+                return null;
+            } finally {
+                VbuCompileScratch.FLAT_NORMAL = false;
             }
-        } catch (Throwable error) {
-            this.frozenFailures.put(model, "upload_error");
-            VbuRenderMetrics.recordFrozenFallback("upload_error", 1);
-            ViaBedrockUtilityNeoForge.LOGGER.debug(
-                    "[FrozenMesh] Failed to bake model key={}, geometry={}",
-                    model.key(), model.geometry(), error);
-            return null;
         } finally {
-            VbuCompileScratch.FLAT_NORMAL = false;
+            ecPerf.pop();
         }
     }
 

@@ -11,6 +11,9 @@ import javax.imageio.ImageIO;
 
 public class ImageUtil {
     public static NativeImage toNativeImage(byte[] data, int width, int height) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/skin/image_convert");
+        try {
         BufferedImage bufferedImage = toBufferedImage(data, width, height);
 
         final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -20,6 +23,8 @@ public class ImageUtil {
         } catch (IOException ignored) {
             return null;
         }
+
+        } finally { attributionProfiler.pop(); }
     }
 
     public static BufferedImage toBufferedImage(byte[] imageData, int width, int height) {

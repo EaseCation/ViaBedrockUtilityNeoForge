@@ -23,6 +23,9 @@ public final class FirstPersonAttachableRenderer {
     }
 
     public static void onRenderHand(RenderHandEvent event) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/attachable/first_person");
+        try {
         if (RENDERING.get()) {
             return;
         }
@@ -111,6 +114,8 @@ public final class FirstPersonAttachableRenderer {
             FirstPersonRenderTrace.end();
             RENDERING.set(false);
         }
+
+        } finally { attributionProfiler.pop(); }
     }
 
     private static void renderArm(RenderHandEvent event, CustomPlayerRenderer renderer,

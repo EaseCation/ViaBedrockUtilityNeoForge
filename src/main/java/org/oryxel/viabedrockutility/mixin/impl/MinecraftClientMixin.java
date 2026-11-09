@@ -22,10 +22,17 @@ public class MinecraftClientMixin {
         if (((Minecraft) (Object) this).level != level) {
             final PayloadHandler handler = ViaBedrockUtility.getInstance().getPayloadHandler();
             if (handler != null) {
+                if (((Minecraft) (Object) this).level != null) handler.clearCustomEntityModels();
                 handler.getCustomEntityHurtTracker().clearAll();
                 handler.clearInputLocks();
             }
         }
+    }
+
+    @Inject(method = "clearClientLevel", at = @At("HEAD"), require = 1)
+    private void clearModelsOnWorldRetirement(Screen nextScreen, CallbackInfo ci) {
+        final PayloadHandler handler = ViaBedrockUtility.getInstance().getPayloadHandler();
+        if (handler != null && ((Minecraft) (Object) this).level != null) handler.clearCustomEntityModels();
     }
 
     @Inject(method = "runTick", at = @At("HEAD"))

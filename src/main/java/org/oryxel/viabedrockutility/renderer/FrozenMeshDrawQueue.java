@@ -35,30 +35,43 @@ public final class FrozenMeshDrawQueue {
     }
 
     static FrozenMeshBackend.Handle upload(String name, ByteBuffer vertices) {
-        return backend.upload(name, vertices);
+        var ecPerf = net.minecraft.util.profiling.Profiler.get();
+        ecPerf.push("ec:viabedrockutility/frozen/upload");
+        try {
+            ecPerf.incrementCounter("ec:viabedrockutility/upload_bytes", vertices.remaining());
+            return backend.upload(name, vertices);
+        } finally { ecPerf.pop(); }
     }
 
     public static void flush() {
+        var ecPerf = net.minecraft.util.profiling.Profiler.get();
+        ecPerf.push("ec:viabedrockutility/frozen/flush");
         try {
-            for (Map.Entry<RenderType, List<DrawRecord>> group : GROUPS.entrySet()) {
-                List<DrawRecord> records = group.getValue();
-                try {
-                    backend.drawGroup(group.getKey(), records);
-                } catch (Throwable error) {
-                    ViaBedrockUtilityNeoForge.LOGGER.warn(
-                            "[FrozenMesh] Static draw failed for {}; using dynamic fallback", group.getKey(), error);
-                    for (DrawRecord record : records) {
-                        if (!record.drawn()) {
-                            record.entry().markFailed();
-                            FrozenEntityMeshCache.global().remove(record.entry(), "draw_error");
-                            drawFallback(record);
+            try {
+                for (Map.Entry<RenderType, List<DrawRecord>> group : GROUPS.entrySet()) {
+                    List<DrawRecord> records = group.getValue();
+                    ecPerf.incrementCounter("ec:viabedrockutility/draw_group_calls");
+                    ecPerf.incrementCounter("ec:viabedrockutility/queued_draw_records", records.size());
+                    try {
+                        backend.drawGroup(group.getKey(), records);
+                    } catch (Throwable error) {
+                        ViaBedrockUtilityNeoForge.LOGGER.warn(
+                                "[FrozenMesh] Static draw failed for {}; using dynamic fallback", group.getKey(), error);
+                        for (DrawRecord record : records) {
+                            if (!record.drawn()) {
+                                record.entry().markFailed();
+                                FrozenEntityMeshCache.global().remove(record.entry(), "draw_error");
+                                drawFallback(record);
+                            }
                         }
+                        VbuRenderMetrics.recordFrozenFallback("draw_error", records.size());
                     }
-                    VbuRenderMetrics.recordFrozenFallback("draw_error", records.size());
                 }
+            } finally {
+                GROUPS.clear();
             }
         } finally {
-            GROUPS.clear();
+            ecPerf.pop();
         }
     }
 
@@ -75,23 +88,29 @@ public final class FrozenMeshDrawQueue {
     }
 
     private static void drawFallback(DrawRecord record) {
-        RenderType renderType = record.entry().renderType();
-        try (ByteBufferBuilder allocation = new ByteBufferBuilder(renderType.bufferSize())) {
-            BufferBuilder builder = new BufferBuilder(allocation, renderType.mode(), renderType.format());
-            PoseStack pose = new PoseStack();
-            pose.mulPose(record.rootPose());
-            VbuCompileScratch.FLAT_NORMAL = record.flatLight();
-            record.fallbackModel().renderToBuffer(
-                    pose, builder, record.light(), OverlayTexture.pack(0, 10));
-            MeshData mesh = builder.build();
-            if (mesh != null) {
-                renderType.draw(mesh);
+        var ecPerf = net.minecraft.util.profiling.Profiler.get();
+        ecPerf.push("ec:viabedrockutility/frozen/fallback");
+        try {
+            RenderType renderType = record.entry().renderType();
+            try (ByteBufferBuilder allocation = new ByteBufferBuilder(renderType.bufferSize())) {
+                BufferBuilder builder = new BufferBuilder(allocation, renderType.mode(), renderType.format());
+                PoseStack pose = new PoseStack();
+                pose.mulPose(record.rootPose());
+                VbuCompileScratch.FLAT_NORMAL = record.flatLight();
+                record.fallbackModel().renderToBuffer(
+                        pose, builder, record.light(), OverlayTexture.pack(0, 10));
+                MeshData mesh = builder.build();
+                if (mesh != null) {
+                    renderType.draw(mesh);
+                }
+            } catch (Throwable fallbackError) {
+                ViaBedrockUtilityNeoForge.LOGGER.error(
+                        "[FrozenMesh] Dynamic safety fallback also failed", fallbackError);
+            } finally {
+                VbuCompileScratch.FLAT_NORMAL = false;
             }
-        } catch (Throwable fallbackError) {
-            ViaBedrockUtilityNeoForge.LOGGER.error(
-                    "[FrozenMesh] Dynamic safety fallback also failed", fallbackError);
         } finally {
-            VbuCompileScratch.FLAT_NORMAL = false;
+            ecPerf.pop();
         }
     }
 

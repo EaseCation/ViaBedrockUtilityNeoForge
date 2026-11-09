@@ -114,7 +114,7 @@ public class ServerResourcePackLoaderMixin {
             ViaBedrockUtilityNeoForge.LOGGER.warn("[ResourcePack] Failed to load vanilla.mcpack for textures", e);
         }
         textureContents.addAll(contents);
-        TextureProcessor.process(textureContents);
+        TextureProcessor.process(textureContents, nextManager);
 
         // Publish particle definitions before the PackManager generation. Both operations run on
         // the client reload thread; render code can therefore observe only the complete old or
@@ -122,6 +122,7 @@ public class ServerResourcePackLoaderMixin {
         loadParticleDefinitions(contents);
         if (!ViaBedrockUtility.getInstance().publishPackManager(
                 nextManager, diagnostics, connectionEpoch)) {
+            TextureProcessor.discardAlphas(nextManager);
             return;
         }
 

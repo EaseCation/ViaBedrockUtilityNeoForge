@@ -29,6 +29,8 @@ final class AttachableTextureResolver {
         for (int i = packs.getPacks().size() - 1; i >= 0; i--) {
             final Content content = packs.getPacks().get(i);
             try {
+                final GeometryUtil.TextureAlpha cached = TextureProcessor.resolveAlpha(packs, content, normalized);
+                if (cached != null) return cached;
                 final Content.LazyImage image = content.getShortnameImage(normalized);
                 if (image != null && image.getImage() != null) {
                     return GeometryUtil.TextureAlpha.from(image.getImage());
@@ -41,7 +43,7 @@ final class AttachableTextureResolver {
         // TextureProcessor owns the same top-most resolved images after registration. This
         // fallback keeps texture_mesh alpha available even when PackManager has released the
         // source Content objects, while preserving the exact ResourceLocation precedence.
-        return TextureProcessor.resolveAlpha(normalized);
+        return TextureProcessor.resolveAlpha(packs, normalized);
     }
 
     static String normalize(String raw) {

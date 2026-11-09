@@ -128,6 +128,9 @@ final class AttachableRuntimeInstance implements AutoCloseable {
     void update(AttachableOwnerSnapshot owner, Entity ownerEntity, AttachableItemSnapshot item,
                 AttachableQueryContext.LogicalHand hand, HumanoidArm arm,
                 AttachableQueryContext.ViewContext view, long tick, float partialTick) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/attachable/shared_runtime_update");
+        try {
         this.owner = owner;
         this.ownerEntity = ownerEntity;
         this.item = item;
@@ -137,6 +140,7 @@ final class AttachableRuntimeInstance implements AutoCloseable {
         actor.variables.set("is_enchanted", Value.of(item.stack().hasFoil()));
         frame = AttachableScopeFactory.RuntimeScope.persistent(persistentScope, actor, owner, ownerEntity, item,
                 hand, arm, view, tick, partialTick, queryIdentifier);
+        } finally { attributionProfiler.pop(); }
     }
 
     void skinContext(String variantQuery, int variant) {
@@ -152,6 +156,9 @@ final class AttachableRuntimeInstance implements AutoCloseable {
     }
 
     void advanceTo(long tick, AttachableQueryContext.ViewContext view) throws IOException {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/attachable/shared_animation_tick");
+        try {
         if (frame == null || tick == animation.lastTick()) {
             return;
         }
@@ -159,6 +166,8 @@ final class AttachableRuntimeInstance implements AutoCloseable {
         frame = AttachableScopeFactory.RuntimeScope.persistent(persistentScope, actor, owner, ownerEntity, item,
                 hand, arm, view, tick, 0.0F, queryIdentifier);
         advanceCurrentFrameTo(tick);
+
+        } finally { attributionProfiler.pop(); }
     }
 
     /**
@@ -218,6 +227,9 @@ final class AttachableRuntimeInstance implements AutoCloseable {
     boolean render(AttachableHostContext host, PoseStack poses,
                    MultiBufferSource buffers, int packedLight, float partialTick,
                    FirstPersonHostMeshRenderer hostMeshRenderer, ResourceLocation skin) throws IOException {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/attachable/draw");
+        try {
         final List<RenderControllerEvaluator.EvaluatedRenderPass> passes =
                 animation.evaluateRenderPasses(frame.scope(), frame.context());
         lastControllerStates = animation.controllers().entrySet().stream().collect(
@@ -319,6 +331,8 @@ final class AttachableRuntimeInstance implements AutoCloseable {
             return false;
         }
         return true;
+
+        } finally { attributionProfiler.pop(); }
     }
 
     private boolean renderGroup(AttachableHostContext host, ModelState model,

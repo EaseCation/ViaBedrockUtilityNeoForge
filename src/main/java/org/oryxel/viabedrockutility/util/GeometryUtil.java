@@ -78,6 +78,9 @@ public final class GeometryUtil {
                                     final String geometryName, final boolean attachable,
                                     final Function<String, TextureAlpha> textureResolver,
                                     final Set<String> entityRoots) {
+        var attributionProfiler = net.minecraft.util.profiling.Profiler.get();
+        attributionProfiler.push("ec:viabedrockutility/model/build");
+        try {
         // There are some times when the skin image file is larger than the geometry UV points.
         // In this case, we need to scale UV calls
         // https://github.com/Camotoy/BedrockSkinUtility/issues/9
@@ -271,6 +274,8 @@ public final class GeometryUtil {
             return model;
         }
         return new CustomEntityModel<>(root.part());
+
+        } finally { attributionProfiler.pop(); }
     }
 
     private static String adjustFormatting(boolean player, String name) {
