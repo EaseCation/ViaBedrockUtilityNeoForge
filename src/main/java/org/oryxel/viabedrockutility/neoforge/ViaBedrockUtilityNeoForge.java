@@ -52,6 +52,7 @@ public class ViaBedrockUtilityNeoForge {
 				}));
 		NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance()::onClientTick);
         NeoForge.EVENT_BUS.addListener(org.oryxel.viabedrockutility.pack.processor.TexturePreparation::beforeFrame);
+        NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance().getPayloadHandler()::beforeSkinFrame);
         NeoForge.EVENT_BUS.addListener(ViaBedrockUtility.getInstance().getPayloadHandler()::beforeModelFrame);
 		NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST,
 				ViaBedrockUtility.getInstance().getPayloadHandler()::onMovementInputUpdate);

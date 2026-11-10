@@ -32,6 +32,7 @@ import java.lang.ref.WeakReference;
 public class CustomPlayerRenderer extends PlayerRenderer {
     private final ResourceLocation texture;
     private final List<AnimatedSkinOverlay> overlays = new ArrayList<>();
+    private final Map<Integer, AnimatedSkinOverlay> indexedOverlays = new java.util.HashMap<>();
     private volatile BedrockPlayerWorldPose thirdPersonPose;
     private final PlayerAnimationRuntimeSlot<PlayerAnimationRuntime> playerAnimationRuntime =
             new PlayerAnimationRuntimeSlot<>();
@@ -163,6 +164,12 @@ public class CustomPlayerRenderer extends PlayerRenderer {
 
     public List<AnimatedSkinOverlay> getOverlays() {
         return Collections.unmodifiableList(overlays);
+    }
+
+    public void setOverlay(int index, AnimatedSkinOverlay overlay) {
+        var previous = indexedOverlays.put(index, overlay);
+        if (previous != null) overlays.remove(previous);
+        overlays.add(overlay);
     }
 
     public void addOverlay(AnimatedSkinOverlay overlay) {

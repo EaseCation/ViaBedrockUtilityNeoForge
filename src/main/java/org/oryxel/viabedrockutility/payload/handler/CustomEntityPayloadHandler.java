@@ -106,6 +106,7 @@ public class CustomEntityPayloadHandler extends PayloadHandler {
             return;
         }
 
+        if (deferPlayerAnimation(payload.getEntityUuid(), 2L * payload.getAnimationName().length(), () -> handle(payload))) return;
         if (this.packManager == null) return;
         // 旧协议没有控制器参数，使用默认运行时控制器及动画结束条件。
         final var renderer = this.cachedPlayerRenderers.get(payload.getEntityUuid());
@@ -189,6 +190,9 @@ public class CustomEntityPayloadHandler extends PayloadHandler {
 
     @Override
     public void handle(PlayerAnimatePayload payload) {
+        long bytes = 2L * (payload.getAnimation().length() + payload.getNextState().length()
+                + payload.getStopExpression().length() + payload.getController().length());
+        if (deferPlayerAnimation(payload.getPlayerUuid(), bytes, () -> handle(payload))) return;
         final var renderer = this.cachedPlayerRenderers.get(payload.getPlayerUuid());
         if (renderer instanceof CustomPlayerRenderer customPlayerRenderer) {
             playPlayerAnimation(customPlayerRenderer, payload.getPlayerUuid(), payload.getAnimation(), payload.getNextState(),

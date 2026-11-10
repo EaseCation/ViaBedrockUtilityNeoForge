@@ -87,6 +87,7 @@ public final class VbuDebugReports {
                     + ",patchHash=" + BedrockPackDiagnostics.shortHash(
                     BedrockPackDiagnostics.hashText(cached.getResourcePatch())) + "}");
         }
+        lines.add("skinWork=" + handler.skinWorkStatistics());
         lines.add("activeTransfer=" + transfer(snapshot.active()));
         lines.add("installed=" + installed(snapshot.installed()));
         if (full) {

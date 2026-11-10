@@ -37,7 +37,18 @@
     "ec:viabedrockutility/texture/create_gpu",
     "ec:viabedrockutility/texture/upload_rows",
     "ec:viabedrockutility/texture/upload_bytes",
-    "ec:viabedrockutility/texture/create_view"
+    "ec:viabedrockutility/texture/create_view",
+    "ec:viabedrockutility/skin/pump",
+    "ec:viabedrockutility/skin/prepare_pixels",
+    "ec:viabedrockutility/skin/parse_geometry",
+    "ec:viabedrockutility/skin/prepare_model",
+    "ec:viabedrockutility/skin/prepare_renderer",
+    "ec:viabedrockutility/skin/prepare_animation",
+    "ec:viabedrockutility/skin/install",
+    "ec:viabedrockutility/skin/animation_geometry",
+    "ec:viabedrockutility/skin/animation_command",
+    "ec:viabedrockutility/skin/create_gpu",
+    "ec:viabedrockutility/skin/upload_rows"
   ],
   "taskOperations": [
     "texture/decode",
