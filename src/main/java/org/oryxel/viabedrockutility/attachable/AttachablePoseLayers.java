@@ -10,7 +10,8 @@ import org.oryxel.viabedrockutility.ViaBedrockUtility;
 import org.oryxel.viabedrockutility.item.BedrockItemIdentity;
 import java.util.*;
 
-/** An equipment-owned numerical pose. It replaces the explicitly delegated TP animation stack only.
+/** An equipment-owned numerical pose. It replaces the explicitly delegated TP animation stack only;
+ * the source may retain named authored animations (unconditional, layered after the pose).
  * Rules, curve sampling and clocks belong to the producer; native inheritance/materials/locators stay here.
  */
 public final class AttachablePoseLayers {
@@ -20,6 +21,8 @@ public final class AttachablePoseLayers {
     public interface Source {
         Set<String> bones();
         void sample(BoneSink sink);
+        /** Attachable animation identifiers kept playing natively on top of this pose (e.g. a part loop). */
+        default Set<String> retainedAnimations() { return Set.of(); }
     }
     private record Key(UUID actor, AttachableQueryContext.LogicalHand hand) {}
     private static final Map<Key, Lease> ACTIVE = new HashMap<>();
@@ -48,7 +51,7 @@ public final class AttachablePoseLayers {
         private final String item;
         private final net.minecraft.resources.ResourceLocation itemId;
         private final Source source;
-        private final Set<String> bones;
+        private final Set<String> bones, retained;
         private final long connection, generation;
         private final IdentityHashMap<IBoneModel, Map<String, IBoneTarget>> models = new IdentityHashMap<>();
         private boolean closed;
@@ -57,6 +60,8 @@ public final class AttachablePoseLayers {
             itemId=net.minecraft.resources.ResourceLocation.parse(item);
             bones=Set.copyOf(source.bones());
             if(bones.isEmpty()||bones.size()>4096||bones.stream().anyMatch(String::isBlank))throw new IllegalArgumentException("Invalid numerical pose bones");
+            retained=Set.copyOf(source.retainedAnimations());
+            if(retained.size()>64||retained.stream().anyMatch(String::isBlank))throw new IllegalArgumentException("Invalid retained attachable animations");
             var host=ViaBedrockUtility.getInstance();connection=host.getConnectionEpoch();generation=host.getPackGeneration().generation();
         }
         public boolean isCurrent(){requireThread();return current();}
@@ -85,6 +90,7 @@ public final class AttachablePoseLayers {
                 target.setScale((float)scale[0],(float)scale[1],(float)scale[2]);
             });
         }
+        @Override public Set<String> retainedAnimations(){return retained;}
         @Override public void close(){requireThread();if(closed)return;closed=true;ACTIVE.remove(key,this);models.clear();}
     }
     private static void finite(double[] vector){if(vector==null||vector.length!=3)throw new IllegalArgumentException("Expected pose vector");for(double value:vector)if(!Double.isFinite(value)||Math.abs(value)>Float.MAX_VALUE)throw new IllegalArgumentException("Nonfinite pose");}
