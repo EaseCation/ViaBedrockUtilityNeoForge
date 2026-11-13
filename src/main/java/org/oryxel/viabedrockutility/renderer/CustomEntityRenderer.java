@@ -230,6 +230,9 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                         if (model.parsedPartVisibility() != null && !model.parsedPartVisibility().isEmpty()) {
                             applyPartVisibility(model.model(), model.parsedPartVisibility(), frameScope);
                         }
+                        if (model.uvAnim() != null) {
+                            model.uvAnim().update(frameScope);
+                        }
                         this.hasRetainedAnimatedPose = true;
                     } finally {
                         ecPerf.pop();
@@ -255,7 +258,8 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                         }
 
                         boolean queuedCachedMesh = false;
-                        if (config.isFrozenMeshEnabled()) {
+                        // uv_anim changes UVs without a pose revision, so it must not be baked into a pose mesh.
+                        if (config.isFrozenMeshEnabled() && model.uvAnim() == null) {
                             queuedCachedMesh = this.tryQueuePoseMesh(
                                     state, model, renderType, vertexConsumers, effectiveLight, flatLight,
                                     matrices.last().pose());
@@ -265,6 +269,9 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
                         }
                         if (!queuedCachedMesh) {
                             VertexConsumer vertexConsumer = vertexConsumers.getBuffer(renderType);
+                            if (model.uvAnim() != null) {
+                                vertexConsumer = model.uvAnim().wrap(vertexConsumer);
+                            }
                             // Signal flat normals without wrapping the consumer, preserving Sodium's writer.
                             VbuCompileScratch.FLAT_NORMAL = flatLight;
                             model.model.renderToBuffer(
@@ -775,10 +782,11 @@ public class CustomEntityRenderer<T extends Entity> extends EntityRenderer<T, Cu
     /**
      * @param parsedPartVisibility Pre-parsed part visibility map. Values are Boolean (for "true"/"false" literals)
      *                             or {@code List<Expression>} (for MoLang expressions). Null if no visibility rules.
+     * @param uvAnim               Render controller uv_anim state owned by this model instance, or null.
      */
     public record Model(String key, String geometry, CustomEntityModel<CustomEntityRenderState> model, ResourceLocation texture, Material material, BedrockRenderController controller,
                         net.easecation.bedrockmotion.pack.definitions.VisibleBounds visibleBounds,
-                        Map<String, Object> parsedPartVisibility) {
+                        Map<String, Object> parsedPartVisibility, RenderControllerUvAnim uvAnim) {
     }
 
     @Getter

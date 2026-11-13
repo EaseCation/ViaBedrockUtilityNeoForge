@@ -24,6 +24,7 @@ import org.oryxel.viabedrockutility.mappings.BedrockMappings;
 import org.oryxel.viabedrockutility.material.data.Material;
 import org.oryxel.viabedrockutility.payload.handler.CustomEntityPayloadHandler;
 import org.oryxel.viabedrockutility.renderer.CustomEntityRenderer;
+import org.oryxel.viabedrockutility.renderer.RenderControllerUvAnim;
 import org.oryxel.viabedrockutility.renderer.model.CustomEntityModel;
 import org.oryxel.viabedrockutility.util.EntityRendererContextUtil;
 import org.oryxel.viabedrockutility.util.GeometryUtil;
@@ -431,7 +432,7 @@ public class CustomEntityTicker implements AnimationEventListener {
                     }
                 }
             }
-            this.renderer.getModels().add(new CustomEntityRenderer.Model(model.key(), model.geometryValue(), cModel, texture, evalMaterial(executionScope, model.controller()), model.controller(), visibleBounds, parsedPV));
+            this.renderer.getModels().add(new CustomEntityRenderer.Model(model.key(), model.geometryValue(), cModel, texture, evalMaterial(executionScope, model.controller()), model.controller(), visibleBounds, parsedPV, RenderControllerUvAnim.create(model.controller())));
             this.availableModels.add(model.key());
         }
         this.renderer.getModels().removeIf(model -> !this.availableModels.contains(model.key()));
