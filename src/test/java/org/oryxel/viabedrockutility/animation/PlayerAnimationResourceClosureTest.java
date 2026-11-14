@@ -42,6 +42,40 @@ class PlayerAnimationResourceClosureTest {
     private static final Object LEVEL_INSTANCE = new Object();
 
     @Test
+    void s8Top300CapeAnimationFollowsCurrentFrameFlapInput() {
+        final Content content = new Content();
+        content.putString("entity/player.entity.json", """
+                {"format_version":"1.10.0","minecraft:client_entity":{"description":{
+                  "identifier":"minecraft:player",
+                  "animations":{"cape":"animation.back.s8final_300.idle"},
+                  "scripts":{"animate":["cape"]}
+                }}}
+                """);
+        // The S8 top-300 resource's authored cape rotation, without unrelated player animations.
+        content.putString("animations/s8-cape.animation.json", """
+                {"format_version":"1.8.0","animations":{
+                  "animation.back.s8final_300.idle":{"loop":true,"bones":{
+                    "back_s8final_300":{"rotation":[
+                      "math.lerp(0.0, -126.0, query.cape_flap_amount) - 6.0",180,0]}
+                  }}
+                }}
+                """);
+        final PlayerAnimationRuntime runtime = new PlayerAnimationRuntime(
+                new PackManager(List.of(content)), Map.of());
+        final TestBoneModel model = new TestBoneModel();
+        model.bones.put("back_s8final_300", new TestBone("back_s8final_300"));
+        final float[] flapAmounts = {0.0F, 0.5F, 1.0F, 0.0F};
+        final float[] expectedDegrees = {-6.0F, -69.0F, -132.0F, -6.0F};
+        for (int frame = 0; frame < flapAmounts.length; frame++) {
+            runtime.sampleThirdPerson(model, state(PlayerAnimationState.View.THIRD_PERSON,
+                    frame + 1L, "", 0.0F, 0.0F, 0.0F, 1.0F, false, false, 0.0D,
+                    HumanoidArm.RIGHT, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, false,
+                    flapAmounts[frame]));
+            assertEquals(expectedDegrees[frame], model.rotationX("back_s8final_300"), 1.0e-3F);
+        }
+    }
+
+    @Test
     void emptyPackGenerationHasNoPlayerRuntime() {
         assertFalse(PlayerAnimationRuntime.isAvailable(new PackManager(List.of())));
         assertFalse(PlayerAnimationRuntime.isAvailable(null));
@@ -617,7 +651,7 @@ class PlayerAnimationResourceClosureTest {
                 tick, 0.0F, 0.0F, 0.0F, pitch, relativeHeadYaw, 0.0F, 0.0F,
                 1.0F, 1.0F, false, true, true, false, false, false, false,
                 false, false, false, true, false, false, true, false, false, false,
-                1, 19, 20, 0.0F, 0.0F, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0F, 0.0F);
+                1, 19, 20, 0.0F, 0.0F, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0F, 0.0F, 0.0F);
     }
 
     private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
@@ -675,7 +709,7 @@ class PlayerAnimationResourceClosureTest {
                                                        float swimAmount) {
         return state(view, tick, "", 0.0F, 0.0F, 0.0F,
                 1.0F, false, false, 0.0D, HumanoidArm.RIGHT, 0.0F, 0.0F,
-                0.0F, 0.0F, swimAmount, swimAmount > 0.0F);
+                0.0F, 0.0F, swimAmount, swimAmount > 0.0F, 0.0F);
     }
 
     private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
@@ -686,7 +720,7 @@ class PlayerAnimationResourceClosureTest {
                                               float bodyYaw, float partialTick, float pitch) {
         return state(view, tick, mainHandIdentifier, positionX, walkSpeed, attackTime,
                 armHeight, slim, bobAnimation, deltaX, mainArm, relativeHeadYaw, bodyYaw,
-                partialTick, pitch, 0.0F, false);
+                partialTick, pitch, 0.0F, false, 0.0F);
     }
 
     private static PlayerAnimationState state(PlayerAnimationState.View view, long tick,
@@ -695,7 +729,7 @@ class PlayerAnimationResourceClosureTest {
                                               boolean slim, boolean bobAnimation, double deltaX,
                                               HumanoidArm mainArm, float relativeHeadYaw,
                                               float bodyYaw, float partialTick, float pitch,
-                                              float swimAmount, boolean swimming) {
+                                              float swimAmount, boolean swimming, float capeFlapAmount) {
         return new PlayerAnimationState(
                 UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 new PlayerAnimationOwner(PLAYER_INSTANCE, LEVEL_INSTANCE),
@@ -707,7 +741,7 @@ class PlayerAnimationResourceClosureTest {
                 true, true, false, false, false, swimming, false,
                 false, false, false, false, false, false, false, false, bobAnimation,
                 0, 0, 0, 0.0F, 0.0F,
-                positionX, 0.0D, deltaX, 0.0D, 0.0D, 0.0F, 0.0F);
+                positionX, 0.0D, deltaX, 0.0D, 0.0D, 0.0F, 0.0F, capeFlapAmount);
     }
 
     private static PlayerAnimationState movementState(PlayerAnimationState.View view, long tick,
@@ -723,7 +757,7 @@ class PlayerAnimationResourceClosureTest {
                 true, onGround, false, crouching, false, false, false,
                 false, false, false, false, false, false, false, false, true,
                 0, 0, 0, 0.0F, 0.0F,
-                positionX, 0.0D, 0.1D, 0.0D, 0.0D, 0.0F, 0.0F);
+                positionX, 0.0D, 0.1D, 0.0D, 0.0D, 0.0F, 0.0F, 0.0F);
     }
 
     private static void assertPoseEquals(TestBoneModel expected, TestBoneModel actual) {
