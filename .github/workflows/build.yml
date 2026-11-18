@@ -7,7 +7,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ec-ci]
+    timeout-minutes: 30
     steps:
       - name: Checkout checked revision
         uses: actions/checkout@v4
@@ -38,6 +39,15 @@ jobs:
           ref: 6b4f5b1dfc9deefe23809a8b89e9d4425de34bdd
           path: dependencies/CubeConverter
 
+      # settings.gradle includes ../NeteaseBridge for easecation-async-logging (private repo).
+      - name: Checkout NeteaseBridge
+        uses: actions/checkout@v4
+        with:
+          repository: EaseCation/NeteaseBridge
+          ref: 47025271cdf516c6af39b87b8ff73abe6f4921f3
+          path: NeteaseBridge
+          ssh-key: ${{ secrets.GH_CODING_SSH_KEY }}
+
       # Released unchanged from https://jepack.easecation.net/mods/; keep these inputs in Git.
       - name: Verify released camera and particle dependencies
         working-directory: ViaBedrockUtilityNeoForge
@@ -58,4 +68,4 @@ jobs:
 
       - name: Build and run tests with public fixtures
         working-directory: ViaBedrockUtilityNeoForge
-        run: sh ./gradlew --init-script .github/gradle-ci.init.gradle build --no-daemon --no-configuration-cache --console=plain
+        run: sh ./gradlew --init-script .github/gradle-ci.init.gradle build -PneteaseBridgeTarget=async-logging --no-daemon --no-configuration-cache --console=plain
