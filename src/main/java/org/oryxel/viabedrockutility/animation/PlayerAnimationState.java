@@ -76,7 +76,8 @@ public record PlayerAnimationState(
         double deltaY,
         double deltaZ,
         float groundSpeed,
-        float verticalSpeed) {
+        float verticalSpeed,
+        float capeFlapAmount) {
 
     public static PlayerAnimationState thirdPerson(AbstractClientPlayer player,
                                                    PlayerRenderState renderState,
@@ -157,7 +158,10 @@ public record PlayerAnimationState(
                 usingMainHand ? Mth.clamp(useElapsedTicks / 5.0F, 0.0F, 1.0F) : 0.0F,
                 useItemIntervalProgress(useAnimation, useElapsedTicks),
                 position.x, position.z,
-                movement.x, movement.y, movement.z, groundSpeed, verticalSpeed);
+                movement.x, movement.y, movement.z, groundSpeed, verticalSpeed,
+                // Vanilla cape angles are degrees; authored Bedrock capes use a 126-degree span.
+                renderState == null ? 0.0F : Mth.clamp(
+                        (renderState.capeLean * 0.5F + renderState.capeFlap) / 126.0F, 0.0F, 1.0F));
     }
 
     public String equippedItemName(boolean offHand) {
