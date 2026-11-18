@@ -7,7 +7,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: [self-hosted, linux, ec-ci]
+    # Public repo: GitHub-hosted minutes are free; the org ec-ci runner group is not open to this repo.
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout checked revision
