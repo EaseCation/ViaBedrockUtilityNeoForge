@@ -1,6 +1,7 @@
 import org.oryxel.viabedrockutility.generator.EnumGeneratorTask
 
 plugins {
+    id 'maven-publish'
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.141'
 }
@@ -9,15 +10,19 @@ version = mod_version
 group = mod_group_id
 
 repositories {
-    mavenCentral()
-    mavenLocal()
-    maven {
-        name = "Jitpack"
-        url = "https://jitpack.io"
-        content {
-            includeGroup "com.github.EaseCation"
+    // EaseCation private repository (Aliyun Yunxiao Packages), only for net.easecation.* coordinates.
+    // Credentials: yunxiaoMavenUsername / yunxiaoMavenPassword in ~/.gradle/gradle.properties.
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'yunxiaoMaven'
+                url = 'https://easecation-cn-hangzhou.devops.aliyuncs.com/packages/api/protocol/maven/14075-release-h64s7e'
+                credentials(PasswordCredentials)
+            }
         }
+        filter { includeGroupByRegex 'net\\.easecation(\\..*)?' }
     }
+    mavenCentral()
 }
 
 base {
@@ -61,37 +66,37 @@ neoForge {
 }
 
 dependencies {
-    implementation "net.easecation.clientdiagnostics:performance-api:1.0.0"
-    jarJar "net.easecation.clientdiagnostics:performance-api:1.0.0"
-    implementation "net.easecation:easecation-async-logging:1.0.0"
-    jarJar "net.easecation:easecation-async-logging:1.0.0"
-    additionalRuntimeClasspath "net.easecation:easecation-async-logging:1.0.0"
+    implementation "net.easecation.clientdiagnostics:performance-api:1.1.10"
+    jarJar "net.easecation.clientdiagnostics:performance-api:1.1.10"
+    implementation "net.easecation:easecation-async-logging:1.0.1"
+    jarJar "net.easecation:easecation-async-logging:1.0.1"
+    additionalRuntimeClasspath "net.easecation:easecation-async-logging:1.0.1"
     // api (not implementation): AttachableQueryProvider exposes BedrockMotion's transitive mocha
     // Value in its method signature, so downstream mods compiling against the query API need it.
-    api('com.github.EaseCation:BedrockMotion:1.0.0') {
+    api('net.easecation:bedrock-motion:1.2.0') {
         exclude group: 'org.apache.commons', module: 'commons-lang3'
         exclude group: 'com.google.code.gson', module: 'gson'
-        exclude group: 'com.github.EaseCation', module: 'CubeConverter'
+        exclude group: 'net.easecation.fork.oryxel.cube', module: 'cubeconverter-gson'
     }
-    jarJar('com.github.EaseCation:BedrockMotion:1.0.0') {
+    jarJar('net.easecation:bedrock-motion:1.2.0') {
         exclude group: 'org.apache.commons', module: 'commons-lang3'
         exclude group: 'com.google.code.gson', module: 'gson'
-        exclude group: 'com.github.EaseCation', module: 'CubeConverter'
+        exclude group: 'net.easecation.fork.oryxel.cube', module: 'cubeconverter-gson'
     }
     // ModDev 1.21.8 does not place non-mod project dependencies on the game classloader.
     // Add only the two class-only artifacts; BEParticle owns the shared Mocha/Javassist runtime.
-    additionalRuntimeClasspath('com.github.EaseCation:BedrockMotion:1.0.0') {
+    additionalRuntimeClasspath('net.easecation:bedrock-motion:1.2.0') {
         transitive = false
     }
-    implementation 'nakern.be_camera:bedrockcameralib:1.2.0'
+    implementation 'net.easecation.fork.be_camera:bedrockcameralib:1.2.1-ec.1'
     // bedrockcameralib exposes Kotlin 2.1 Function types in its public API but its POM does not declare
     // kotlin-stdlib. Keep it on both the compile classpath and the standalone mod's JarJar runtime.
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
     jarJar 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
     implementation 'net.easecation.beparticle:beparticle:1.0.0'
-    implementation 'com.github.EaseCation:CubeConverter:1.3'
-    jarJar 'com.github.EaseCation:CubeConverter:1.3'
-    additionalRuntimeClasspath('com.github.EaseCation:CubeConverter:1.3') {
+    implementation 'net.easecation.fork.oryxel.cube:cubeconverter-gson:1.3-ec.2'
+    jarJar 'net.easecation.fork.oryxel.cube:cubeconverter-gson:1.3-ec.2'
+    additionalRuntimeClasspath('net.easecation.fork.oryxel.cube:cubeconverter-gson:1.3-ec.2') {
         transitive = false
     }
     // BEParticle is a required runtime mod and owns the shared Mocha/Javassist JarJar modules.
@@ -255,4 +260,27 @@ tasks.register('verifyNoBundledSodium') {
 
 tasks.named('check').configure {
     dependsOn tasks.named('verifyNoBundledSodium')
+}
+
+// Published to the EaseCation private repository (Aliyun Yunxiao Packages) for the other NeoForgeWorkspace
+// mods to build against on their own, see GeyserWorkspace docs/maven-coordinates.md.
+// Credentials: yunxiaoMavenUsername / yunxiaoMavenPassword in ~/.gradle/gradle.properties.
+publishing {
+    publications {
+        create('maven', MavenPublication) {
+            // EaseCation fork coordinates (port of oryxel ViaBedrockUtility); the project keeps its runtime group/version.
+            groupId = 'net.easecation.fork.oryxel.viabedrockutility'
+            artifactId = 'viabedrockutility'
+            version = '1.0.0-ec.1'
+            from components.java
+            pom.properties = ['upstream.groupId': 'org.oryxel.viabedrockutility', 'upstream.version': '1.0.0']
+        }
+    }
+    repositories {
+        maven {
+            name = 'yunxiaoMaven'
+            url = 'https://easecation-cn-hangzhou.devops.aliyuncs.com/packages/api/protocol/maven/14075-release-h64s7e'
+            credentials(PasswordCredentials)
+        }
+    }
 }
