@@ -60,6 +60,7 @@ class PlayerAnimationInputs {
         query.set("modified_move_speed", Value.of(value.walkSpeed()));
         query.set("ground_speed", Value.of(value.groundSpeed()));
         query.set("vertical_speed", Value.of(value.verticalSpeed()));
+        query.set("cape_flap_amount", Value.of(value.capeFlapAmount()));
         query.set("delta_time", Value.of(BedrockFrameTime.INSTANCE.deltaSeconds()));
         query.set("distance_from_camera", Value.of(value.distanceFromCamera()));
         query.set("model_scale", Value.of(0.0625D));
